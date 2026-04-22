@@ -17,7 +17,6 @@ class Shopify
 
     public function __construct(string $store, string $accessToken, ?Cache $cache = null)
     {
-        // Accept either "mystore" or "mystore.myshopify.com"
         $host = str_contains($store, '.') ? $store : "{$store}.myshopify.com";
         $this->baseUrl = "https://{$host}/admin/api/2024-01";
         $this->token   = $accessToken;
@@ -28,8 +27,7 @@ class Shopify
 
     /**
      * Returns every order created between $start and $end (inclusive).
-     * Cancelled orders are included so we can detect them and skip them.
-     * Results are served from cache when available and fresh.
+     * Includes total_price and shipping_lines for filtering logic.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -43,7 +41,7 @@ class Shopify
                 'created_at_min' => $startDate . 'T00:00:00-00:00',
                 'created_at_max' => $endDate   . 'T23:59:59-00:00',
                 'limit'          => self::PAGE_SIZE,
-                'fields'         => 'id,order_number,name,financial_status,fulfillment_status,cancelled_at,created_at,email',
+                'fields'         => 'id,order_number,name,financial_status,fulfillment_status,cancelled_at,created_at,email,total_price,shipping_lines',
             ]);
 
             echo "  Fetching Shopify orders";
@@ -73,17 +71,13 @@ class Shopify
 
     // ── Private ───────────────────────────────────────────────────────
 
-    /**
-     * Fetch one page; return [orders[], nextPageUrl|null].
-     *
-     * @return array{0: array<int, array<string, mixed>>, 1: string|null}
-     */
+    /** @return array{0: array<int, array<string, mixed>>, 1: string|null} */
     private function getPage(string $url): array
     {
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HEADER         => true,           // need Link header
+            CURLOPT_HEADER         => true,
             CURLOPT_HTTPHEADER     => [
                 "X-Shopify-Access-Token: {$this->token}",
                 'Content-Type: application/json',
@@ -97,11 +91,8 @@ class Shopify
         $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
         curl_close($ch);
 
-        if ($err) {
-            throw new RuntimeException("Shopify cURL error: {$err}");
-        }
+        if ($err) throw new RuntimeException("Shopify cURL error: {$err}");
 
-        // Shopify rate-limits: 429 with Retry-After header
         if ($code === 429) {
             $headers    = substr($raw, 0, $headerSize);
             $retryAfter = 10;
@@ -110,23 +101,21 @@ class Shopify
             }
             echo "\n  [Shopify] Rate limited — waiting {$retryAfter}s ...\n";
             sleep($retryAfter);
-            return $this->getPage($url); // one retry
+            return $this->getPage($url);
         }
 
         if ($code < 200 || $code >= 300) {
-            $body = substr($raw, $headerSize);
-            throw new RuntimeException("Shopify API error {$code}: {$body}");
+            throw new RuntimeException("Shopify API error {$code}: " . substr($raw, $headerSize));
         }
 
         $headers = substr($raw, 0, $headerSize);
         $body    = substr($raw, $headerSize);
-
         $decoded = json_decode($body, true);
+
         if (!isset($decoded['orders'])) {
             throw new RuntimeException("Shopify unexpected response: {$body}");
         }
 
-        // Follow cursor pagination via Link: <url>; rel="next"
         $nextUrl = null;
         if (preg_match('/<([^>]+)>;\s*rel="next"/i', $headers, $m)) {
             $nextUrl = $m[1];

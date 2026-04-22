@@ -82,18 +82,25 @@ try {
         }
     }
 
-    // ── Step 3: Build index + compare ────────────────────────────
-    $ssIndex = Comparator::buildSSIndex($ssOrders);
-    $result  = Comparator::compare($shopifyOrders, $ssIndex);
+    // ── Step 3: Load ignored orders ──────────────────────────────
+    $ignoredFile    = __DIR__ . '/data/ignored.json';
+    $ignoredNumbers = file_exists($ignoredFile)
+        ? (json_decode(file_get_contents($ignoredFile), true) ?: [])
+        : [];
 
-    // ── Step 4: Report ────────────────────────────────────────────
+    // ── Step 4: Build index + compare ────────────────────────────
+    $ssIndex = Comparator::buildSSIndex($ssOrders);
+    $result  = Comparator::compare($shopifyOrders, $ssIndex, $ignoredNumbers);
+
+    // ── Step 5: Report ────────────────────────────────────────────
     Reporter::printSummary(
         $result['missing'],
         $result['found'],
         $result['skipped'],
         $startDate,
         $endDate,
-        $spotCheckResults
+        $spotCheckResults,
+        $result['ignored']
     );
 
     Reporter::saveReports($result['missing'], $startDate, $endDate);

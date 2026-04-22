@@ -1,17 +1,11 @@
 <?php
 /**
  * Comparator — pure logic, no I/O.
- *
- * Builds a lookup index from ShipStation orders and compares it against
- * the canonical Shopify order list.
  */
 class Comparator
 {
     /**
-     * Build a fast lookup: orderNumber → [ss orders].
-     *
-     * ShipStation stores the Shopify order number in the `orderNumber`
-     * field (e.g. "1234" or "#1234"). We normalise to digits only.
+     * Build a fast lookup: normalised orderNumber → [ss orders].
      *
      * @param  array<int, array<string, mixed>> $ssOrders
      * @return array<string, array<int, array<string, mixed>>>
@@ -20,8 +14,7 @@ class Comparator
     {
         $index = [];
         foreach ($ssOrders as $order) {
-            $raw = (string) ($order['orderNumber'] ?? '');
-            $key = self::normalise($raw);
+            $key = self::normalise((string) ($order['orderNumber'] ?? ''));
             if ($key !== '') {
                 $index[$key][] = $order;
             }
@@ -32,37 +25,69 @@ class Comparator
     /**
      * Compare Shopify orders against the ShipStation index.
      *
-     * Returns:
-     *   missing  — Shopify orders that have NO match in ShipStation
-     *   found    — Shopify orders that DO have a match
-     *   skipped  — Shopify orders we deliberately ignore (cancelled / unpaid)
+     * Skipped reasons (stored in $order['_skip_reason']):
+     *   cancelled     — cancelled_at is set
+     *   financial     — pending / voided / refunded
+     *   zero_value    — total_price == 0 (digital downloads, gift cards)
+     *   no_shipping   — no shipping lines (fulfilled digitally or local pickup)
+     *   ignored       — manually ignored via the web dashboard
      *
-     * @param  array<int, array<string, mixed>>                    $shopifyOrders
-     * @param  array<string, array<int, array<string, mixed>>>     $ssIndex
-     * @return array{missing: list<array>, found: list<array>, skipped: list<array>}
+     * @param  array<int, array<string, mixed>>                $shopifyOrders
+     * @param  array<string, array<int, array<string, mixed>>> $ssIndex
+     * @param  array<string, array<string, mixed>>             $ignoredNumbers  key = normalised order number
+     * @return array{missing: list<array>, found: list<array>, skipped: list<array>, ignored: list<array>}
      */
-    public static function compare(array $shopifyOrders, array $ssIndex): array
-    {
+    public static function compare(
+        array $shopifyOrders,
+        array $ssIndex,
+        array $ignoredNumbers = []
+    ): array {
         $missing = [];
         $found   = [];
         $skipped = [];
+        $ignored = [];
 
         foreach ($shopifyOrders as $order) {
-            // Skip cancelled orders — they should never be in ShipStation
-            if (!empty($order['cancelled_at'])) {
-                $skipped[] = $order;
-                continue;
-            }
-
-            // Skip orders that were never paid (pending / voided)
-            $financial = $order['financial_status'] ?? '';
-            if (in_array($financial, ['pending', 'voided', 'refunded'], true)) {
-                $skipped[] = $order;
-                continue;
-            }
-
             $num = self::normalise((string) ($order['order_number'] ?? $order['name'] ?? ''));
 
+            // ── Ignored (manually dismissed) ──────────────────────────
+            if (isset($ignoredNumbers[$num])) {
+                $order['_ignore_info'] = $ignoredNumbers[$num];
+                $ignored[] = $order;
+                continue;
+            }
+
+            // ── Cancelled ─────────────────────────────────────────────
+            if (!empty($order['cancelled_at'])) {
+                $order['_skip_reason'] = 'cancelled';
+                $skipped[] = $order;
+                continue;
+            }
+
+            // ── Financial status ──────────────────────────────────────
+            $financial = $order['financial_status'] ?? '';
+            if (in_array($financial, ['pending', 'voided', 'refunded'], true)) {
+                $order['_skip_reason'] = 'financial';
+                $skipped[] = $order;
+                continue;
+            }
+
+            // ── Zero-value orders (digital downloads, gift cards) ─────
+            if (isset($order['total_price']) && (float) $order['total_price'] === 0.0) {
+                $order['_skip_reason'] = 'zero_value';
+                $skipped[] = $order;
+                continue;
+            }
+
+            // ── No shipping lines (digital / local pickup) ────────────
+            // shipping_lines is an array; empty = nothing shipped physically.
+            if (array_key_exists('shipping_lines', $order) && $order['shipping_lines'] === []) {
+                $order['_skip_reason'] = 'no_shipping';
+                $skipped[] = $order;
+                continue;
+            }
+
+            // ── Compare ───────────────────────────────────────────────
             if (isset($ssIndex[$num])) {
                 $order['_ss_matches'] = $ssIndex[$num];
                 $found[] = $order;
@@ -71,13 +96,13 @@ class Comparator
             }
         }
 
-        return compact('missing', 'found', 'skipped');
+        return compact('missing', 'found', 'skipped', 'ignored');
     }
 
     // ── Helpers ───────────────────────────────────────────────────────
 
     /** Strip leading # and whitespace; keep digits only. */
-    private static function normalise(string $raw): string
+    public static function normalise(string $raw): string
     {
         return preg_replace('/\D/', '', ltrim(trim($raw), '#'));
     }

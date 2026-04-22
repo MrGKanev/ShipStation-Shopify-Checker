@@ -49,9 +49,62 @@ if ($action === 'logout') {
 
 $authed = !empty($_SESSION['authed']);
 
+// ── Shared setup (all authenticated sections) ─────────────────────────────────
+
+$dataDir     = __DIR__ . '/data';
+$ignoredFile = $dataDir . '/ignored.json';
+$cacheDir    = __DIR__ . '/cache';
+$cacheTtl    = (int) (getenv('CACHE_TTL') ?: 14400);
+
+$ignoredOrders = [];   // normalised_num => {reason, ignored_at}
+$cacheObj      = null;
+
+if ($authed) {
+    require_once __DIR__ . '/src/Cache.php';
+    require_once __DIR__ . '/src/Comparator.php';
+
+    $cacheObj = new Cache($cacheDir, $cacheTtl);
+
+    if (file_exists($ignoredFile)) {
+        $ignoredOrders = json_decode(file_get_contents($ignoredFile), true) ?: [];
+    }
+}
+
+// ── Ignore / unignore actions ─────────────────────────────────────────────────
+
+if ($authed && $action === 'ignore_order') {
+    $num    = Comparator::normalise($_POST['order_number'] ?? '');
+    $reason = trim($_POST['reason'] ?? '');
+    if ($num) {
+        if (!is_dir($dataDir)) mkdir($dataDir, 0755, true);
+        $ignoredOrders[$num] = ['reason' => $reason, 'ignored_at' => date('Y-m-d')];
+        file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT));
+    }
+}
+
+if ($authed && $action === 'unignore_order') {
+    $num = Comparator::normalise($_POST['order_number'] ?? '');
+    if ($num && isset($ignoredOrders[$num])) {
+        unset($ignoredOrders[$num]);
+        file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT));
+    }
+}
+
+// ── Cache flush ───────────────────────────────────────────────────────────────
+
+$cacheEntries = [];
+$cacheFlushed = 0;
+
+if ($authed) {
+    if ($action === 'flush_cache') {
+        $cacheFlushed = $cacheObj->flush();
+    }
+    $cacheEntries = $cacheObj->entries();
+}
+
 // ── Spot-check (live ShipStation lookup) ──────────────────────────────────────
 
-$spotResults  = null;   // null = not submitted yet
+$spotResults  = null;
 $spotInput    = '';
 $spotError    = '';
 
@@ -72,7 +125,7 @@ if ($authed && $action === 'spotcheck') {
             $spotError = 'SS_API_KEY / SS_API_SECRET not set in .env.';
         } else {
             try {
-                $ss          = new ShipStation($ssKey, $ssSecret);
+                $ss          = new ShipStation($ssKey, $ssSecret); // no cache for targeted lookups
                 $spotResults = [];
                 foreach ($numbers as $num) {
                     $clean  = ltrim(trim($num), '#');
@@ -91,13 +144,14 @@ if ($authed && $action === 'spotcheck') {
     }
 }
 
-// ── On-demand audit (custom date range from the web UI) ───────────────────────
+// ── On-demand audit ───────────────────────────────────────────────────────────
 
-$auditResult   = null;   // null = not run yet
-$auditStart    = $_POST['audit_start'] ?? date('Y-m-d', strtotime('-30 days'));
-$auditEnd      = $_POST['audit_end']   ?? date('Y-m-d');
-$auditError    = '';
-$auditDuration = 0;
+$auditResult    = null;
+$auditStart     = $_POST['audit_start'] ?? date('Y-m-d', strtotime('-30 days'));
+$auditEnd       = $_POST['audit_end']   ?? date('Y-m-d');
+$auditError     = '';
+$auditDuration  = 0;
+$auditFromCache = ['shopify' => false, 'ss' => false];
 
 if ($authed && $action === 'run_audit') {
     $auditStart = $_POST['audit_start'] ?? '';
@@ -118,42 +172,46 @@ if ($authed && $action === 'run_audit') {
         $shopifyToken = getenv('SHOPIFY_ACCESS_TOKEN');
 
         if (!$ssKey || !$ssSecret || !$shopifyToken) {
-            $auditError = 'API credentials missing in .env (SS_API_KEY, SS_API_SECRET, SHOPIFY_ACCESS_TOKEN).';
+            $auditError = 'API credentials missing in .env.';
         } else {
-            require_once __DIR__ . '/src/Cache.php';
             require_once __DIR__ . '/src/ShipStation.php';
             require_once __DIR__ . '/src/Shopify.php';
-            require_once __DIR__ . '/src/Comparator.php';
             require_once __DIR__ . '/src/Reporter.php';
 
             try {
-                set_time_limit(300); // large date ranges can take a while
+                set_time_limit(300);
                 $t0 = microtime(true);
 
-                $cacheTtl = (int) (getenv('CACHE_TTL') ?: 14400);
-                $cache    = new Cache(__DIR__ . '/cache', $cacheTtl);
+                // Check cache status BEFORE fetching (to display "from cache" badge)
+                $auditFromCache = [
+                    'shopify' => $cacheObj->isFresh('shopify', "{$auditStart}|{$auditEnd}"),
+                    'ss'      => $cacheObj->isFresh('ss',      "{$auditStart}|{$auditEnd}"),
+                ];
 
-                $ss      = new ShipStation($ssKey, $ssSecret, $cache);
-                $shopify = new Shopify($shopifyStore, $shopifyToken, $cache);
+                $ss      = new ShipStation($ssKey, $ssSecret, $cacheObj);
+                $shopify = new Shopify($shopifyStore, $shopifyToken, $cacheObj);
 
-                // Suppress the echo dots from the API clients
                 ob_start();
                 $shopifyOrders = $shopify->fetchAllOrders($auditStart, $auditEnd);
                 $ssOrders      = $ss->fetchAllOrders($auditStart, $auditEnd);
                 ob_end_clean();
 
-                $ssIndex     = Comparator::buildSSIndex($ssOrders);
-                $comparison  = Comparator::compare($shopifyOrders, $ssIndex);
+                $ssIndex    = Comparator::buildSSIndex($ssOrders);
+                $comparison = Comparator::compare($shopifyOrders, $ssIndex, $ignoredOrders);
 
                 Reporter::saveReports($comparison['missing'], $auditStart, $auditEnd);
 
                 $auditDuration = round(microtime(true) - $t0, 1);
                 $auditResult   = [
                     'missing'  => $comparison['missing'],
+                    'ignored'  => $comparison['ignored'],
                     'found'    => count($comparison['found']),
                     'skipped'  => count($comparison['skipped']),
                     'total_ss' => count($ssOrders),
                 ];
+
+                // Refresh cache entry list
+                $cacheEntries = $cacheObj->entries();
             } catch (Throwable $e) {
                 $auditError = $e->getMessage();
             }
@@ -161,32 +219,14 @@ if ($authed && $action === 'run_audit') {
     }
 }
 
-// ── Cache info + flush ────────────────────────────────────────────────────────
+// ── Load report data ──────────────────────────────────────────────────────────
 
-$cacheDir     = __DIR__ . '/cache';
-$cacheTtl     = (int) (getenv('CACHE_TTL') ?: 14400);
-$cacheEntries = [];
-$cacheFlushed = 0;
-
-if ($authed) {
-    require_once __DIR__ . '/src/Cache.php';
-    $cacheObj = new Cache($cacheDir, $cacheTtl);
-
-    if ($action === 'flush_cache') {
-        $cacheFlushed = $cacheObj->flush();
-    }
-
-    $cacheEntries = $cacheObj->entries();
-}
-
-// ── Load report data (only when authed) ───────────────────────────────────────
-
-$reports      = [];   // [{date, csvPath, txtPath, missing: []}]
+$reports      = [];
 $latestReport = null;
 
 if ($authed && is_dir($reportDir)) {
     $files = glob($reportDir . '/missing_*.csv') ?: [];
-    rsort($files); // newest first
+    rsort($files);
 
     foreach ($files as $csvPath) {
         preg_match('/missing_(\d{4}-\d{2}-\d{2})\.csv$/', $csvPath, $m);
@@ -200,6 +240,12 @@ if ($authed && is_dir($reportDir)) {
             }
             fclose($fh);
         }
+
+        // Filter out currently-ignored orders from display
+        $missing = array_values(array_filter(
+            $missing,
+            fn($o) => !isset($ignoredOrders[Comparator::normalise((string)($o['order_number'] ?? ''))])
+        ));
 
         $reports[] = [
             'date'    => $date,
@@ -219,10 +265,125 @@ foreach ($reports as $r) {
     if ($r['date'] === $selectedDate) { $selectedReport = $r; break; }
 }
 
+// Shopify admin base URL for order links
+$shopifyAdminBase = 'https://'
+    . (str_contains($shopifyStore, '.') ? $shopifyStore : "{$shopifyStore}.myshopify.com")
+    . '/admin/orders';
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function esc(mixed $v): string {
     return htmlspecialchars((string) $v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+/**
+ * Render the missing-orders table with search, Shopify links, and ignore buttons.
+ * Used by both the Reports page (CSV data) and the Run Audit page (live data).
+ *
+ * @param list<array>                           $missing
+ * @param array<string, array<string, mixed>>   $ignoredOrders
+ * @param string                                $shopifyAdminBase
+ * @param string                                $context   'reports' | 'run'
+ * @param string                                $contextVal  date for reports, audit_start for run
+ */
+function renderMissingTable(
+    array  $missing,
+    array  $ignoredOrders,
+    string $shopifyAdminBase,
+    string $context,
+    string $contextVal,
+    string $contextVal2 = ''
+): string {
+    $count   = count($missing);
+    $tableId = 'tbl-' . substr(md5($context . $contextVal), 0, 6);
+    ob_start();
+    ?>
+    <div class="search-wrap">
+      <input class="js-search" data-target="<?= esc($tableId) ?>"
+             placeholder="Filter by order #, email, status…" type="search">
+    </div>
+    <div class="table-wrap">
+      <div class="table-header">
+        <h2>Missing Orders</h2>
+        <span><?= $count ?> order<?= $count !== 1 ? 's' : '' ?></span>
+      </div>
+
+      <?php if ($count === 0): ?>
+        <div class="empty">
+          <div class="icon">✅</div>
+          <h3>All clear!</h3>
+          <p>Every paid Shopify order was found in ShipStation.</p>
+        </div>
+      <?php else: ?>
+        <table>
+          <thead>
+            <tr>
+              <th>Order #</th>
+              <th>Created</th>
+              <th>Total</th>
+              <th>Financial</th>
+              <th>Fulfillment</th>
+              <th>Email</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="<?= esc($tableId) ?>">
+            <?php foreach ($missing as $row):
+              $num       = (string) ($row['order_number'] ?? $row['name'] ?? '?');
+              $shopifyId = $row['id'] ?? $row['shopify_id'] ?? '';
+              $financial = strtolower($row['financial_status'] ?? '');
+              $chipClass = match($financial) {
+                'paid'           => 'chip-paid',
+                'partially_paid' => 'chip-partial',
+                'unpaid'         => 'chip-unpaid',
+                default          => 'chip-unknown',
+              };
+              $totalPrice = isset($row['total_price']) && $row['total_price'] !== ''
+                ? '$' . number_format((float) $row['total_price'], 2)
+                : '—';
+              $adminUrl = $shopifyId
+                ? $shopifyAdminBase . '/' . esc($shopifyId)
+                : null;
+              $normNum = preg_replace('/\D/', '', ltrim(trim($num), '#'));
+            ?>
+            <tr>
+              <td>
+                <?php if ($adminUrl): ?>
+                  <a class="order-num" href="<?= $adminUrl ?>" target="_blank" rel="noopener">#<?= esc($num) ?></a>
+                <?php else: ?>
+                  <span class="order-num">#<?= esc($num) ?></span>
+                <?php endif; ?>
+              </td>
+              <td><?= esc(substr($row['created_at'] ?? '', 0, 10)) ?></td>
+              <td style="font-variant-numeric:tabular-nums"><?= $totalPrice ?></td>
+              <td><span class="chip <?= $chipClass ?>"><?= esc($row['financial_status'] ?? '—') ?></span></td>
+              <td><?= esc($row['fulfillment_status'] ?? '—') ?></td>
+              <td style="color:var(--muted)"><?= esc($row['email'] ?? '—') ?></td>
+              <td style="white-space:nowrap">
+                <button class="ignore-btn js-ignore-toggle" data-order="<?= esc($normNum) ?>">Ignore</button>
+                <div id="ignore-form-<?= esc($normNum) ?>" class="ignore-form-row" style="display:none">
+                  <form method="post" style="display:contents">
+                    <input type="hidden" name="action" value="ignore_order">
+                    <input type="hidden" name="order_number" value="<?= esc($num) ?>">
+                    <?php if ($context === 'run'): ?>
+                      <input type="hidden" name="audit_start" value="<?= esc($contextVal) ?>">
+                      <input type="hidden" name="audit_end"   value="<?= esc($contextVal2) ?>">
+                    <?php else: ?>
+                      <input type="hidden" name="date" value="<?= esc($contextVal) ?>">
+                    <?php endif; ?>
+                    <input type="text" name="reason" placeholder="Reason (optional)" style="width:150px">
+                    <button class="btn btn-sm btn-danger" type="submit">Confirm</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      <?php endif; ?>
+    </div>
+    <?php
+    return ob_get_clean();
 }
 
 function badge(int $count): string {
@@ -445,6 +606,41 @@ function badge(int $count): string {
   /* Active sidebar link for spot-check page */
   .sidebar-nav li a.page-active { background: #ebe9fd; color: var(--accent); font-weight: 600; }
 
+  /* Search / filter bar */
+  .search-wrap { margin-bottom: 1rem; }
+  .search-wrap input {
+    width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 7px;
+    padding: .6rem 1rem; font-size: .875rem; color: var(--text); outline: none;
+    transition: border-color .15s;
+  }
+  .search-wrap input:focus { border-color: var(--accent); }
+  .search-wrap input::placeholder { color: var(--muted); }
+
+  /* Cache/source badge */
+  .source-badge { display: inline-flex; gap: .3rem; align-items: center; font-size: .75rem; font-weight: 600; padding: .2rem .6rem; border-radius: 99px; }
+  .source-badge.cached { background: #ede9fe; color: #6d28d9; }
+  .source-badge.live   { background: #dbeafe; color: #1d4ed8; }
+
+  /* Ignore row UI */
+  .ignore-btn { background: none; border: 1px solid var(--border); border-radius: 5px; padding: .2rem .55rem; font-size: .72rem; color: var(--muted); cursor: pointer; transition: all .12s; white-space: nowrap; }
+  .ignore-btn:hover { border-color: var(--danger); color: var(--danger); background: #fff5f5; }
+  .unignore-btn { background: none; border: 1px solid #fecaca; border-radius: 5px; padding: .2rem .55rem; font-size: .72rem; color: #b91c1c; cursor: pointer; transition: all .12s; }
+  .unignore-btn:hover { background: #fee2e2; }
+  .ignore-form-row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: .4rem; }
+  .ignore-form-row input[type=text] {
+    flex: 1; min-width: 140px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
+    padding: .3rem .6rem; font-size: .8rem; color: var(--text); outline: none;
+  }
+  .ignore-form-row input:focus { border-color: var(--accent); }
+  .row-ignored { opacity: .5; }
+  .ignored-section { margin-top: 1.5rem; }
+  .ignored-section summary { cursor: pointer; font-size: .8rem; color: var(--muted); font-weight: 600; padding: .4rem 0; }
+  .ignored-section summary:hover { color: var(--text); }
+  .ignored-list { display: flex; flex-direction: column; gap: .4rem; margin-top: .6rem; }
+  .ignored-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: .6rem 1rem; opacity: .7; }
+  .ignored-num { font-family: monospace; font-weight: 700; font-size: .85rem; }
+  .ignored-reason { font-size: .78rem; color: var(--muted); }
+
   tbody tr:hover { background: #f8f9fb; }
 
   @media (max-width: 700px) {
@@ -570,9 +766,22 @@ function badge(int $count): string {
     </div>
 
     <?php if ($auditResult !== null): ?>
-      <div class="duration-note">Completed in <?= $auditDuration ?>s &mdash; report saved to <code>reports/</code></div>
-
       <?php $missing = $auditResult['missing']; $count = count($missing); ?>
+
+      <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;flex-wrap:wrap">
+        <span class="duration-note" style="margin:0">Completed in <?= $auditDuration ?>s &mdash; report saved to <code>reports/</code></span>
+        <?php if ($auditFromCache['shopify']): ?>
+          <span class="source-badge cached">Shopify: from cache</span>
+        <?php else: ?>
+          <span class="source-badge live">Shopify: live</span>
+        <?php endif; ?>
+        <?php if ($auditFromCache['ss']): ?>
+          <span class="source-badge cached">ShipStation: from cache</span>
+        <?php else: ?>
+          <span class="source-badge live">ShipStation: live</span>
+        <?php endif; ?>
+      </div>
+
       <div class="audit-summary">
         <div class="stat-card">
           <div class="label">Missing</div>
@@ -587,55 +796,45 @@ function badge(int $count): string {
           <div class="value accent"><?= $auditResult['skipped'] ?></div>
         </div>
         <div class="stat-card">
+          <div class="label">Ignored</div>
+          <div class="value accent"><?= count($auditResult['ignored']) ?></div>
+        </div>
+        <div class="stat-card">
           <div class="label">SS total</div>
           <div class="value accent"><?= $auditResult['total_ss'] ?></div>
         </div>
       </div>
 
-      <div class="table-wrap">
-        <div class="table-header">
-          <h2>Missing Orders</h2>
-          <span><?= $count ?> order<?= $count !== 1 ? 's' : '' ?></span>
-        </div>
-        <?php if ($count === 0): ?>
-          <div class="empty">
-            <div class="icon">✅</div>
-            <h3>All clear!</h3>
-            <p>Every paid Shopify order was found in ShipStation for this period.</p>
+      <?php echo renderMissingTable($missing, $ignoredOrders, $shopifyAdminBase, 'run', $auditStart, $auditEnd); // phpcs:ignore ?>
+
+      <?php if (!empty($auditResult['ignored'])): ?>
+        <details class="ignored-section">
+          <summary><?= count($auditResult['ignored']) ?> ignored order<?= count($auditResult['ignored']) !== 1 ? 's' : '' ?> (excluded from results)</summary>
+          <div class="ignored-list">
+            <?php foreach ($auditResult['ignored'] as $o):
+              $num = $o['order_number'] ?? $o['name'] ?? '?';
+              $info = $o['_ignore_info'] ?? [];
+            ?>
+              <div class="ignored-row">
+                <div>
+                  <span class="ignored-num">#<?= esc($num) ?></span>
+                  <?php if (!empty($info['reason'])): ?>
+                    <span class="ignored-reason">&mdash; <?= esc($info['reason']) ?></span>
+                  <?php endif; ?>
+                </div>
+                <form method="post">
+                  <input type="hidden" name="action" value="unignore_order">
+                  <input type="hidden" name="order_number" value="<?= esc($num) ?>">
+                  <input type="hidden" name="audit_start" value="<?= esc($auditStart) ?>">
+                  <input type="hidden" name="audit_end"   value="<?= esc($auditEnd) ?>">
+                  <button class="unignore-btn" type="submit">Unignore</button>
+                </form>
+              </div>
+            <?php endforeach; ?>
           </div>
-        <?php else: ?>
-          <table>
-            <thead>
-              <tr>
-                <th>Order #</th>
-                <th>Created</th>
-                <th>Financial</th>
-                <th>Fulfillment</th>
-                <th>Email</th>
-              </tr>
-            </thead>
-            <tbody>
-              <?php foreach ($missing as $row):
-                $financial = strtolower($row['financial_status'] ?? '');
-                $chipClass = match($financial) {
-                  'paid'           => 'chip-paid',
-                  'partially_paid' => 'chip-partial',
-                  'unpaid'         => 'chip-unpaid',
-                  default          => 'chip-unknown',
-                };
-              ?>
-              <tr>
-                <td><span class="order-num">#<?= esc($row['order_number'] ?? $row['name'] ?? '?') ?></span></td>
-                <td><?= esc(substr($row['created_at'] ?? '', 0, 10)) ?></td>
-                <td><span class="chip <?= $chipClass ?>"><?= esc($row['financial_status'] ?? '—') ?></span></td>
-                <td><?= esc($row['fulfillment_status'] ?? '—') ?></td>
-                <td style="color:var(--muted)"><?= esc($row['email'] ?? '—') ?></td>
-              </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
-        <?php endif; ?>
-      </div>
+        </details>
+      <?php endif; ?>
+
     <?php endif; ?>
 
     <!-- Cache status -->
@@ -833,51 +1032,7 @@ function badge(int $count): string {
       <?php endif; ?>
 
       <!-- Table -->
-      <div class="table-wrap">
-        <div class="table-header">
-          <h2>Missing Orders</h2>
-          <span><?= $count ?> order<?= $count !== 1 ? 's' : '' ?></span>
-        </div>
-
-        <?php if ($count === 0): ?>
-          <div class="empty">
-            <div class="icon">✅</div>
-            <h3>All clear!</h3>
-            <p>Every Shopify order was found in ShipStation.</p>
-          </div>
-        <?php else: ?>
-          <table>
-            <thead>
-              <tr>
-                <th>Order #</th>
-                <th>Created</th>
-                <th>Financial status</th>
-                <th>Fulfillment</th>
-                <th>Email</th>
-              </tr>
-            </thead>
-            <tbody>
-              <?php foreach ($missing as $row):
-                $financial = strtolower($row['financial_status'] ?? '');
-                $chipClass = match($financial) {
-                  'paid'         => 'chip-paid',
-                  'partially_paid' => 'chip-partial',
-                  'unpaid'       => 'chip-unpaid',
-                  default        => 'chip-unknown',
-                };
-              ?>
-              <tr>
-                <td><span class="order-num">#<?= esc($row['order_number'] ?? '?') ?></span></td>
-                <td><?= esc(substr($row['created_at'] ?? '', 0, 10)) ?></td>
-                <td><span class="chip <?= $chipClass ?>"><?= esc($row['financial_status'] ?? '—') ?></span></td>
-                <td><?= esc($row['fulfillment_status'] ?? '—') ?></td>
-                <td style="color:var(--muted)"><?= esc($row['email'] ?? '—') ?></td>
-              </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
-        <?php endif; ?>
-      </div>
+      <?php echo renderMissingTable($missing, $ignoredOrders, $shopifyAdminBase, 'reports', $selectedDate ?? ''); ?>
 
     <?php endif; // reports page ?>
     <?php endif; // page switch ?>
@@ -885,5 +1040,26 @@ function badge(int $count): string {
 </div>
 <?php endif; // authed ?>
 
+<script>
+// ── Search / filter ────────────────────────────────────────────────────────────
+document.querySelectorAll('.js-search').forEach(function(input) {
+  var tbody = document.querySelector('#' + input.dataset.target);
+  if (!tbody) return;
+  input.addEventListener('input', function() {
+    var q = input.value.toLowerCase();
+    tbody.querySelectorAll('tr').forEach(function(tr) {
+      tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  });
+});
+
+// ── Inline ignore form toggle ──────────────────────────────────────────────────
+document.querySelectorAll('.js-ignore-toggle').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var form = document.getElementById('ignore-form-' + btn.dataset.order);
+    if (form) form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+  });
+});
+</script>
 </body>
 </html>

@@ -1,10 +1,6 @@
 <?php
 /**
  * Reporter — formats and saves the audit results.
- *
- * Terminal output uses basic ASCII so it works cleanly in cron logs.
- * Files saved: reports/missing_YYYY-MM-DD.csv  (machine-readable)
- *              reports/missing_YYYY-MM-DD.txt  (human-readable summary)
  */
 class Reporter
 {
@@ -12,21 +8,16 @@ class Reporter
 
     // ── Terminal output ───────────────────────────────────────────────
 
-    /**
-     * @param list<array>                               $missing
-     * @param list<array>                               $found
-     * @param list<array>                               $skipped
-     * @param array<int, array{orderNumber: string, ssOrders: list<array>}> $spotChecks
-     */
     public static function printSummary(
         array  $missing,
         array  $found,
         array  $skipped,
         string $startDate,
         string $endDate,
-        array  $spotChecks = []
+        array  $spotChecks = [],
+        array  $ignored    = []
     ): void {
-        $total = count($missing) + count($found) + count($skipped);
+        $total = count($missing) + count($found) + count($skipped) + count($ignored);
 
         echo "\n";
         echo "=======================================================\n";
@@ -35,6 +26,7 @@ class Reporter
         printf("  Shopify orders in window : %d\n", $total);
         printf("  Matched in ShipStation   : %d\n", count($found));
         printf("  Skipped (cancelled/etc)  : %d\n", count($skipped));
+        printf("  Ignored (manual)         : %d\n", count($ignored));
         printf("  MISSING from ShipStation : %d\n", count($missing));
         echo "-------------------------------------------------------\n";
 
@@ -42,26 +34,22 @@ class Reporter
             echo "  [OK] All paid orders are present in ShipStation.\n";
         } else {
             echo "  [!!] Missing orders:\n\n";
-            echo "  " . str_pad("Order #", 12)
-                       . str_pad("Date", 22)
-                       . str_pad("Financial", 14)
-                       . "Email\n";
-            echo "  " . str_repeat('-', 70) . "\n";
+            echo "  " . str_pad("Order #", 12) . str_pad("Date", 12)
+                      . str_pad("Total", 10)   . str_pad("Financial", 14) . "Email\n";
+            echo "  " . str_repeat('-', 76) . "\n";
 
             foreach ($missing as $o) {
                 $num       = $o['order_number'] ?? $o['name'] ?? '?';
                 $date      = substr($o['created_at'] ?? '', 0, 10);
+                $total_p   = isset($o['total_price']) ? '$' . number_format((float)$o['total_price'], 2) : '—';
                 $financial = $o['financial_status'] ?? '';
                 $email     = $o['email'] ?? '';
 
-                echo "  " . str_pad("#{$num}", 12)
-                           . str_pad($date, 22)
-                           . str_pad($financial, 14)
-                           . $email . "\n";
+                echo "  " . str_pad("#{$num}", 12) . str_pad($date, 12)
+                           . str_pad($total_p, 10) . str_pad($financial, 14) . $email . "\n";
             }
         }
 
-        // ── Spot-check section ────────────────────────────────────────
         if (!empty($spotChecks)) {
             echo "\n-------------------------------------------------------\n";
             echo "  SPOT-CHECK RESULTS\n";
@@ -73,9 +61,9 @@ class Reporter
                     echo "  #{$num} => NOT FOUND in ShipStation\n";
                 } else {
                     foreach ($orders as $o) {
-                        $ssNum    = $o['orderNumber']  ?? '?';
-                        $status   = $o['orderStatus']  ?? '?';
-                        $ssId     = $o['orderId']      ?? '?';
+                        $ssNum  = $o['orderNumber'] ?? '?';
+                        $status = $o['orderStatus'] ?? '?';
+                        $ssId   = $o['orderId']     ?? '?';
                         echo "  #{$num} => found as SS #{$ssNum} (id={$ssId}, status={$status})\n";
                     }
                 }
@@ -87,37 +75,31 @@ class Reporter
 
     // ── File output ───────────────────────────────────────────────────
 
-    /**
-     * Save missing orders to CSV and a plain-text summary.
-     *
-     * @param list<array> $missing
-     */
     public static function saveReports(array $missing, string $startDate, string $endDate): void
     {
         $dir = self::REPORT_DIR;
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
 
         $stamp = date('Y-m-d');
 
-        // ── CSV ───────────────────────────────────────────────────────
+        // CSV
         $csvPath = "{$dir}/missing_{$stamp}.csv";
         $fh = fopen($csvPath, 'w');
-        fputcsv($fh, ['order_number', 'shopify_id', 'created_at', 'financial_status', 'fulfillment_status', 'email']);
+        fputcsv($fh, ['order_number', 'shopify_id', 'created_at', 'total_price', 'financial_status', 'fulfillment_status', 'email']);
         foreach ($missing as $o) {
             fputcsv($fh, [
-                $o['order_number']      ?? $o['name'] ?? '',
-                $o['id']                ?? '',
-                $o['created_at']        ?? '',
-                $o['financial_status']  ?? '',
+                $o['order_number']       ?? $o['name'] ?? '',
+                $o['id']                 ?? '',
+                $o['created_at']         ?? '',
+                $o['total_price']        ?? '',
+                $o['financial_status']   ?? '',
                 $o['fulfillment_status'] ?? '',
-                $o['email']             ?? '',
+                $o['email']              ?? '',
             ]);
         }
         fclose($fh);
 
-        // ── Plain text ────────────────────────────────────────────────
+        // Plain text
         $txtPath = "{$dir}/missing_{$stamp}.txt";
         $lines   = [
             "ShipStation missing orders — generated " . date('Y-m-d H:i:s'),
@@ -126,10 +108,12 @@ class Reporter
             "",
         ];
         foreach ($missing as $o) {
+            $total_p = isset($o['total_price']) ? '$' . number_format((float)$o['total_price'], 2) : '—';
             $lines[] = sprintf(
-                "#%s  %s  %-12s  %s",
-                $o['order_number']     ?? $o['name'] ?? '?',
+                "#%s  %s  %-8s  %-12s  %s",
+                $o['order_number']    ?? $o['name'] ?? '?',
                 substr($o['created_at'] ?? '', 0, 10),
+                $total_p,
                 $o['financial_status'] ?? '',
                 $o['email']            ?? ''
             );
