@@ -70,7 +70,25 @@ if ($authed) {
     }
 }
 
-// ── Ignore / unignore actions ─────────────────────────────────────────────────
+// ── CSV download (authenticated, serves file through PHP) ─────────────────────
+
+if ($authed && ($_GET['action'] ?? '') === 'download') {
+    $date = $_GET['date'] ?? '';
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+        http_response_code(400); exit('Invalid date.');
+    }
+    $path = $reportDir . '/missing_' . $date . '.csv';
+    if (!file_exists($path)) {
+        http_response_code(404); exit('Report not found.');
+    }
+    header('Content-Type: text/csv');
+    header('Content-Disposition: attachment; filename="missing_' . $date . '.csv"');
+    header('Content-Length: ' . filesize($path));
+    readfile($path);
+    exit;
+}
+
+// ── Ignore / unignore actions (Post-Redirect-Get) ─────────────────────────────
 
 if ($authed && $action === 'ignore_order') {
     $num    = Comparator::normalise($_POST['order_number'] ?? '');
@@ -80,6 +98,13 @@ if ($authed && $action === 'ignore_order') {
         $ignoredOrders[$num] = ['reason' => $reason, 'ignored_at' => date('Y-m-d')];
         file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT));
     }
+    // PRG: redirect back to where the form came from
+    $redirectPage = $_POST['redirect_page'] ?? 'reports';
+    $redirectDate = $_POST['redirect_date'] ?? '';
+    $loc = '?page=' . urlencode($redirectPage);
+    if ($redirectDate) $loc .= '&date=' . urlencode($redirectDate);
+    header('Location: ' . $loc);
+    exit;
 }
 
 if ($authed && $action === 'unignore_order') {
@@ -88,6 +113,12 @@ if ($authed && $action === 'unignore_order') {
         unset($ignoredOrders[$num]);
         file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT));
     }
+    $redirectPage = $_POST['redirect_page'] ?? 'reports';
+    $redirectDate = $_POST['redirect_date'] ?? '';
+    $loc = '?page=' . urlencode($redirectPage);
+    if ($redirectDate) $loc .= '&date=' . urlencode($redirectDate);
+    header('Location: ' . $loc);
+    exit;
 }
 
 // ── Cache flush ───────────────────────────────────────────────────────────────
@@ -365,12 +396,8 @@ function renderMissingTable(
                   <form method="post" style="display:contents">
                     <input type="hidden" name="action" value="ignore_order">
                     <input type="hidden" name="order_number" value="<?= esc($num) ?>">
-                    <?php if ($context === 'run'): ?>
-                      <input type="hidden" name="audit_start" value="<?= esc($contextVal) ?>">
-                      <input type="hidden" name="audit_end"   value="<?= esc($contextVal2) ?>">
-                    <?php else: ?>
-                      <input type="hidden" name="date" value="<?= esc($contextVal) ?>">
-                    <?php endif; ?>
+                    <input type="hidden" name="redirect_page" value="<?= esc($context) ?>">
+                    <input type="hidden" name="redirect_date" value="<?= esc($contextVal) ?>">
                     <input type="text" name="reason" placeholder="Reason (optional)" style="width:150px">
                     <button class="btn btn-sm btn-danger" type="submit">Confirm</button>
                   </form>
@@ -825,8 +852,7 @@ function badge(int $count): string {
                 <form method="post">
                   <input type="hidden" name="action" value="unignore_order">
                   <input type="hidden" name="order_number" value="<?= esc($num) ?>">
-                  <input type="hidden" name="audit_start" value="<?= esc($auditStart) ?>">
-                  <input type="hidden" name="audit_end"   value="<?= esc($auditEnd) ?>">
+                  <input type="hidden" name="redirect_page" value="run">
                   <button class="unignore-btn" type="submit">Unignore</button>
                 </form>
               </div>
@@ -973,7 +999,7 @@ function badge(int $count): string {
         <h1>Order Audit</h1>
         <?php if ($selectedReport): ?>
           <div class="meta">Report for <?= esc($selectedReport['date']) ?> &mdash;
-            <a href="reports/missing_<?= esc($selectedReport['date']) ?>.csv" download>Download CSV</a>
+            <a href="?action=download&date=<?= esc($selectedReport['date']) ?>">Download CSV</a>
           </div>
         <?php endif; ?>
       </div>

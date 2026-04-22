@@ -1,5 +1,10 @@
 .env
 cache/
-reports/
 logs/
-data/
+
+# Keep .htaccess files but ignore generated content
+reports/*
+!reports/.htaccess
+
+data/*
+!data/.htaccess

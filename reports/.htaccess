@@ -1,0 +1,9 @@
+# Block all direct HTTP access to report files.
+# Downloads are served through index.php (authenticated).
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order deny,allow
+    Deny from all
+</IfModule>
