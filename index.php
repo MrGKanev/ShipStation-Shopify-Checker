@@ -91,6 +91,94 @@ if ($authed && $action === 'spotcheck') {
     }
 }
 
+// ── On-demand audit (custom date range from the web UI) ───────────────────────
+
+$auditResult   = null;   // null = not run yet
+$auditStart    = $_POST['audit_start'] ?? date('Y-m-d', strtotime('-30 days'));
+$auditEnd      = $_POST['audit_end']   ?? date('Y-m-d');
+$auditError    = '';
+$auditDuration = 0;
+
+if ($authed && $action === 'run_audit') {
+    $auditStart = $_POST['audit_start'] ?? '';
+    $auditEnd   = $_POST['audit_end']   ?? '';
+
+    $validStart = (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $auditStart);
+    $validEnd   = (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $auditEnd);
+
+    if (!$validStart || !$validEnd) {
+        $auditError = 'Invalid date format. Use YYYY-MM-DD.';
+    } elseif ($auditStart > $auditEnd) {
+        $auditError = 'Start date must be before end date.';
+    } elseif ((strtotime($auditEnd) - strtotime($auditStart)) > 366 * 86400) {
+        $auditError = 'Date range cannot exceed 366 days.';
+    } else {
+        $ssKey        = getenv('SS_API_KEY');
+        $ssSecret     = getenv('SS_API_SECRET');
+        $shopifyToken = getenv('SHOPIFY_ACCESS_TOKEN');
+
+        if (!$ssKey || !$ssSecret || !$shopifyToken) {
+            $auditError = 'API credentials missing in .env (SS_API_KEY, SS_API_SECRET, SHOPIFY_ACCESS_TOKEN).';
+        } else {
+            require_once __DIR__ . '/src/Cache.php';
+            require_once __DIR__ . '/src/ShipStation.php';
+            require_once __DIR__ . '/src/Shopify.php';
+            require_once __DIR__ . '/src/Comparator.php';
+            require_once __DIR__ . '/src/Reporter.php';
+
+            try {
+                set_time_limit(300); // large date ranges can take a while
+                $t0 = microtime(true);
+
+                $cacheTtl = (int) (getenv('CACHE_TTL') ?: 14400);
+                $cache    = new Cache(__DIR__ . '/cache', $cacheTtl);
+
+                $ss      = new ShipStation($ssKey, $ssSecret, $cache);
+                $shopify = new Shopify($shopifyStore, $shopifyToken, $cache);
+
+                // Suppress the echo dots from the API clients
+                ob_start();
+                $shopifyOrders = $shopify->fetchAllOrders($auditStart, $auditEnd);
+                $ssOrders      = $ss->fetchAllOrders($auditStart, $auditEnd);
+                ob_end_clean();
+
+                $ssIndex     = Comparator::buildSSIndex($ssOrders);
+                $comparison  = Comparator::compare($shopifyOrders, $ssIndex);
+
+                Reporter::saveReports($comparison['missing'], $auditStart, $auditEnd);
+
+                $auditDuration = round(microtime(true) - $t0, 1);
+                $auditResult   = [
+                    'missing'  => $comparison['missing'],
+                    'found'    => count($comparison['found']),
+                    'skipped'  => count($comparison['skipped']),
+                    'total_ss' => count($ssOrders),
+                ];
+            } catch (Throwable $e) {
+                $auditError = $e->getMessage();
+            }
+        }
+    }
+}
+
+// ── Cache info + flush ────────────────────────────────────────────────────────
+
+$cacheDir     = __DIR__ . '/cache';
+$cacheTtl     = (int) (getenv('CACHE_TTL') ?: 14400);
+$cacheEntries = [];
+$cacheFlushed = 0;
+
+if ($authed) {
+    require_once __DIR__ . '/src/Cache.php';
+    $cacheObj = new Cache($cacheDir, $cacheTtl);
+
+    if ($action === 'flush_cache') {
+        $cacheFlushed = $cacheObj->flush();
+    }
+
+    $cacheEntries = $cacheObj->entries();
+}
+
 // ── Load report data (only when authed) ───────────────────────────────────────
 
 $reports      = [];   // [{date, csvPath, txtPath, missing: []}]
@@ -299,6 +387,35 @@ function badge(int $count): string {
   .history-bar.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
   .history-label { font-size: .65rem; color: var(--muted); text-align: center; margin-top: .25rem; white-space: nowrap; }
 
+  /* Run audit */
+  .run-form { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.5rem; }
+  .run-form h2 { font-size: .95rem; font-weight: 700; margin-bottom: .25rem; }
+  .run-form .hint { font-size: .8rem; color: var(--muted); margin-bottom: 1.25rem; }
+  .date-row { display: flex; gap: .75rem; align-items: flex-end; flex-wrap: wrap; }
+  .date-row .field { margin-bottom: 0; flex: 1; min-width: 140px; }
+  .date-row input[type=date] {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+    padding: .65rem .9rem; color: var(--text); font-size: .875rem;
+    outline: none; transition: border-color .15s; -webkit-appearance: none;
+  }
+  .date-row input[type=date]:focus { border-color: var(--accent); }
+  .audit-summary { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); gap: .75rem; margin-bottom: 1.5rem; }
+  .audit-summary .stat-card .value { font-size: 1.6rem; }
+  .duration-note { font-size: .75rem; color: var(--muted); margin-bottom: 1rem; }
+
+  /* Cache table */
+  .cache-section { margin-top: 2rem; }
+  .cache-section h2 { font-size: .95rem; font-weight: 700; margin-bottom: .75rem; }
+  .cache-meta { font-size: .8rem; color: var(--muted); margin-bottom: .75rem; }
+  .cache-table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .cache-actions { display: flex; align-items: center; gap: .75rem; margin-bottom: .75rem; flex-wrap: wrap; }
+  .btn-danger { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+  .btn-danger:hover { background: #fecaca; }
+  .tag-fresh   { background: #dcfce7; color: #15803d; border-radius: 5px; padding: .1rem .45rem; font-size: .7rem; font-weight: 700; }
+  .tag-expired { background: #f1f5f9; color: var(--muted); border-radius: 5px; padding: .1rem .45rem; font-size: .7rem; font-weight: 700; }
+  .empty-cache { text-align: center; padding: 2rem; color: var(--muted); font-size: .875rem; }
+  .flush-notice { background: #dcfce7; border: 1px solid #bbf7d0; border-radius: 7px; padding: .6rem 1rem; color: #15803d; font-size: .85rem; margin-bottom: 1rem; }
+
   /* Spot-check */
   .spot-form { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.5rem; }
   .spot-form h2 { font-size: .95rem; font-weight: 700; margin-bottom: .25rem; }
@@ -382,6 +499,11 @@ function badge(int $count): string {
         </a>
       </li>
       <li>
+        <a href="?page=run" class="<?= $page === 'run' ? 'page-active' : '' ?>">
+          Run Audit
+        </a>
+      </li>
+      <li>
         <a href="?page=spotcheck" class="<?= $page === 'spotcheck' ? 'page-active' : '' ?>">
           Spot-check
         </a>
@@ -414,7 +536,171 @@ function badge(int $count): string {
   <!-- Main content -->
   <main class="main">
 
-    <?php if (($page ?? 'reports') === 'spotcheck'): ?>
+    <?php if (($page ?? 'reports') === 'run'): ?>
+    <!-- ══════════════ RUN AUDIT PAGE ══════════════ -->
+    <div class="topbar">
+      <div>
+        <h1>Run Audit</h1>
+        <div class="meta">Compare Shopify vs ShipStation for any date range</div>
+      </div>
+    </div>
+
+    <div class="run-form">
+      <h2>Date range</h2>
+      <div class="hint">Fetches orders from both platforms and shows what's missing in ShipStation. Large ranges (90+ days) may take 30–60 seconds.</div>
+
+      <?php if ($auditError): ?>
+        <div class="error-msg" style="margin-bottom:.75rem"><?= esc($auditError) ?></div>
+      <?php endif; ?>
+
+      <form method="post">
+        <input type="hidden" name="action" value="run_audit">
+        <div class="date-row">
+          <div class="field">
+            <label>From</label>
+            <input type="date" name="audit_start" value="<?= esc($auditStart) ?>" max="<?= date('Y-m-d') ?>">
+          </div>
+          <div class="field">
+            <label>To</label>
+            <input type="date" name="audit_end" value="<?= esc($auditEnd) ?>" max="<?= date('Y-m-d') ?>">
+          </div>
+          <button class="btn" type="submit" style="flex-shrink:0">Run Audit</button>
+        </div>
+      </form>
+    </div>
+
+    <?php if ($auditResult !== null): ?>
+      <div class="duration-note">Completed in <?= $auditDuration ?>s &mdash; report saved to <code>reports/</code></div>
+
+      <?php $missing = $auditResult['missing']; $count = count($missing); ?>
+      <div class="audit-summary">
+        <div class="stat-card">
+          <div class="label">Missing</div>
+          <div class="value <?= $count > 0 ? 'warn' : 'ok' ?>"><?= $count ?></div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Matched</div>
+          <div class="value ok"><?= $auditResult['found'] ?></div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Skipped</div>
+          <div class="value accent"><?= $auditResult['skipped'] ?></div>
+        </div>
+        <div class="stat-card">
+          <div class="label">SS total</div>
+          <div class="value accent"><?= $auditResult['total_ss'] ?></div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-header">
+          <h2>Missing Orders</h2>
+          <span><?= $count ?> order<?= $count !== 1 ? 's' : '' ?></span>
+        </div>
+        <?php if ($count === 0): ?>
+          <div class="empty">
+            <div class="icon">✅</div>
+            <h3>All clear!</h3>
+            <p>Every paid Shopify order was found in ShipStation for this period.</p>
+          </div>
+        <?php else: ?>
+          <table>
+            <thead>
+              <tr>
+                <th>Order #</th>
+                <th>Created</th>
+                <th>Financial</th>
+                <th>Fulfillment</th>
+                <th>Email</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($missing as $row):
+                $financial = strtolower($row['financial_status'] ?? '');
+                $chipClass = match($financial) {
+                  'paid'           => 'chip-paid',
+                  'partially_paid' => 'chip-partial',
+                  'unpaid'         => 'chip-unpaid',
+                  default          => 'chip-unknown',
+                };
+              ?>
+              <tr>
+                <td><span class="order-num">#<?= esc($row['order_number'] ?? $row['name'] ?? '?') ?></span></td>
+                <td><?= esc(substr($row['created_at'] ?? '', 0, 10)) ?></td>
+                <td><span class="chip <?= $chipClass ?>"><?= esc($row['financial_status'] ?? '—') ?></span></td>
+                <td><?= esc($row['fulfillment_status'] ?? '—') ?></td>
+                <td style="color:var(--muted)"><?= esc($row['email'] ?? '—') ?></td>
+              </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        <?php endif; ?>
+      </div>
+    <?php endif; ?>
+
+    <!-- Cache status -->
+    <div class="cache-section">
+      <h2>Cache</h2>
+      <div class="cache-meta">
+        TTL: <?= $cacheTtl >= 3600 ? round($cacheTtl / 3600, 1) . ' h' : ($cacheTtl / 60) . ' min' ?>
+        &mdash; set <code>CACHE_TTL</code> in .env (seconds) to change.
+        Cached data is reused for repeated runs on the same date range.
+      </div>
+
+      <?php if ($cacheFlushed > 0): ?>
+        <div class="flush-notice">Cleared <?= $cacheFlushed ?> cache file<?= $cacheFlushed !== 1 ? 's' : '' ?>.</div>
+      <?php endif; ?>
+
+      <div class="cache-actions">
+        <form method="post">
+          <input type="hidden" name="action" value="flush_cache">
+          <input type="hidden" name="audit_start" value="<?= esc($auditStart) ?>">
+          <input type="hidden" name="audit_end"   value="<?= esc($auditEnd) ?>">
+          <button class="btn btn-danger btn-sm" type="submit"
+                  <?= empty($cacheEntries) ? 'disabled' : '' ?>>
+            Clear all cache
+          </button>
+        </form>
+        <span style="font-size:.8rem;color:var(--muted)"><?= count($cacheEntries) ?> file<?= count($cacheEntries) !== 1 ? 's' : '' ?> cached</span>
+      </div>
+
+      <?php if (empty($cacheEntries)): ?>
+        <div class="cache-table-wrap"><div class="empty-cache">No cache files yet — run an audit to populate.</div></div>
+      <?php else: ?>
+        <div class="cache-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Platform</th>
+                <th>File</th>
+                <th>Expires</th>
+                <th>Size</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($cacheEntries as $e): ?>
+              <tr>
+                <td><span class="chip chip-unknown" style="text-transform:capitalize"><?= esc($e['prefix']) ?></span></td>
+                <td style="font-family:monospace;font-size:.78rem;color:var(--muted)"><?= esc(substr($e['file'], 0, 24)) ?>…</td>
+                <td><?= date('Y-m-d H:i', $e['expires_at']) ?></td>
+                <td><?= $e['size_kb'] ?> KB</td>
+                <td>
+                  <?php if ($e['expired']): ?>
+                    <span class="tag-expired">Expired</span>
+                  <?php else: ?>
+                    <span class="tag-fresh">Fresh</span>
+                  <?php endif; ?>
+                </td>
+              </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      <?php endif; ?>
+    </div>
+
+    <?php elseif (($page ?? 'reports') === 'spotcheck'): ?>
     <!-- ══════════════ SPOT-CHECK PAGE ══════════════ -->
     <div class="topbar">
       <div>

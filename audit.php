@@ -3,6 +3,7 @@
 // audit.php — ShipStation ↔ Shopify Order Audit
 // Usage: php audit.php [--spot-check 164777,164789]
 
+require_once __DIR__ . '/src/Cache.php';
 require_once __DIR__ . '/src/ShipStation.php';
 require_once __DIR__ . '/src/Shopify.php';
 require_once __DIR__ . '/src/Comparator.php';
@@ -56,8 +57,11 @@ if ($spotCheckNumbers) {
 echo "\n";
 
 try {
-    $ss      = new ShipStation($ssKey, $ssSecret);
-    $shopify = new Shopify($shopifyStore, $shopifyToken);
+    $cacheTtl = (int) (getenv('CACHE_TTL') ?: 14400); // default 4 h
+    $cache    = new Cache(__DIR__ . '/cache', $cacheTtl);
+
+    $ss      = new ShipStation($ssKey, $ssSecret, $cache);
+    $shopify = new Shopify($shopifyStore, $shopifyToken, $cache);
 
     // ── Step 1: Fetch orders from both platforms ──────────────────
     $shopifyOrders = $shopify->fetchAllOrders($startDate, $endDate);

@@ -13,13 +13,15 @@ class Shopify
 
     private string $baseUrl;
     private string $token;
+    private ?Cache $cache;
 
-    public function __construct(string $store, string $accessToken)
+    public function __construct(string $store, string $accessToken, ?Cache $cache = null)
     {
         // Accept either "mystore" or "mystore.myshopify.com"
         $host = str_contains($store, '.') ? $store : "{$store}.myshopify.com";
         $this->baseUrl = "https://{$host}/admin/api/2024-01";
         $this->token   = $accessToken;
+        $this->cache   = $cache;
     }
 
     // ── Public ────────────────────────────────────────────────────────
@@ -27,33 +29,46 @@ class Shopify
     /**
      * Returns every order created between $start and $end (inclusive).
      * Cancelled orders are included so we can detect them and skip them.
+     * Results are served from cache when available and fresh.
      *
      * @return array<int, array<string, mixed>>
      */
     public function fetchAllOrders(string $startDate, string $endDate): array
     {
-        $all = [];
+        $fetch = function () use ($startDate, $endDate): array {
+            $all = [];
 
-        $params = http_build_query([
-            'status'           => 'any',
-            'created_at_min'   => $startDate . 'T00:00:00-00:00',
-            'created_at_max'   => $endDate   . 'T23:59:59-00:00',
-            'limit'            => self::PAGE_SIZE,
-            'fields'           => 'id,order_number,name,financial_status,fulfillment_status,cancelled_at,created_at,email',
-        ]);
+            $params = http_build_query([
+                'status'         => 'any',
+                'created_at_min' => $startDate . 'T00:00:00-00:00',
+                'created_at_max' => $endDate   . 'T23:59:59-00:00',
+                'limit'          => self::PAGE_SIZE,
+                'fields'         => 'id,order_number,name,financial_status,fulfillment_status,cancelled_at,created_at,email',
+            ]);
 
-        echo "  Fetching Shopify orders";
+            echo "  Fetching Shopify orders";
 
-        $nextUrl = "{$this->baseUrl}/orders.json?{$params}";
+            $nextUrl = "{$this->baseUrl}/orders.json?{$params}";
 
-        while ($nextUrl) {
-            [$orders, $nextUrl] = $this->getPage($nextUrl);
-            $all = array_merge($all, $orders);
-            echo '.';
+            while ($nextUrl) {
+                [$orders, $nextUrl] = $this->getPage($nextUrl);
+                $all = array_merge($all, $orders);
+                echo '.';
+            }
+
+            echo " done (" . count($all) . " orders)\n";
+            return $all;
+        };
+
+        if ($this->cache) {
+            return $this->cache->remember('shopify', "{$startDate}|{$endDate}", function () use ($fetch, $startDate, $endDate) {
+                $orders = $fetch();
+                echo "  [cache] Shopify orders stored ({$startDate} → {$endDate})\n";
+                return $orders;
+            });
         }
 
-        echo " done (" . count($all) . " orders)\n";
-        return $all;
+        return $fetch();
     }
 
     // ── Private ───────────────────────────────────────────────────────
@@ -76,9 +91,9 @@ class Shopify
             CURLOPT_TIMEOUT        => 30,
         ]);
 
-        $raw  = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $err  = curl_error($ch);
+        $raw        = curl_exec($ch);
+        $code       = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err        = curl_error($ch);
         $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
         curl_close($ch);
 

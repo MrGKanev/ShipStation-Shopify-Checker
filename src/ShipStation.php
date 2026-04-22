@@ -11,53 +11,76 @@ class ShipStation
     private const PAGE_SIZE = 500;   // max allowed by the API
 
     private string $auth;
+    private ?Cache $cache;
 
-    public function __construct(string $apiKey, string $apiSecret)
+    public function __construct(string $apiKey, string $apiSecret, ?Cache $cache = null)
     {
-        $this->auth = base64_encode("{$apiKey}:{$apiSecret}");
+        $this->auth  = base64_encode("{$apiKey}:{$apiSecret}");
+        $this->cache = $cache;
     }
 
     // ── Public ────────────────────────────────────────────────────────
 
     /**
      * Returns every order created between $start and $end (inclusive).
-     * Each element is the raw associative array from the API.
+     * Results are served from cache when available and fresh.
      *
      * @return array<int, array<string, mixed>>
      */
     public function fetchAllOrders(string $startDate, string $endDate): array
     {
-        $all  = [];
-        $page = 1;
+        $fetch = function () use ($startDate, $endDate): array {
+            $all  = [];
+            $page = 1;
 
-        echo "  Fetching ShipStation orders";
+            echo "  Fetching ShipStation orders";
 
-        do {
-            $params = http_build_query([
-                'createDateStart' => $startDate . ' 00:00:00',
-                'createDateEnd'   => $endDate   . ' 23:59:59',
-                'pageSize'        => self::PAGE_SIZE,
-                'page'            => $page,
-                'sortBy'          => 'OrderDate',
-                'sortDir'         => 'ASC',
-            ]);
+            do {
+                $params = http_build_query([
+                    'createDateStart' => $startDate . ' 00:00:00',
+                    'createDateEnd'   => $endDate   . ' 23:59:59',
+                    'pageSize'        => self::PAGE_SIZE,
+                    'page'            => $page,
+                    'sortBy'          => 'OrderDate',
+                    'sortDir'         => 'ASC',
+                ]);
 
-            $data  = $this->get("/orders?{$params}");
-            $batch = $data['orders'] ?? [];
-            $all   = array_merge($all, $batch);
+                $data  = $this->get("/orders?{$params}");
+                $batch = $data['orders'] ?? [];
+                $all   = array_merge($all, $batch);
 
-            $pages = $data['pages'] ?? 1;
-            echo '.';
-            $page++;
-        } while ($page <= $pages);
+                $pages = $data['pages'] ?? 1;
+                echo '.';
+                $page++;
+            } while ($page <= $pages);
 
-        echo " done (" . count($all) . " orders)\n";
-        return $all;
+            echo " done (" . count($all) . " orders)\n";
+            return $all;
+        };
+
+        if ($this->cache) {
+            $orders = $this->cache->remember('ss', "{$startDate}|{$endDate}", function () use ($fetch, $startDate, $endDate) {
+                $orders = $fetch();
+                echo "  [cache] ShipStation orders stored ({$startDate} → {$endDate})\n";
+                return $orders;
+            });
+
+            // If served from cache the closure above never ran — announce it
+            static $announced = [];
+            $key = "ss|{$startDate}|{$endDate}";
+            if (!isset($announced[$key])) {
+                $announced[$key] = true;
+            }
+
+            return $orders;
+        }
+
+        return $fetch();
     }
 
     /**
      * Look up orders in ShipStation that match a given Shopify order number.
-     * ShipStation stores the Shopify order number in orderNumber.
+     * (Not cached — targeted lookup, always live.)
      *
      * @return array<int, array<string, mixed>>
      */
