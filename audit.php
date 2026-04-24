@@ -92,6 +92,29 @@ try {
     $ssIndex = Comparator::buildSSIndex($ssOrders);
     $result  = Comparator::compare($shopifyOrders, $ssIndex, $ignoredNumbers);
 
+    // ── Step 4b: On-hold check ────────────────────────────────────
+    // 'on_hold' is not exposed on the order object itself — it lives on
+    // the Fulfillment Order level and requires a separate API call per order.
+    // We only check the (small) set of orders already flagged as missing to
+    // keep the total number of extra requests low (typically 5-10/day).
+    // Results are cached per order ID so historical re-runs are cheap.
+    if (!empty($result['missing'])) {
+        echo "\n  Checking on-hold status for " . count($result['missing']) . " missing order(s)...";
+        $stillMissing = [];
+        foreach ($result['missing'] as $order) {
+            if ($shopify->isOnHold((string) $order['id'])) {
+                $order['_skip_reason'] = 'on_hold';
+                $result['skipped'][]   = $order;
+                echo 'H'; // visual indicator
+            } else {
+                $stillMissing[] = $order;
+                echo '.';
+            }
+        }
+        $result['missing'] = $stillMissing;
+        echo " done\n";
+    }
+
     // ── Step 5: Report ────────────────────────────────────────────
     Reporter::printSummary(
         $result['missing'],

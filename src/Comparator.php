@@ -28,6 +28,10 @@ class Comparator
      * Skipped reasons (stored in $order['_skip_reason']):
      *   cancelled     — cancelled_at is set
      *   financial     — pending / voided / refunded
+     *   fulfilled     — fulfillment_status === 'fulfilled' (fully shipped; already processed)
+     *   restocked     — fulfillment_status === 'restocked' (returned & restocked after shipment)
+     *   on_hold       — fulfillment order has status 'on_hold' (checked post-compare in audit.php
+     *                   via Shopify::isOnHold(); requires a separate API call per order)
      *   zero_value    — total_price == 0 (digital downloads, gift cards)
      *   no_shipping   — no shipping lines (fulfilled digitally or local pickup)
      *   ignored       — manually ignored via the web dashboard
@@ -68,6 +72,20 @@ class Comparator
             $financial = $order['financial_status'] ?? '';
             if (in_array($financial, ['pending', 'voided', 'refunded'], true)) {
                 $order['_skip_reason'] = 'financial';
+                $skipped[] = $order;
+                continue;
+            }
+
+            // ── Fulfillment status ────────────────────────────────────
+            // 'fulfilled'  → all line items shipped; order is done.
+            // 'restocked'  → items were returned and restocked after shipment
+            //                (Shopify sets this when a fulfilment is cancelled
+            //                 post-shipment, e.g. a return/void after dispatch).
+            // Both cases mean the order is no longer actionable from a
+            // ShipStation perspective, so we skip them.
+            $fulfillment = $order['fulfillment_status'] ?? null;
+            if (in_array($fulfillment, ['fulfilled', 'restocked'], true)) {
+                $order['_skip_reason'] = 'fulfilled';
                 $skipped[] = $order;
                 continue;
             }

@@ -69,7 +69,84 @@ class Shopify
         return $fetch();
     }
 
+    /**
+     * Returns true if any fulfillment order for this Shopify order ID has
+     * status 'on_hold'. Uses the Fulfillment Orders API (separate endpoint
+     * from orders.json — hold state is not exposed on the order object itself).
+     *
+     * Results are cached per order ID to avoid redundant calls during
+     * large historical audits.
+     */
+    public function isOnHold(string $orderId): bool
+    {
+        $check = function () use ($orderId): bool {
+            $url  = "{$this->baseUrl}/orders/{$orderId}/fulfillment_orders.json";
+            $data = $this->get($url);
+
+            foreach ($data['fulfillment_orders'] ?? [] as $fo) {
+                if (($fo['status'] ?? '') === 'on_hold') {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        if ($this->cache) {
+            return $this->cache->remember('shopify_hold', $orderId, $check);
+        }
+
+        return $check();
+    }
+
     // ── Private ───────────────────────────────────────────────────────
+
+    /**
+     * Single GET request — returns decoded JSON body as array.
+     * Handles rate limiting (HTTP 429) with automatic retry.
+     *
+     * @return array<string, mixed>
+     */
+    private function get(string $url): array
+    {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HEADER         => true,
+            CURLOPT_HTTPHEADER     => [
+                "X-Shopify-Access-Token: {$this->token}",
+                'Content-Type: application/json',
+            ],
+            CURLOPT_TIMEOUT        => 30,
+        ]);
+
+        $raw        = curl_exec($ch);
+        $code       = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err        = curl_error($ch);
+        $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        curl_close($ch);
+
+        if ($err) throw new RuntimeException("Shopify cURL error: {$err}");
+
+        if ($code === 429) {
+            $headers    = substr($raw, 0, $headerSize);
+            $retryAfter = 10;
+            if (preg_match('/Retry-After:\s*(\d+)/i', $headers, $m)) {
+                $retryAfter = (int) $m[1];
+            }
+            echo "\n  [Shopify] Rate limited — waiting {$retryAfter}s ...\n";
+            sleep($retryAfter);
+            return $this->get($url);
+        }
+
+        if ($code < 200 || $code >= 300) {
+            throw new RuntimeException("Shopify API error {$code}: " . substr($raw, $headerSize));
+        }
+
+        $body    = substr($raw, $headerSize);
+        $decoded = json_decode($body, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
 
     /** @return array{0: array<int, array<string, mixed>>, 1: string|null} */
     private function getPage(string $url): array
