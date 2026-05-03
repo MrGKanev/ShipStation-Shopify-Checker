@@ -1,3 +1,13 @@
+// Local timezone for cache expiry timestamps
+document.querySelectorAll('.js-localtime').forEach(function(el) {
+  var ts = parseInt(el.dataset.ts, 10);
+  if (!ts) return;
+  el.textContent = new Date(ts * 1000).toLocaleString([], {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit'
+  });
+});
+
 // Mobile sidebar toggle
 (function() {
   var sidebar  = document.getElementById('js-sidebar');
@@ -24,6 +34,35 @@
   // Close sidebar on nav link click (mobile)
   sidebar.querySelectorAll('a').forEach(function(a) {
     a.addEventListener('click', close);
+  });
+})();
+
+// Audit loading overlay
+(function() {
+  var form = document.getElementById('js-audit-form');
+  var overlay = document.getElementById('js-audit-loading');
+  if (!form || !overlay) return;
+
+  var steps = [
+    { id: 'lstep-shopify', delay: 0 },
+    { id: 'lstep-ss',      delay: 4000 },
+    { id: 'lstep-compare', delay: 9000 },
+  ];
+
+  form.addEventListener('submit', function() {
+    overlay.classList.add('active');
+
+    steps.forEach(function(s, i) {
+      setTimeout(function() {
+        // Mark previous step done
+        if (i > 0) {
+          var prev = document.getElementById(steps[i - 1].id);
+          if (prev) { prev.classList.remove('active'); prev.classList.add('done'); }
+        }
+        var el = document.getElementById(s.id);
+        if (el) el.classList.add('active');
+      }, s.delay);
+    });
   });
 })();
 

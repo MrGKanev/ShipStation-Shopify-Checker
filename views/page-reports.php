@@ -34,6 +34,11 @@
       <div class="label">Total reports</div>
       <div class="value accent"><?= count($reports) ?></div>
     </div>
+    <div class="stat-card" style="display:flex;flex-direction:column;justify-content:space-between">
+      <div class="label">Download</div>
+      <a class="btn btn-sm" href="?action=download&date=<?= esc($selectedReport['date']) ?>" download
+         style="margin-top:.5rem;align-self:flex-start">CSV</a>
+    </div>
   </div>
 
   <?php if (count($reports) > 1): ?>

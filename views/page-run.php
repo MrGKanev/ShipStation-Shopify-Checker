@@ -1,3 +1,20 @@
+<!-- Audit loading overlay -->
+<div class="audit-loading" id="js-audit-loading">
+  <div class="spinner"></div>
+  <div class="loading-title">Running audit…</div>
+  <div class="loading-steps">
+    <div class="loading-step" id="lstep-shopify">
+      <div class="step-dot"></div> Fetching Shopify orders
+    </div>
+    <div class="loading-step" id="lstep-ss">
+      <div class="step-dot"></div> Fetching ShipStation orders
+    </div>
+    <div class="loading-step" id="lstep-compare">
+      <div class="step-dot"></div> Comparing &amp; saving report
+    </div>
+  </div>
+</div>
+
 <div class="topbar">
   <div>
     <h1>Run Audit</h1>
@@ -13,7 +30,7 @@
     <div class="error-msg" style="margin-bottom:.75rem"><?= esc($auditError) ?></div>
   <?php endif; ?>
 
-  <form method="post">
+  <form method="post" id="js-audit-form">
     <input type="hidden" name="action" value="run_audit">
     <div class="date-row">
       <div class="field">
@@ -139,7 +156,7 @@
           <tr>
             <td><span class="chip chip-unknown" style="text-transform:capitalize"><?= esc($e['prefix']) ?></span></td>
             <td style="font-family:monospace;font-size:.78rem;color:var(--muted)"><?= esc(substr($e['file'], 0, 24)) ?>…</td>
-            <td><?= date('Y-m-d H:i', $e['expires_at']) ?></td>
+            <td><span class="js-localtime" data-ts="<?= $e['expires_at'] ?>"></span></td>
             <td><?= $e['size_kb'] ?> KB</td>
             <td>
               <?php if ($e['expired']): ?>

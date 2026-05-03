@@ -88,6 +88,17 @@ a:hover { text-decoration: underline; }
 .sidebar-nav li a.active,
 .sidebar-nav li a.page-active { background: #ebe9fd; color: var(--accent); font-weight: 600; }
 .sidebar-nav li a .date-label { font-size: .78rem; }
+.sidebar-nav li.history-item { display: flex; align-items: center; }
+.sidebar-nav li.history-item > a:first-child { flex: 1; }
+.dl-btn {
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 5px;
+  font-size: .85rem; color: var(--muted);
+  transition: background .12s, color .12s;
+  text-decoration: none !important;
+}
+.dl-btn:hover { background: #eef0fb; color: var(--accent); }
 .sidebar-footer { margin-top: auto; padding: 1rem; border-top: 1px solid var(--border); }
 
 /* Main */
@@ -234,6 +245,42 @@ tbody td { padding: .75rem 1.25rem; font-size: .875rem; vertical-align: middle; 
 .ignored-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: .6rem 1rem; opacity: .7; }
 .ignored-num    { font-family: monospace; font-weight: 700; font-size: .85rem; }
 .ignored-reason { font-size: .78rem; color: var(--muted); }
+
+/* ── Audit loading overlay ── */
+.audit-loading {
+  display: none;
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(248,249,251,.88);
+  backdrop-filter: blur(3px);
+  flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 1.25rem;
+}
+.audit-loading.active { display: flex; }
+.audit-loading .spinner {
+  width: 44px; height: 44px;
+  border: 4px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.audit-loading .loading-title { font-weight: 700; font-size: 1rem; color: var(--text); }
+.audit-loading .loading-steps { display: flex; flex-direction: column; gap: .35rem; min-width: 220px; }
+.loading-step {
+  display: flex; align-items: center; gap: .6rem;
+  font-size: .85rem; color: var(--muted);
+  transition: color .2s;
+}
+.loading-step.active { color: var(--accent); font-weight: 600; }
+.loading-step.done   { color: var(--ok); }
+.loading-step .step-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--border); flex-shrink: 0;
+  transition: background .2s;
+}
+.loading-step.active .step-dot { background: var(--accent); }
+.loading-step.done   .step-dot { background: var(--ok); }
 
 /* ── Mobile header ── */
 .mobile-header {

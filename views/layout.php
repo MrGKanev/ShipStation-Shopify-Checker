@@ -47,7 +47,7 @@
       <div class="sidebar-section">History</div>
       <ul class="sidebar-nav">
         <?php foreach ($reports as $r): ?>
-          <li>
+          <li class="history-item">
             <a href="?date=<?= esc($r['date']) ?>"
                class="<?= ($page === 'reports' && $r['date'] === $selectedDate) ? 'active' : '' ?>">
               <span class="date-label"><?= esc($r['date']) ?></span>

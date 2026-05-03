@@ -1,6 +1,6 @@
 # ShipStation ↔ Shopify Order Audit
 
-Compares every paid Shopify order against ShipStation and surfaces the ones that are missing. Runs as a daily cron job and exposes a password-protected web dashboard to browse historical reports.
+Compares every paid Shopify order against ShipStation and surfaces the ones that are missing. Runs as a daily cron job and exposes a password-protected web dashboard to browse reports, run on-demand audits, and spot-check individual orders.
 
 ---
 
@@ -8,10 +8,10 @@ Compares every paid Shopify order against ShipStation and surfaces the ones that
 
 1. Fetches all Shopify orders in the configured date range (cursor-paginated, up to 250/page)
 2. Fetches all ShipStation orders in the same range (paginated, up to 500/page)
-3. Filters out Shopify orders that should never be in ShipStation (see [What gets skipped](#what-gets-skipped))
-4. For orders not found in ShipStation, checks whether each is on hold in Shopify (separate Fulfillment Orders API call, cached per order ID)
+3. Filters out orders that should never appear in ShipStation (see [What gets skipped](#what-gets-skipped))
+4. For any order not found in ShipStation, checks whether it is on hold in Shopify (separate Fulfillment Orders API call, cached per order ID)
 5. Diffs the two sets and flags any Shopify orders genuinely missing from ShipStation
-6. Saves a CSV + TXT report under `reports/`
+6. Saves a CSV report under `reports/`
 7. The web dashboard reads those reports and displays them
 
 ---
@@ -35,26 +35,43 @@ cd ShipStation-Shopify-Checker
 cp .env.example .env
 ```
 
-Edit `.env` and fill in:
+Edit `.env` and fill in all required values:
 
-| Variable | Where to get it |
-|---|---|
-| `SS_API_KEY` | ShipStation → Settings → API |
-| `SS_API_SECRET` | same page |
-| `SHOPIFY_STORE` | the subdomain part of `yourstore.myshopify.com` |
-| `SHOPIFY_ACCESS_TOKEN` | Shopify → Apps → Develop apps → your app → Admin API access token |
-| `WEB_PASSWORD` | choose any password for the dashboard |
+| Variable | Required | Where to get it |
+|---|---|---|
+| `SS_API_KEY` | ✅ | ShipStation → Settings → API |
+| `SS_API_SECRET` | ✅ | Same page |
+| `SHOPIFY_STORE` | ✅ | The subdomain part of `yourstore.myshopify.com` |
+| `SHOPIFY_ACCESS_TOKEN` | ✅ | Shopify → Apps → Develop apps → your app → Admin API access token |
+| `WEB_PASSWORD` | ✅ | Choose any password for the dashboard |
+| `CACHE_TTL` | — | Cache duration in seconds (default: `14400` = 4 hours). Set to `0` to disable. |
+| `APP_TITLE` | — | Browser tab title (default: `SS ↔ Shopify Audit`) |
+| `APP_BRAND` | — | Sidebar and login logo text (default: `SS ↔ Shopify`) |
 
-### 2. Run the audit manually
+#### Creating a Shopify access token
+
+1. In Shopify Admin go to **Settings → Apps and sales channels → Develop apps**
+2. Click **Create an app** and give it a name (e.g. "ShipStation Audit")
+3. Go to **Configuration → Admin API integration → Edit**
+4. Enable scopes: `read_orders`, `read_fulfillments`
+5. Click **Save**, then **API credentials → Install app**
+6. Copy the **Admin API access token** — it is shown only once
+
+### 2. Point your web server at the repo
+
+The `index.php` at the root is the dashboard entry point. Set your document root to the repo directory, or run locally:
+
+```bash
+php -S localhost:8080
+# open http://localhost:8080
+```
+
+Log in with the `WEB_PASSWORD` you set in `.env`. On first visit with no reports yet, click **Run first audit** to generate the initial report.
+
+### 3. Run the audit manually (CLI)
 
 ```bash
 php audit.php
-```
-
-Spot-check specific order numbers:
-
-```bash
-php audit.php --spot-check 164777,164789
 ```
 
 Override the date window (default: last 90 days):
@@ -63,7 +80,15 @@ Override the date window (default: last 90 days):
 AUDIT_START_DATE=2025-01-01 AUDIT_END_DATE=2025-03-31 php audit.php
 ```
 
-### 3. Schedule via cron
+Spot-check specific order numbers without running a full audit:
+
+```bash
+php audit.php --spot-check 164777,164789
+```
+
+Exit codes: `0` = all clear, `1` = missing orders found, `2` = script error.
+
+### 4. Schedule via cron
 
 Run once a day at 06:00 and append output to a log file:
 
@@ -71,39 +96,48 @@ Run once a day at 06:00 and append output to a log file:
 0 6 * * * cd /var/www/ShipStation-Shopify-Checker && php audit.php >> logs/audit.log 2>&1
 ```
 
-Exit codes: `0` = all clear, `1` = missing orders found (useful for cron alerting), `2` = script error.
+---
 
-### 4. Web dashboard
+## Dashboard pages
 
-Point your web server document root at the repo directory. Then visit `https://yourdomain.com/` — you will be prompted for the `WEB_PASSWORD` you set in `.env`.
+| Page | What it does |
+|---|---|
+| **Reports** | Browse historical CSV reports. Click any date in the sidebar to load that report. Download as CSV. |
+| **Run Audit** | Run a live audit for any date range directly from the browser. Shows a progress indicator while fetching. Results are saved as a new report. |
+| **Spot-check** | Look up one or more specific order numbers in ShipStation in real time. Found orders link directly to ShipStation. |
+| **Settings** | Test API connectivity for both platforms, view current `.env` configuration. |
 
-For a quick local preview:
-
-```bash
-php -S localhost:8080
-# open http://localhost:8080
-```
+From any report, each missing order has:
+- A **Shopify admin link** to the order
+- A **Search SS** link that opens ShipStation filtered to that order number
+- An **Ignore** button to permanently exclude it from future reports (with optional reason)
 
 ---
 
 ## What gets skipped
 
-The following Shopify orders are intentionally excluded from the comparison. Each skipped order is recorded with a `_skip_reason` for transparency in the reports.
+The following Shopify orders are intentionally excluded from the comparison.
 
 | Skip reason | Condition | Why |
 |---|---|---|
 | `cancelled` | `cancelled_at` is set | Order was cancelled — never goes to ShipStation |
 | `financial` | `financial_status` is `pending`, `voided`, or `refunded` | Unpaid, reversed, or refunded — not actionable |
 | `fulfilled` | `fulfillment_status` is `fulfilled` | All items have been shipped; order is complete |
-| `restocked` | `fulfillment_status` is `restocked` | Items were returned and restocked after shipment (Shopify sets this on return/void post-dispatch) |
-| `on_hold` | Any fulfillment order has `status: on_hold` | Fulfillment was deliberately paused by the merchant — not a missing order |
+| `restocked` | `fulfillment_status` is `restocked` | Items returned and restocked after shipment |
+| `on_hold` | Any fulfillment order has `status: on_hold` | Fulfillment deliberately paused — not a missing order |
 | `zero_value` | `total_price == 0` | Digital downloads, gift cards, fully-discounted orders |
-| `no_shipping` | `shipping_lines` is empty | No physical shipment needed (digital delivery, local pickup) |
+| `no_shipping` | `shipping_lines` is empty | No physical shipment needed |
 | `ignored` | Manually dismissed via the dashboard | One-off exceptions added by the team |
 
-### Note on `on_hold`
+> **Note on `on_hold`:** Shopify does not expose hold status on the order object itself — it lives on the Fulfillment Order level and requires a separate API call (`/orders/{id}/fulfillment_orders.json`). This check runs only for orders already flagged as missing. Results are cached per order ID to avoid redundant calls on re-runs.
 
-Shopify does not expose hold status on the order object itself — it lives on the **Fulfillment Order** level and requires a separate API call (`/orders/{id}/fulfillment_orders.json`). To keep the request count low, this check runs only against orders already flagged as missing (typically 5–10 per day). Results are cached per order ID, so historical re-runs (months back) do not repeat calls already made.
+---
+
+## Caching
+
+API responses are cached under `cache/` as JSON files keyed by platform and date range. The default TTL is 23 hours (`CACHE_TTL=82800`) — aligned with the daily cron schedule so each run fetches fresh data. Repeated runs within the same day reuse the cache automatically.
+
+To force a fresh fetch: use **Clear all cache** in the Run Audit page, or set `CACHE_TTL=0` in `.env`.
 
 ---
 
@@ -111,23 +145,27 @@ Shopify does not expose hold status on the order object itself — it lives on t
 
 ```
 ├── audit.php           — CLI entry point
-├── index.php           — Web dashboard
+├── index.php           — Web dashboard (routing + all action handlers)
 ├── .env                — Credentials and config (not committed)
+├── .env.example        — Template with all supported variables
 ├── src/
 │   ├── Shopify.php     — Shopify Admin REST API client
 │   ├── ShipStation.php — ShipStation API client
-│   ├── Comparator.php  — Filtering and comparison logic (no I/O)
-│   ├── Reporter.php    — Output formatting (CSV, TXT, console)
+│   ├── Comparator.php  — Filtering and diff logic (no I/O)
+│   ├── Reporter.php    — CSV output
 │   └── Cache.php       — File-based JSON cache
-├── cache/              — Cached API responses (TTL controlled by CACHE_TTL)
-├── reports/            — Generated CSV and TXT reports
-└── data/ignored.json   — Manually ignored order numbers
+├── views/
+│   ├── layout.php      — HTML shell, sidebar, mobile header
+│   ├── login.php       — Login screen
+│   ├── page-reports.php
+│   ├── page-run.php
+│   ├── page-spotcheck.php
+│   └── page-settings.php
+├── assets/
+│   ├── app.css         — All styles (desktop + mobile responsive)
+│   └── app.js          — Search filter, ignore toggle, audit loader, mobile menu
+├── cache/              — Cached API responses
+├── reports/            — Generated CSV reports
+└── data/
+    └── ignored.json    — Manually ignored order numbers
 ```
-
----
-
-## Caching
-
-API responses are cached under `cache/` as JSON files. The default TTL is 4 hours (`CACHE_TTL=14400` in `.env`). To force a fresh fetch, delete the relevant cache files or set `CACHE_TTL=0`.
-
-On-hold status is cached per Shopify order ID indefinitely within the same TTL window — once an order's fulfillment orders are fetched, that result is reused across runs.

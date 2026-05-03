@@ -48,7 +48,7 @@ $authed = !empty($_SESSION['authed']);
 $dataDir     = __DIR__ . '/data';
 $ignoredFile = $dataDir . '/ignored.json';
 $cacheDir    = __DIR__ . '/cache';
-$cacheTtl    = (int) (getenv('CACHE_TTL') ?: 14400);
+$cacheTtl    = (int) (getenv('CACHE_TTL') ?: 82800); // 23 hours
 
 $ignoredOrders = [];
 $cacheObj      = null;
