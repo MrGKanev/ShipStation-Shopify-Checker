@@ -100,7 +100,9 @@
 
   <main class="main">
     <?php
-      $pageFile = __DIR__ . '/page-' . $page . '.php';
+      $allowedPages = ['reports', 'run', 'trends', 'spotcheck', 'ignored', 'settings'];
+      $page         = in_array($page, $allowedPages, true) ? $page : 'reports';
+      $pageFile     = __DIR__ . '/page-' . $page . '.php';
       if (file_exists($pageFile)) {
           require $pageFile;
       } else {

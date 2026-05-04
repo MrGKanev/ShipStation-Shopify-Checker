@@ -30,22 +30,26 @@ $action = $_POST['action'] ?? '';
 if ($action === 'login') {
     $attemptsFile = __DIR__ . '/data/login_attempts.json';
     $ip           = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-    $lockWindow   = 900;  // 15 minutes
+    $lockWindow   = 900; // 15 minutes
     $maxAttempts  = 5;
 
-    $attempts = [];
-    if (file_exists($attemptsFile)) {
-        $attempts = json_decode(file_get_contents($attemptsFile), true) ?: [];
-    }
+    if (!is_dir(__DIR__ . '/data')) mkdir(__DIR__ . '/data', 0755, true);
 
-    // Prune expired entries
-    $now = time();
+    // Exclusive lock for the full read-modify-write cycle to prevent race conditions
+    $fh  = fopen($attemptsFile, 'c+');
+    flock($fh, LOCK_EX);
+    $raw      = stream_get_contents($fh);
+    $attempts = $raw ? (json_decode($raw, true) ?: []) : [];
+
+    $now      = time();
     $attempts = array_filter($attempts, fn($e) => ($e['until'] ?? 0) > $now || ($e['first'] ?? 0) > $now - $lockWindow);
 
     $entry     = $attempts[$ip] ?? ['count' => 0, 'first' => $now, 'until' => 0];
     $lockedOut = ($entry['until'] ?? 0) > $now;
 
     if ($lockedOut) {
+        flock($fh, LOCK_UN);
+        fclose($fh);
         $mins  = (int) ceil(($entry['until'] - $now) / 60);
         $error = "Too many failed attempts. Try again in {$mins} minute" . ($mins !== 1 ? 's' : '') . '.';
     } else {
@@ -53,8 +57,9 @@ if ($action === 'login') {
         $okPass = hash_equals($webPassword, $_POST['password'] ?? '');
         if ($okUser && $okPass) {
             unset($attempts[$ip]);
-            if (!is_dir(__DIR__ . '/data')) mkdir(__DIR__ . '/data', 0755, true);
-            file_put_contents($attemptsFile, json_encode($attempts));
+            ftruncate($fh, 0); rewind($fh);
+            fwrite($fh, json_encode($attempts));
+            flock($fh, LOCK_UN); fclose($fh);
             $_SESSION['authed'] = true;
             header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
             exit;
@@ -65,8 +70,9 @@ if ($action === 'login') {
             $entry['until'] = $now + $lockWindow;
         }
         $attempts[$ip] = $entry;
-        if (!is_dir(__DIR__ . '/data')) mkdir(__DIR__ . '/data', 0755, true);
-        file_put_contents($attemptsFile, json_encode($attempts));
+        ftruncate($fh, 0); rewind($fh);
+        fwrite($fh, json_encode($attempts));
+        flock($fh, LOCK_UN); fclose($fh);
 
         $remaining = $maxAttempts - $entry['count'];
         $error = $remaining > 0
@@ -130,7 +136,7 @@ if ($authed && $action === 'ignore_order') {
     if ($num) {
         if (!is_dir($dataDir)) mkdir($dataDir, 0755, true);
         $ignoredOrders[$num] = ['reason' => $reason, 'ignored_at' => date('Y-m-d')];
-        file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT));
+        file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT), LOCK_EX);
     }
     $redirectPage = $_POST['redirect_page'] ?? 'reports';
     $redirectDate = $_POST['redirect_date'] ?? '';
@@ -144,7 +150,7 @@ if ($authed && $action === 'unignore_order') {
     $num = Comparator::normalise($_POST['order_number'] ?? '');
     if ($num && isset($ignoredOrders[$num])) {
         unset($ignoredOrders[$num]);
-        file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT));
+        file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT), LOCK_EX);
     }
     $redirectPage = $_POST['redirect_page'] ?? 'reports';
     $redirectDate = $_POST['redirect_date'] ?? '';
@@ -163,7 +169,7 @@ if ($authed && $action === 'bulk_unignore_orders') {
         if ($norm) unset($ignoredOrders[$norm]);
     }
     if (!is_dir($dataDir)) mkdir($dataDir, 0755, true);
-    file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT));
+    file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT), LOCK_EX);
     header('Location: ?page=ignored');
     exit;
 }
@@ -180,7 +186,7 @@ if ($authed && $action === 'bulk_ignore_orders') {
         }
     }
     if (!is_dir($dataDir)) mkdir($dataDir, 0755, true);
-    file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT));
+    file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT), LOCK_EX);
     $redirectPage = $_POST['redirect_page'] ?? 'reports';
     $redirectDate = $_POST['redirect_date'] ?? '';
     $loc = '?page=' . urlencode($redirectPage);
@@ -212,7 +218,7 @@ if ($authed && $action === 'import_ignore_csv') {
             fclose($fh);
         }
         if (!is_dir($dataDir)) mkdir($dataDir, 0755, true);
-        file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT));
+        file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT), LOCK_EX);
     }
     header('Location: ?page=ignored&imported=' . $count);
     exit;

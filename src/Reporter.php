@@ -85,6 +85,7 @@ class Reporter
         // CSV
         $csvPath = "{$dir}/missing_{$stamp}.csv";
         $fh = fopen($csvPath, 'w');
+        flock($fh, LOCK_EX);
         fputcsv($fh, ['order_number', 'shopify_id', 'created_at', 'total_price', 'financial_status', 'fulfillment_status', 'email'], ',', '"', '\\');
         foreach ($missing as $o) {
             fputcsv($fh, [
@@ -97,6 +98,7 @@ class Reporter
                 $o['email']              ?? '',
             ], ',', '"', '\\');
         }
+        flock($fh, LOCK_UN);
         fclose($fh);
 
         // Plain text
@@ -118,7 +120,7 @@ class Reporter
                 $o['email']            ?? ''
             );
         }
-        file_put_contents($txtPath, implode("\n", $lines) . "\n");
+        file_put_contents($txtPath, implode("\n", $lines) . "\n", LOCK_EX);
 
         if (!empty($missing) && php_sapi_name() === 'cli') {
             echo "  Reports saved:\n";
