@@ -28,14 +28,51 @@ $error  = '';
 $action = $_POST['action'] ?? '';
 
 if ($action === 'login') {
-    $okUser = hash_equals($webUsername, $_POST['username'] ?? '');
-    $okPass = hash_equals($webPassword, $_POST['password'] ?? '');
-    if ($okUser && $okPass) {
-        $_SESSION['authed'] = true;
-        header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
-        exit;
+    $attemptsFile = __DIR__ . '/data/login_attempts.json';
+    $ip           = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $lockWindow   = 900;  // 15 minutes
+    $maxAttempts  = 5;
+
+    $attempts = [];
+    if (file_exists($attemptsFile)) {
+        $attempts = json_decode(file_get_contents($attemptsFile), true) ?: [];
     }
-    $error = 'Incorrect username or password.';
+
+    // Prune expired entries
+    $now = time();
+    $attempts = array_filter($attempts, fn($e) => ($e['until'] ?? 0) > $now || ($e['first'] ?? 0) > $now - $lockWindow);
+
+    $entry     = $attempts[$ip] ?? ['count' => 0, 'first' => $now, 'until' => 0];
+    $lockedOut = ($entry['until'] ?? 0) > $now;
+
+    if ($lockedOut) {
+        $mins  = (int) ceil(($entry['until'] - $now) / 60);
+        $error = "Too many failed attempts. Try again in {$mins} minute" . ($mins !== 1 ? 's' : '') . '.';
+    } else {
+        $okUser = hash_equals($webUsername, $_POST['username'] ?? '');
+        $okPass = hash_equals($webPassword, $_POST['password'] ?? '');
+        if ($okUser && $okPass) {
+            unset($attempts[$ip]);
+            if (!is_dir(__DIR__ . '/data')) mkdir(__DIR__ . '/data', 0755, true);
+            file_put_contents($attemptsFile, json_encode($attempts));
+            $_SESSION['authed'] = true;
+            header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
+            exit;
+        }
+        $entry['count'] = ($entry['count'] ?? 0) + 1;
+        if (!isset($entry['first'])) $entry['first'] = $now;
+        if ($entry['count'] >= $maxAttempts) {
+            $entry['until'] = $now + $lockWindow;
+        }
+        $attempts[$ip] = $entry;
+        if (!is_dir(__DIR__ . '/data')) mkdir(__DIR__ . '/data', 0755, true);
+        file_put_contents($attemptsFile, json_encode($attempts));
+
+        $remaining = $maxAttempts - $entry['count'];
+        $error = $remaining > 0
+            ? 'Incorrect username or password. ' . $remaining . ' attempt' . ($remaining !== 1 ? 's' : '') . ' remaining.'
+            : 'Too many failed attempts. Try again in 15 minutes.';
+    }
 }
 
 if ($action === 'logout') {
@@ -114,6 +151,70 @@ if ($authed && $action === 'unignore_order') {
     $loc = '?page=' . urlencode($redirectPage);
     if ($redirectDate) $loc .= '&date=' . urlencode($redirectDate);
     header('Location: ' . $loc);
+    exit;
+}
+
+// ── Bulk unignore ─────────────────────────────────────────────────────────────
+
+if ($authed && $action === 'bulk_unignore_orders') {
+    $numbers = array_filter((array) ($_POST['order_numbers'] ?? []));
+    foreach ($numbers as $raw) {
+        $norm = Comparator::normalise($raw);
+        if ($norm) unset($ignoredOrders[$norm]);
+    }
+    if (!is_dir($dataDir)) mkdir($dataDir, 0755, true);
+    file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT));
+    header('Location: ?page=ignored');
+    exit;
+}
+
+// ── Bulk ignore ───────────────────────────────────────────────────────────────
+
+if ($authed && $action === 'bulk_ignore_orders') {
+    $numbers = array_filter((array) ($_POST['order_numbers'] ?? []));
+    $reason  = trim($_POST['reason'] ?? '');
+    foreach ($numbers as $raw) {
+        $norm = Comparator::normalise($raw);
+        if ($norm) {
+            $ignoredOrders[$norm] = ['reason' => $reason, 'ignored_at' => date('Y-m-d')];
+        }
+    }
+    if (!is_dir($dataDir)) mkdir($dataDir, 0755, true);
+    file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT));
+    $redirectPage = $_POST['redirect_page'] ?? 'reports';
+    $redirectDate = $_POST['redirect_date'] ?? '';
+    $loc = '?page=' . urlencode($redirectPage);
+    if ($redirectDate) $loc .= '&date=' . urlencode($redirectDate);
+    header('Location: ' . $loc);
+    exit;
+}
+
+// ── CSV import bulk ignore ────────────────────────────────────────────────────
+
+if ($authed && $action === 'import_ignore_csv') {
+    $file   = $_FILES['ignore_csv'] ?? null;
+    $reason = trim($_POST['import_reason'] ?? '') ?: 'CSV import ' . date('Y-m-d');
+    $count  = 0;
+    if ($file && $file['error'] === UPLOAD_ERR_OK) {
+        if (($fh = fopen($file['tmp_name'], 'r')) !== false) {
+            $first = fgetcsv($fh);
+            if ($first) {
+                $firstCell = ltrim(trim((string) ($first[0] ?? '')), '#');
+                if (preg_match('/^\d+$/', $firstCell)) {
+                    $norm = Comparator::normalise($firstCell);
+                    if ($norm) { $ignoredOrders[$norm] = ['reason' => $reason, 'ignored_at' => date('Y-m-d')]; $count++; }
+                }
+            }
+            while (($row = fgetcsv($fh)) !== false) {
+                $norm = Comparator::normalise(ltrim(trim((string) ($row[0] ?? '')), '#'));
+                if ($norm) { $ignoredOrders[$norm] = ['reason' => $reason, 'ignored_at' => date('Y-m-d')]; $count++; }
+            }
+            fclose($fh);
+        }
+        if (!is_dir($dataDir)) mkdir($dataDir, 0755, true);
+        file_put_contents($ignoredFile, json_encode($ignoredOrders, JSON_PRETTY_PRINT));
+    }
+    header('Location: ?page=ignored&imported=' . $count);
     exit;
 }
 
@@ -221,8 +322,8 @@ if ($authed && $action === 'spotcheck') {
 // ── On-demand audit ───────────────────────────────────────────────────────────
 
 $auditResult    = null;
-$auditStart     = $_POST['audit_start'] ?? date('Y-m-d', strtotime('-30 days'));
-$auditEnd       = $_POST['audit_end']   ?? date('Y-m-d');
+$auditStart     = $_POST['audit_start'] ?? $_GET['start'] ?? date('Y-m-d', strtotime('-30 days'));
+$auditEnd       = $_POST['audit_end']   ?? $_GET['end']   ?? date('Y-m-d');
 $auditError     = '';
 $auditDuration  = 0;
 $auditFromCache = ['shopify' => false, 'ss' => false];
@@ -295,6 +396,7 @@ if ($authed && $action === 'run_audit') {
 
 $reports      = [];
 $latestReport = null;
+$orderHistory = []; // [norm_num => ['count' => N, 'first' => date, 'last' => date]]
 
 if ($authed && is_dir($reportDir)) {
     $files = glob($reportDir . '/missing_*.csv') ?: [];
@@ -303,18 +405,29 @@ if ($authed && is_dir($reportDir)) {
     foreach ($files as $csvPath) {
         preg_match('/missing_(\d{4}-\d{2}-\d{2})\.csv$/', $csvPath, $m);
         $date    = $m[1] ?? 'unknown';
-        $missing = [];
+        $rawRows = [];
 
         if (($fh = fopen($csvPath, 'r')) !== false) {
             $headers = fgetcsv($fh, 0, ',', '"', '\\');
             while (($row = fgetcsv($fh, 0, ',', '"', '\\')) !== false) {
-                $missing[] = array_combine($headers ?: [], $row);
+                $rawRows[] = array_combine($headers ?: [], $row);
             }
             fclose($fh);
         }
 
+        foreach ($rawRows as $row) {
+            $num = Comparator::normalise((string) ($row['order_number'] ?? ''));
+            if (!$num) continue;
+            if (!isset($orderHistory[$num])) {
+                $orderHistory[$num] = ['count' => 0, 'first' => $date, 'last' => $date];
+            }
+            $orderHistory[$num]['count']++;
+            if ($date < $orderHistory[$num]['first']) $orderHistory[$num]['first'] = $date;
+            if ($date > $orderHistory[$num]['last'])  $orderHistory[$num]['last']  = $date;
+        }
+
         $missing = array_values(array_filter(
-            $missing,
+            $rawRows,
             fn($o) => !isset($ignoredOrders[Comparator::normalise((string)($o['order_number'] ?? ''))])
         ));
 
@@ -354,16 +467,35 @@ function renderMissingTable(
     string $shopifyAdminBase,
     string $context,
     string $contextVal,
-    string $contextVal2 = ''
+    string $contextVal2 = '',
+    array  $orderHistory = []
 ): string {
     $count   = count($missing);
     $tableId = 'tbl-' . substr(md5($context . $contextVal), 0, 6);
+    $formId  = 'bulk-' . substr(md5($context . $contextVal), 0, 6);
     ob_start();
     ?>
     <div class="search-wrap">
       <input class="js-search" data-target="<?= esc($tableId) ?>"
              placeholder="Filter by order #, email, status…" type="search">
     </div>
+
+    <?php if ($count > 0): ?>
+    <form id="<?= esc($formId) ?>" method="post" class="bulk-form">
+      <input type="hidden" name="action" value="bulk_ignore_orders">
+      <input type="hidden" name="redirect_page" value="<?= esc($context) ?>">
+      <input type="hidden" name="redirect_date" value="<?= esc($contextVal) ?>">
+      <div class="bulk-bar" id="bar-<?= esc($formId) ?>">
+        <span class="bulk-count" id="cnt-<?= esc($formId) ?>">0 selected</span>
+        <input type="text" name="reason" placeholder="Reason (optional)" class="bulk-reason">
+        <button class="btn btn-sm btn-danger" type="submit">Ignore selected</button>
+        <button class="btn btn-sm btn-ghost" type="button"
+                onclick="document.querySelectorAll('#<?= esc($tableId) ?> .js-row-check').forEach(c=>c.checked=false);updateBulkBar('<?= esc($formId) ?>')">
+          Clear
+        </button>
+      </div>
+    <?php endif; ?>
+
     <div class="table-wrap">
       <div class="table-header">
         <h2>Missing Orders</h2>
@@ -380,7 +512,12 @@ function renderMissingTable(
         <table>
           <thead>
             <tr>
+              <th style="width:32px">
+                <input type="checkbox" class="js-select-all" data-target="<?= esc($tableId) ?>"
+                       data-bar="<?= esc($formId) ?>" title="Select all">
+              </th>
               <th>Order #</th>
+              <th>Seen</th>
               <th>Created</th>
               <th>Total</th>
               <th>Financial</th>
@@ -407,13 +544,29 @@ function renderMissingTable(
               $normNum     = preg_replace('/\D/', '', ltrim(trim($num), '#'));
               $ssSearchUrl = 'https://app.shipstation.com/#!/orders/all-orders-search-result?quickSearch='
                            . urlencode(ltrim($num, '#'));
+              $seenCount   = $orderHistory[$normNum]['count'] ?? 1;
+              $isRepeat    = $seenCount >= 2;
             ?>
-            <tr>
+            <tr class="<?= $isRepeat ? 'row-repeat' : '' ?>">
+              <td>
+                <input type="checkbox" class="js-row-check" name="order_numbers[]"
+                       value="<?= esc($num) ?>" data-bar="<?= esc($formId) ?>"
+                       onchange="updateBulkBar('<?= esc($formId) ?>')">
+              </td>
               <td>
                 <?php if ($adminUrl): ?>
                   <a class="order-num" href="<?= $adminUrl ?>" target="_blank" rel="noopener">#<?= esc($num) ?></a>
                 <?php else: ?>
                   <span class="order-num">#<?= esc($num) ?></span>
+                <?php endif; ?>
+              </td>
+              <td>
+                <?php if ($seenCount >= 3): ?>
+                  <span class="seen-badge seen-hot" title="Appeared in <?= $seenCount ?> reports"><?= $seenCount ?>×</span>
+                <?php elseif ($seenCount === 2): ?>
+                  <span class="seen-badge seen-warn" title="Appeared in 2 reports">2×</span>
+                <?php else: ?>
+                  <span style="color:var(--muted);font-size:.78rem">1×</span>
                 <?php endif; ?>
               </td>
               <td><?= esc(substr($row['created_at'] ?? '', 0, 10)) ?></td>
@@ -442,6 +595,11 @@ function renderMissingTable(
         </table>
       <?php endif; ?>
     </div>
+
+    <?php if ($count > 0): ?>
+    </form>
+    <?php endif; ?>
+
     <?php
     return ob_get_clean();
 }

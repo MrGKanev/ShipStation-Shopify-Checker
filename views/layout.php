@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= esc($appTitle) ?></title>
 <link rel="stylesheet" href="assets/app.css">
+<script>
+  (function() {
+    if (localStorage.getItem('theme') === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  })();
+</script>
 </head>
 <body>
 
@@ -36,7 +43,21 @@
         <a href="?page=run" class="<?= $page === 'run' ? 'page-active' : '' ?>">Run Audit</a>
       </li>
       <li>
+        <a href="?page=trends" class="<?= $page === 'trends' ? 'page-active' : '' ?>">Trends</a>
+      </li>
+      <li>
         <a href="?page=spotcheck" class="<?= $page === 'spotcheck' ? 'page-active' : '' ?>">Spot-check</a>
+      </li>
+    </ul>
+    <div class="sidebar-section">Manage</div>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="?page=ignored" class="<?= $page === 'ignored' ? 'page-active' : '' ?>">
+          Ignored
+          <?php if (count($ignoredOrders) > 0): ?>
+            <span class="badge badge-warn" style="font-size:.65rem"><?= count($ignoredOrders) ?></span>
+          <?php endif; ?>
+        </a>
       </li>
       <li>
         <a href="?page=settings" class="<?= $page === 'settings' ? 'page-active' : '' ?>">Settings</a>
@@ -59,10 +80,21 @@
     <?php endif; ?>
 
     <div class="sidebar-footer">
+      <button class="btn btn-ghost btn-sm btn-full" id="js-theme-toggle" style="margin-bottom:.5rem" type="button">
+        <span id="js-theme-icon">🌙</span> Dark mode
+      </button>
       <form method="post" style="display:inline">
         <input type="hidden" name="action" value="logout">
         <button class="btn btn-ghost btn-sm btn-full" type="submit">Sign out</button>
       </form>
+      <div style="margin-top:.75rem;text-align:center">
+        <a href="https://github.com/mrgkanev/ShipStation-Shopify-Checker"
+           target="_blank" rel="noopener"
+           style="font-size:.7rem;color:var(--muted);text-decoration:none;opacity:.6"
+           title="View on GitHub">
+          ⌥ GitHub
+        </a>
+      </div>
     </div>
   </aside>
 

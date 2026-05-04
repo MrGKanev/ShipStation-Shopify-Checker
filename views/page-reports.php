@@ -7,6 +7,12 @@
       </div>
     <?php endif; ?>
   </div>
+  <?php if ($selectedReport): ?>
+    <a class="btn btn-sm btn-ghost"
+       href="?page=run&start=<?= esc($selectedReport['date']) ?>&end=<?= esc($selectedReport['date']) ?>">
+      Re-audit this date
+    </a>
+  <?php endif; ?>
 </div>
 
 <?php if (empty($reports)): ?>
@@ -64,6 +70,6 @@
     </div>
   <?php endif; ?>
 
-  <?= renderMissingTable($missing, $ignoredOrders, $shopifyAdminBase, 'reports', $selectedDate ?? '') ?>
+  <?= renderMissingTable($missing, $ignoredOrders, $shopifyAdminBase, 'reports', $selectedDate ?? '', '', $orderHistory) ?>
 
 <?php endif; ?>

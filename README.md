@@ -1,6 +1,6 @@
 # ShipStation ↔ Shopify Order Audit
 
-Compares every paid Shopify order against ShipStation and surfaces the ones that are missing. Runs as a daily cron job and exposes a password-protected web dashboard to browse reports, run on-demand audits, and spot-check individual orders.
+Compares every paid Shopify order against ShipStation and surfaces the ones that are missing. Runs as a daily cron job and exposes a password-protected web dashboard to browse reports, run on-demand audits, spot-check individual orders, and bulk-manage exceptions.
 
 ---
 
@@ -43,8 +43,9 @@ Edit `.env` and fill in all required values:
 | `SS_API_SECRET` | ✅ | Same page |
 | `SHOPIFY_STORE` | ✅ | The subdomain part of `yourstore.myshopify.com` |
 | `SHOPIFY_ACCESS_TOKEN` | ✅ | Shopify → Apps → Develop apps → your app → Admin API access token |
+| `WEB_USERNAME` | — | Dashboard login username (default: `admin`) |
 | `WEB_PASSWORD` | ✅ | Choose any password for the dashboard |
-| `CACHE_TTL` | — | Cache duration in seconds (default: `14400` = 4 hours). Set to `0` to disable. |
+| `CACHE_TTL` | — | Cache duration in seconds (default: `82800` = 23 hours). Set to `0` to disable. |
 | `APP_TITLE` | — | Browser tab title (default: `SS ↔ Shopify Audit`) |
 | `APP_BRAND` | — | Sidebar and login logo text (default: `SS ↔ Shopify`) |
 
@@ -66,7 +67,7 @@ php -S localhost:8080
 # open http://localhost:8080
 ```
 
-Log in with the `WEB_PASSWORD` you set in `.env`. On first visit with no reports yet, click **Run first audit** to generate the initial report.
+Log in with the username and password you set in `.env`. On first visit with no reports yet, click **Run first audit** to generate the initial report.
 
 ### 3. Run the audit manually (CLI)
 
@@ -102,15 +103,21 @@ Run once a day at 06:00 and append output to a log file:
 
 | Page | What it does |
 |---|---|
-| **Reports** | Browse historical CSV reports. Click any date in the sidebar to load that report. Download as CSV. |
+| **Reports** | Browse historical CSV reports. Click any date in the sidebar to load that report. Download as CSV. Re-audit any past date with one click. |
 | **Run Audit** | Run a live audit for any date range directly from the browser. Shows a progress indicator while fetching. Results are saved as a new report. |
+| **Trends** | Aggregated stats across all reports: average missing count, worst day, repeat offenders. Includes a full history bar chart and a bulk-ignore table for chronic missing orders. |
 | **Spot-check** | Look up one or more specific order numbers in ShipStation in real time. Found orders link directly to ShipStation. |
+| **Ignored** | View and manage all ignored orders. Bulk-unignore with checkboxes. Import a list of order numbers to ignore via CSV upload. |
 | **Settings** | Test API connectivity for both platforms, view current `.env` configuration. |
 
-From any report, each missing order has:
+### Missing order actions
+
+Each missing order row has:
 - A **Shopify admin link** to the order
 - A **Search SS** link that opens ShipStation filtered to that order number
+- A **Seen** badge showing how many reports the order has appeared in (`2×` = yellow, `3×+` = red)
 - An **Ignore** button to permanently exclude it from future reports (with optional reason)
+- A **checkbox** for selecting multiple orders to bulk-ignore in one action
 
 ---
 
@@ -138,34 +145,3 @@ The following Shopify orders are intentionally excluded from the comparison.
 API responses are cached under `cache/` as JSON files keyed by platform and date range. The default TTL is 23 hours (`CACHE_TTL=82800`) — aligned with the daily cron schedule so each run fetches fresh data. Repeated runs within the same day reuse the cache automatically.
 
 To force a fresh fetch: use **Clear all cache** in the Run Audit page, or set `CACHE_TTL=0` in `.env`.
-
----
-
-## File structure
-
-```
-├── audit.php           — CLI entry point
-├── index.php           — Web dashboard (routing + all action handlers)
-├── .env                — Credentials and config (not committed)
-├── .env.example        — Template with all supported variables
-├── src/
-│   ├── Shopify.php     — Shopify Admin REST API client
-│   ├── ShipStation.php — ShipStation API client
-│   ├── Comparator.php  — Filtering and diff logic (no I/O)
-│   ├── Reporter.php    — CSV output
-│   └── Cache.php       — File-based JSON cache
-├── views/
-│   ├── layout.php      — HTML shell, sidebar, mobile header
-│   ├── login.php       — Login screen
-│   ├── page-reports.php
-│   ├── page-run.php
-│   ├── page-spotcheck.php
-│   └── page-settings.php
-├── assets/
-│   ├── app.css         — All styles (desktop + mobile responsive)
-│   └── app.js          — Search filter, ignore toggle, audit loader, mobile menu
-├── cache/              — Cached API responses
-├── reports/            — Generated CSV reports
-└── data/
-    └── ignored.json    — Manually ignored order numbers
-```

@@ -78,6 +78,54 @@ document.querySelectorAll('.js-search').forEach(function(input) {
   });
 });
 
+// Bulk select helpers
+function updateBulkBar(barId) {
+  var bar     = document.getElementById('bar-' + barId);
+  var counter = document.getElementById('cnt-' + barId);
+  if (!bar) return;
+  var checked = document.querySelectorAll('[data-bar="' + barId + '"].js-row-check:checked').length;
+  if (counter) counter.textContent = checked + ' selected';
+  bar.classList.toggle('bulk-bar-active', checked > 0);
+}
+
+// Select-all checkboxes
+document.querySelectorAll('.js-select-all').forEach(function(master) {
+  master.addEventListener('change', function() {
+    var tbody  = document.getElementById(master.dataset.target);
+    var barId  = master.dataset.bar;
+    if (!tbody) return;
+    tbody.querySelectorAll('.js-row-check').forEach(function(cb) {
+      cb.checked = master.checked;
+    });
+    updateBulkBar(barId);
+  });
+});
+
+// Dark mode toggle
+(function() {
+  var btn  = document.getElementById('js-theme-toggle');
+  var icon = document.getElementById('js-theme-icon');
+  if (!btn) return;
+
+  function apply(dark) {
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    if (icon) icon.textContent = dark ? '☀️' : '🌙';
+    btn.querySelector('span + span') || (btn.lastChild.textContent = dark ? ' Light mode' : ' Dark mode');
+    btn.childNodes.forEach(function(n) {
+      if (n.nodeType === 3) n.textContent = dark ? ' Light mode' : ' Dark mode';
+    });
+  }
+
+  var isDark = localStorage.getItem('theme') === 'dark';
+  apply(isDark);
+
+  btn.addEventListener('click', function() {
+    isDark = !isDark;
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    apply(isDark);
+  });
+})();
+
 // Inline ignore form toggle
 document.querySelectorAll('.js-ignore-toggle').forEach(function(btn) {
   btn.addEventListener('click', function() {

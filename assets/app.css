@@ -16,6 +16,43 @@
   --font:      'Inter', system-ui, -apple-system, sans-serif;
 }
 
+[data-theme="dark"] {
+  --bg:        #0f1117;
+  --surface:   #1a1d27;
+  --border:    #2a2d3a;
+  --accent:    #7b73f5;
+  --accent-lt: #9d97f8;
+  --ok:        #22c55e;
+  --warn:      #f97316;
+  --danger:    #f87171;
+  --text:      #e5e7eb;
+  --muted:     #9ca3af;
+}
+
+[data-theme="dark"] tbody tr:hover { background: #22263a; }
+[data-theme="dark"] .sidebar-nav li a:hover { background: #22263a; }
+[data-theme="dark"] .sidebar-nav li a.active,
+[data-theme="dark"] .sidebar-nav li a.page-active { background: #2a274a; }
+[data-theme="dark"] .badge-ok   { background: #14532d; color: #86efac; }
+[data-theme="dark"] .badge-warn { background: #431407; color: #fdba74; }
+[data-theme="dark"] .chip-paid     { background: #14532d; color: #86efac; }
+[data-theme="dark"] .chip-partial  { background: #422006; color: #fcd34d; }
+[data-theme="dark"] .chip-unpaid   { background: #450a0a; color: #fca5a5; }
+[data-theme="dark"] .chip-unknown  { background: #1e2130; color: var(--muted); }
+[data-theme="dark"] .spot-match-tag   { background: #14532d; color: #86efac; }
+[data-theme="dark"] .spot-missing-tag { background: #450a0a; color: #fca5a5; }
+[data-theme="dark"] .tag-fresh   { background: #14532d; color: #86efac; }
+[data-theme="dark"] .tag-expired { background: #1e2130; color: var(--muted); }
+[data-theme="dark"] .source-badge.cached { background: #2e1065; color: #c4b5fd; }
+[data-theme="dark"] .source-badge.live   { background: #1e3a5f; color: #93c5fd; }
+[data-theme="dark"] .btn-danger { background: #450a0a; color: #fca5a5; border-color: #7f1d1d; }
+[data-theme="dark"] .btn-danger:hover { background: #7f1d1d; }
+[data-theme="dark"] .flush-notice { background: #14532d; border-color: #166534; color: #86efac; }
+[data-theme="dark"] .error-msg { background: #450a0a; border-color: #7f1d1d; color: #fca5a5; }
+[data-theme="dark"] .audit-loading { background: rgba(15,17,23,.88); }
+[data-theme="dark"] .empty h3 { color: #22c55e; }
+[data-theme="dark"] .no-reports code { background: #1e2130; }
+
 html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 15px; line-height: 1.6; }
 
 a { color: var(--accent-lt); text-decoration: none; }
@@ -216,6 +253,39 @@ tbody td { padding: .75rem 1.25rem; font-size: .875rem; vertical-align: middle; 
 .spot-match-tag   { background: #dcfce7; color: #15803d; border-radius: 5px; padding: .15rem .55rem; font-size: .75rem; font-weight: 600; }
 .spot-missing-tag { background: #fee2e2; color: #b91c1c; border-radius: 5px; padding: .15rem .55rem; font-size: .75rem; font-weight: 600; }
 .spot-status-label { font-size: .75rem; font-weight: 700; }
+
+/* ── Bulk action bar ── */
+.bulk-bar {
+  display: none; align-items: center; gap: .65rem; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: .65rem 1rem; margin-bottom: .75rem;
+}
+.bulk-bar-active { display: flex; }
+.bulk-count { font-size: .8rem; font-weight: 700; color: var(--text); white-space: nowrap; }
+.bulk-reason {
+  flex: 1; min-width: 160px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: .4rem .75rem; font-size: .8rem; color: var(--text); outline: none;
+  transition: border-color .15s;
+}
+.bulk-reason:focus { border-color: var(--accent); }
+
+/* Row repeat-offender highlight */
+.row-repeat { background: #fff8f0; }
+[data-theme="dark"] .row-repeat { background: #2a1f12; }
+
+/* Seen badges */
+.seen-badge {
+  display: inline-block; padding: .1rem .42rem; border-radius: 5px;
+  font-size: .72rem; font-weight: 700;
+}
+.seen-warn { background: #fef9c3; color: #854d0e; }
+.seen-hot  { background: #fee2e2; color: #b91c1c; }
+[data-theme="dark"] .seen-warn { background: #422006; color: #fcd34d; }
+[data-theme="dark"] .seen-hot  { background: #450a0a; color: #fca5a5; }
+
+/* Checkbox column */
+input[type="checkbox"] { cursor: pointer; accent-color: var(--accent); width: 15px; height: 15px; }
 
 /* Search / filter bar */
 .search-wrap { margin-bottom: 1rem; }

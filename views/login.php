@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= esc($appTitle) ?></title>
 <link rel="stylesheet" href="assets/app.css">
+<script>(function(){if(localStorage.getItem('theme')==='dark')document.documentElement.setAttribute('data-theme','dark');})();</script>
 </head>
 <body>
 

@@ -82,7 +82,7 @@
     </div>
   </div>
 
-  <?= renderMissingTable($missing, $ignoredOrders, $shopifyAdminBase, 'run', $auditStart, $auditEnd) ?>
+  <?= renderMissingTable($missing, $ignoredOrders, $shopifyAdminBase, 'run', $auditStart, $auditEnd, $orderHistory) ?>
 
   <?php if (!empty($auditResult['ignored'])): ?>
     <details class="ignored-section">
