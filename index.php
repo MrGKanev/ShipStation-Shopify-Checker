@@ -13,6 +13,7 @@ if (file_exists($envFile)) {
     }
 }
 
+$webUsername  = getenv('WEB_USERNAME') ?: 'admin';
 $webPassword  = getenv('WEB_PASSWORD') ?: 'changeme';
 $shopifyStore = getenv('SHOPIFY_STORE') ?: 'N/A';
 $appTitle     = getenv('APP_TITLE') ?: 'SS ↔ Shopify Audit';
@@ -27,12 +28,14 @@ $error  = '';
 $action = $_POST['action'] ?? '';
 
 if ($action === 'login') {
-    if (hash_equals($webPassword, $_POST['password'] ?? '')) {
+    $okUser = hash_equals($webUsername, $_POST['username'] ?? '');
+    $okPass = hash_equals($webPassword, $_POST['password'] ?? '');
+    if ($okUser && $okPass) {
         $_SESSION['authed'] = true;
         header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
         exit;
     }
-    $error = 'Incorrect password.';
+    $error = 'Incorrect username or password.';
 }
 
 if ($action === 'logout') {

@@ -20,8 +20,12 @@
     <form method="post">
       <input type="hidden" name="action" value="login">
       <div class="field">
+        <label>Username</label>
+        <input type="text" name="username" autofocus autocomplete="username">
+      </div>
+      <div class="field">
         <label>Password</label>
-        <input type="password" name="password" autofocus autocomplete="current-password">
+        <input type="password" name="password" autocomplete="current-password">
       </div>
       <button class="btn btn-full" type="submit">Sign in</button>
     </form>
