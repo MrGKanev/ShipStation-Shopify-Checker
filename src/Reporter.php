@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/AtomicFile.php';
+
 use League\Csv\Writer;
 
 /**
@@ -88,20 +90,36 @@ class Reporter
 
         // CSV
         $csvPath = "{$dir}/missing_{$stamp}.csv";
-        $writer  = Writer::from($csvPath, 'w+');
-        $writer->insertOne(['order_number', 'shopify_name', 'shopify_id', 'created_at', 'total_price', 'financial_status', 'fulfillment_status', 'email', 'order_type']);
-        foreach ($missing as $o) {
-            $writer->insertOne([
-                $o['order_number']       ?? '',
-                $o['name']               ?? '',
-                $o['id']                 ?? '',
-                $o['created_at']         ?? '',
-                $o['total_price']        ?? '',
-                $o['financial_status']   ?? '',
-                $o['fulfillment_status'] ?? '',
-                $o['email']              ?? '',
-                $o['_order_type']        ?? '',
-            ]);
+        $csvTmp  = tempnam($dir, "missing_{$stamp}.csv.tmp.");
+        if ($csvTmp === false) {
+            throw new RuntimeException("Could not create temporary report file in {$dir}");
+        }
+
+        try {
+            $writer = Writer::from($csvTmp, 'w+');
+            $writer->insertOne(['order_number', 'shopify_name', 'shopify_id', 'created_at', 'total_price', 'financial_status', 'fulfillment_status', 'email', 'order_type']);
+            foreach ($missing as $o) {
+                $writer->insertOne([
+                    $o['order_number']       ?? '',
+                    $o['name']               ?? '',
+                    $o['id']                 ?? '',
+                    $o['created_at']         ?? '',
+                    $o['total_price']        ?? '',
+                    $o['financial_status']   ?? '',
+                    $o['fulfillment_status'] ?? '',
+                    $o['email']              ?? '',
+                    $o['_order_type']        ?? '',
+                ]);
+            }
+            unset($writer);
+
+            if (!@rename($csvTmp, $csvPath)) {
+                throw new RuntimeException("Could not replace report {$csvPath}");
+            }
+        } finally {
+            if (file_exists($csvTmp)) {
+                @unlink($csvTmp);
+            }
         }
 
         // Plain text
@@ -126,7 +144,7 @@ class Reporter
                 $o['email']            ?? ''
             );
         }
-        file_put_contents($txtPath, implode("\n", $lines) . "\n", LOCK_EX);
+        AtomicFile::write($txtPath, implode("\n", $lines) . "\n");
 
         if (!empty($missing) && php_sapi_name() === 'cli') {
             echo "  Reports saved:\n";

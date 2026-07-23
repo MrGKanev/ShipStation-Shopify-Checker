@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/AtomicFile.php';
+
 /**
  * Authentication helpers: login brute-force protection, logout, ban management.
  */
@@ -9,6 +11,98 @@ class Auth
     private const int LOCK_DURATION  = 604800; // 1 week
     private const int ATTEMPT_WINDOW = 3600;   // sliding window (1 hour)
     private const int MAX_ATTEMPTS   = 3;
+
+    /**
+     * Central POST action permission map.
+     *
+     * null means any authenticated user may run the action. Unknown actions are
+     * denied by Auth::canPerformAction(), so newly added POST handlers must be
+     * classified here before they can execute.
+     *
+     * @var array<string, string|null>
+     */
+    private const array ACTION_PERMISSIONS = [
+        // Session / navigation
+        'login'        => null,
+        'dev_login'    => null,
+        'logout'       => null,
+        'switch_store' => null,
+
+        // Narrow read-only lookups
+        'spotcheck'        => null,
+        'tag_search'       => null,
+        'metafield_search' => null,
+        'metafield_lookup' => null,
+        'customer_lookup'  => null,
+        'lookup_tracking'  => null,
+        'compare_orders'   => null,
+        'order_timeline'   => null,
+        'packingslip'      => null,
+        'order_detail'     => null,
+
+        // Operational mutations
+        'push_to_shipstation' => 'push',
+        'bulk_push'           => 'push',
+        'preview_push'        => 'push',
+        'save_order_note'     => 'edit_order',
+        'ignore_order'        => 'ignore',
+        'unignore_order'      => 'ignore',
+        'bulk_ignore_orders'  => 'ignore',
+        'bulk_unignore_orders'=> 'ignore',
+        'import_ignore_csv'   => 'ignore',
+        'flush_cache'         => 'flush_cache',
+        'queue_audit'         => 'queue_audit',
+        'run_audit'           => 'run_audit',
+        'pq_add'              => 'manage_queue',
+        'pq_remove'           => 'manage_queue',
+        'pq_clear'            => 'manage_queue',
+
+        // Batch scans and reports
+        'tag_audit'             => 'run_audit',
+        'scan_addresses'        => 'run_audit',
+        'scan_emails'           => 'run_audit',
+        'scan_hvorders'         => 'run_audit',
+        'find_refunds'          => 'run_audit',
+        'find_dupes'            => 'run_audit',
+        'find_orphans'          => 'run_audit',
+        'scan_repeat_refunds'   => 'run_audit',
+        'scan_failed_shipments' => 'run_audit',
+        'scan_addr_changes'     => 'run_audit',
+        'scan_order_edits'      => 'run_audit',
+        'scan_noteflags'        => 'run_audit',
+        'scan_addrdupes'        => 'run_audit',
+        'scan_discountabuse'    => 'run_audit',
+        'scan_tagpolicy'        => 'run_audit',
+        'scan_country_mismatch' => 'run_audit',
+        'scan_partial_fulfill'  => 'run_audit',
+        'scan_onhold'           => 'run_audit',
+        'scan_notracking'       => 'run_audit',
+        'scan_postshipaddr'     => 'run_audit',
+        'scan_ssshipped'        => 'run_audit',
+        'scan_sla'              => 'run_audit',
+        'scan_shipmentaging'    => 'run_audit',
+        'scan_carrierperf'      => 'run_audit',
+        'scan_activess'         => 'run_audit',
+        'scan_bundle'           => 'run_audit',
+        'scan_products'         => 'run_audit',
+        'scan_skudupes'         => 'run_audit',
+        'scan_inventory'        => 'run_audit',
+        'scan_zombieproducts'   => 'run_audit',
+        'scan_inventoryaging'   => 'run_audit',
+        'scan_inventoryforecast'=> 'run_audit',
+        'scan_returns'          => 'run_audit',
+        'scan_ltv'              => 'run_audit',
+
+        // Admin-only checks and settings
+        'test_connection'    => 'manage_settings',
+        'refresh_api_health' => 'manage_settings',
+        'save_settings'      => 'manage_settings',
+        'ban_ip'             => 'manage_settings',
+        'unban_ip'           => 'manage_settings',
+        'save_slack_rules'   => 'manage_settings',
+        'add_user'           => 'manage_users',
+        'delete_user'        => 'manage_users',
+    ];
 
     private static string $customFile = '';
 
@@ -38,9 +132,8 @@ class Auth
             mkdir(dirname($attemptsFile), 0755, true);
         }
 
-        $fh = fopen($attemptsFile, 'c+');
-        flock($fh, LOCK_EX);
-        $raw      = stream_get_contents($fh);
+        $lock     = self::lockAttempts($attemptsFile);
+        $raw      = file_exists($attemptsFile) ? (string) file_get_contents($attemptsFile) : '';
         $attempts = $raw ? (json_decode($raw, true) ?: []) : [];
 
         $now = time();
@@ -54,8 +147,7 @@ class Auth
         $lockedOut = ($entry['until'] ?? 0) > $now;
 
         if ($lockedOut) {
-            flock($fh, LOCK_UN);
-            fclose($fh);
+            self::unlockAttempts($lock);
             $secs  = $entry['until'] - $now;
             $days  = (int) floor($secs / 86400);
             $hours = (int) floor(($secs % 86400) / 3600);
@@ -69,9 +161,8 @@ class Auth
 
         if ($okUser && $okPass) {
             unset($attempts[$ip]);
-            ftruncate($fh, 0); rewind($fh);
-            fwrite($fh, json_encode($attempts));
-            flock($fh, LOCK_UN); fclose($fh);
+            self::writeAttempts($attemptsFile, $attempts);
+            self::unlockAttempts($lock);
             return '';
         }
 
@@ -81,9 +172,8 @@ class Auth
             $entry['until'] = $now + self::LOCK_DURATION;
         }
         $attempts[$ip] = $entry;
-        ftruncate($fh, 0); rewind($fh);
-        fwrite($fh, json_encode($attempts));
-        flock($fh, LOCK_UN); fclose($fh);
+        self::writeAttempts($attemptsFile, $attempts);
+        self::unlockAttempts($lock);
 
         $remaining = self::MAX_ATTEMPTS - $entry['count'];
         return $remaining > 0
@@ -155,7 +245,7 @@ class Auth
     {
         $role = self::role();
         $adminOnly    = ['manage_settings', 'manage_users'];
-        $operatorPlus = ['push', 'ignore', 'run_audit', 'flush_cache', 'queue_audit'];
+        $operatorPlus = ['push', 'ignore', 'run_audit', 'flush_cache', 'queue_audit', 'edit_order', 'manage_queue'];
 
         if (in_array($action, $adminOnly, true)) {
             return $role === 'admin';
@@ -164,6 +254,35 @@ class Auth
             return in_array($role, ['operator', 'admin'], true);
         }
         return true; // viewers can read everything
+    }
+
+    /**
+     * Returns null for authenticated-only actions, a permission name for
+     * restricted actions, and false for unknown actions.
+     */
+    public static function permissionForAction(string $action): string|false|null
+    {
+        return array_key_exists($action, self::ACTION_PERMISSIONS)
+            ? self::ACTION_PERMISSIONS[$action]
+            : false;
+    }
+
+    public static function canPerformAction(string $action): bool
+    {
+        $permission = self::permissionForAction($action);
+        if ($permission === false) {
+            return false;
+        }
+        if ($permission === null) {
+            return true;
+        }
+        return self::can($permission);
+    }
+
+    public static function isUnsafeLegacyPassword(string $password): bool
+    {
+        $password = trim($password);
+        return $password === '' || in_array($password, ['changeme', 'change_me_now'], true);
     }
 
     // ── Multi-user support ────────────────────────────────────────────────────
@@ -180,9 +299,8 @@ class Auth
             mkdir(dirname($attemptsFile), 0755, true);
         }
 
-        $fh = fopen($attemptsFile, 'c+');
-        flock($fh, LOCK_EX);
-        $raw      = stream_get_contents($fh);
+        $lock     = self::lockAttempts($attemptsFile);
+        $raw      = file_exists($attemptsFile) ? (string) file_get_contents($attemptsFile) : '';
         $attempts = $raw ? (json_decode($raw, true) ?: []) : [];
 
         $now = time();
@@ -195,8 +313,7 @@ class Auth
         $lockedOut = ($entry['until'] ?? 0) > $now;
 
         if ($lockedOut) {
-            flock($fh, LOCK_UN);
-            fclose($fh);
+            self::unlockAttempts($lock);
             return '';
         }
 
@@ -215,9 +332,8 @@ class Auth
 
         if ($role !== '') {
             unset($attempts[$ip]);
-            ftruncate($fh, 0); rewind($fh);
-            fwrite($fh, json_encode($attempts));
-            flock($fh, LOCK_UN); fclose($fh);
+            self::writeAttempts($attemptsFile, $attempts);
+            self::unlockAttempts($lock);
             return $role;
         }
 
@@ -227,9 +343,8 @@ class Auth
             $entry['until'] = $now + self::LOCK_DURATION;
         }
         $attempts[$ip] = $entry;
-        ftruncate($fh, 0); rewind($fh);
-        fwrite($fh, json_encode($attempts));
-        flock($fh, LOCK_UN); fclose($fh);
+        self::writeAttempts($attemptsFile, $attempts);
+        self::unlockAttempts($lock);
         return '';
     }
 
@@ -257,7 +372,7 @@ class Auth
         if (!is_dir(dirname($file))) {
             mkdir(dirname($file), 0755, true);
         }
-        file_put_contents($file, json_encode(array_values($users), JSON_PRETTY_PRINT));
+        AtomicFile::writeJson($file, array_values($users));
     }
 
     private static function usersFile(): string
@@ -274,13 +389,41 @@ class Auth
         if (!$ip || !file_exists($attemptsFile)) {
             return;
         }
-        $fh = fopen($attemptsFile, 'c+');
-        flock($fh, LOCK_EX);
-        $attempts = json_decode(stream_get_contents($fh), true) ?: [];
+        $lock = self::lockAttempts($attemptsFile);
+        $attempts = json_decode((string) file_get_contents($attemptsFile), true) ?: [];
         unset($attempts[$ip]);
-        ftruncate($fh, 0); rewind($fh);
-        fwrite($fh, json_encode($attempts));
-        flock($fh, LOCK_UN); fclose($fh);
+        self::writeAttempts($attemptsFile, $attempts);
+        self::unlockAttempts($lock);
+    }
+
+    /**
+     * @param array<string, mixed> $attempts
+     */
+    private static function writeAttempts(string $file, array $attempts): void
+    {
+        AtomicFile::writeJson($file, $attempts, 0);
+    }
+
+    /**
+     * @return resource
+     */
+    private static function lockAttempts(string $file)
+    {
+        $lock = fopen($file . '.lock', 'c+');
+        if ($lock === false) {
+            throw new RuntimeException("Could not open login attempts lock file for {$file}");
+        }
+        flock($lock, LOCK_EX);
+        return $lock;
+    }
+
+    /**
+     * @param resource $lock
+     */
+    private static function unlockAttempts($lock): void
+    {
+        flock($lock, LOCK_UN);
+        fclose($lock);
     }
 
     /**

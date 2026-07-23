@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/AtomicFile.php';
+
 /**
  * Simple file-based JSON cache.
  *
@@ -55,13 +57,19 @@ class Cache
 
         $data    = $fetch();
         $wrapper = ['expires_at' => time() + $this->ttl, 'data' => $data];
-        file_put_contents($file, json_encode($wrapper), LOCK_EX);
+        AtomicFile::writeJson($file, $wrapper, 0);
 
         return $data;
     }
 
     public function getTtl(): int       { return $this->ttl; }
     public function getRetention(): int { return $this->retention; }
+    public function getDir(): string    { return $this->dir; }
+
+    public function checkpointDir(string $prefix, string $key): string
+    {
+        return $this->dir . '/checkpoints/' . $prefix . '_' . hash('sha256', $key);
+    }
 
     public function wasHit(string $prefix): bool
     {
@@ -91,7 +99,7 @@ class Cache
     {
         if ($this->ttl <= 0) return;
         $wrapper = ['expires_at' => time() + $this->ttl, 'data' => $data];
-        file_put_contents($this->path($prefix, $key), json_encode($wrapper), LOCK_EX);
+        AtomicFile::writeJson($this->path($prefix, $key), $wrapper, 0);
     }
 
     /**
@@ -122,11 +130,7 @@ class Cache
                 if (!file_exists($metaFile)) continue;
                 $meta = json_decode(file_get_contents($metaFile), true);
                 if (is_array($meta) && ($meta['expires_at'] ?? 0) < $deadline) {
-                    foreach (glob(rtrim($cpDir, '/') . '/*') ?: [] as $f) {
-                        @unlink($f);
-                    }
-                    @rmdir(rtrim($cpDir, '/'));
-                    $count++;
+                    $count += self::removeTree(rtrim($cpDir, '/'));
                 }
             }
         }
@@ -142,7 +146,17 @@ class Cache
         $pattern = $this->dir . '/' . $prefix . '_*.json';
         $files   = glob($pattern) ?: [];
         foreach ($files as $f) unlink($f);
-        return count($files);
+        $count = count($files);
+
+        $cpBase = $this->dir . '/checkpoints';
+        if (is_dir($cpBase)) {
+            $cpPattern = $prefix === '*' ? $cpBase . '/*' : $cpBase . '/' . $prefix . '_*';
+            foreach (glob($cpPattern, GLOB_ONLYDIR) ?: [] as $dir) {
+                $count += self::removeTree($dir);
+            }
+        }
+
+        return $count;
     }
 
     /**
@@ -177,5 +191,29 @@ class Cache
     private function path(string $prefix, string $key): string
     {
         return $this->dir . '/' . $prefix . '_' . hash('sha256', $key) . '.json';
+    }
+
+    private static function removeTree(string $path): int
+    {
+        if (!is_dir($path)) {
+            return 0;
+        }
+
+        $count = 0;
+        foreach (scandir($path) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+
+            $child = $path . '/' . $entry;
+            if (is_dir($child)) {
+                $count += self::removeTree($child);
+            } elseif (@unlink($child)) {
+                $count++;
+            }
+        }
+
+        @rmdir($path);
+        return $count;
     }
 }

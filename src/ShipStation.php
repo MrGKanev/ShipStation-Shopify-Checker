@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/AtomicFile.php';
+
 use GuzzleHttp\Client;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
@@ -56,8 +58,14 @@ class ShipStation
      */
     public function fetchAllOrders(string $startDate, string $endDate): array
     {
-        $cpDir   = __DIR__ . '/../cache/checkpoints/ss_' . md5("{$startDate}|{$endDate}");
+        if ($this->cache === null || $this->cache->getTtl() <= 0) {
+            return $this->fetchAllOrderPages($startDate, $endDate, null);
+        }
+
+        $cacheKey = "{$startDate}|{$endDate}";
+        $cpDir   = $this->cache->checkpointDir('ss', $cacheKey);
         $metaFile = $cpDir . '/_meta.json';
+        $staleAvailable = false;
 
         // Cache hit: all pages already on disk and still fresh
         if (file_exists($metaFile)) {
@@ -66,6 +74,34 @@ class ShipStation
                 $this->logInfo('ShipStation orders loaded from checkpoint ({start} -> {end})', [
                     'start' => $startDate,
                     'end'   => $endDate,
+                ]);
+                return $this->mergePageFiles($cpDir);
+            }
+
+            $staleAvailable = $this->hasCheckpointPages($cpDir);
+        }
+
+        if ($staleAvailable) {
+            $tmpDir = $this->temporaryCheckpointDir($cpDir);
+            try {
+                mkdir($tmpDir, 0755, true);
+                $this->fetchAllOrderPages($startDate, $endDate, $tmpDir);
+                AtomicFile::writeJson($tmpDir . '/_meta.json', ['expires_at' => time() + $this->cache->getTtl()], 0);
+                $this->replaceCheckpoint($tmpDir, $cpDir);
+
+                $all = $this->mergePageFiles($cpDir);
+                $this->logInfo('ShipStation orders refreshed ({start} -> {end}); {count} orders', [
+                    'start' => $startDate,
+                    'end'   => $endDate,
+                    'count' => count($all),
+                ]);
+                return $all;
+            } catch (Throwable $e) {
+                $this->removeCheckpoint($tmpDir);
+                $this->logWarning('ShipStation refresh failed; using stale checkpoint ({start} -> {end}): {message}', [
+                    'start'   => $startDate,
+                    'end'     => $endDate,
+                    'message' => $e->getMessage(),
                 ]);
                 return $this->mergePageFiles($cpDir);
             }
@@ -83,8 +119,40 @@ class ShipStation
             $this->logInfo('Resuming ShipStation fetch from page {page}', ['page' => $startPage]);
         }
 
+        $this->fetchAllOrderPages($startDate, $endDate, $cpDir, $startPage);
+
+        // Write meta (TTL marker) - page files ARE the cache now
+        AtomicFile::writeJson($metaFile, ['expires_at' => time() + $this->cache->getTtl()], 0);
+
+        $all = $this->mergePageFiles($cpDir);
+        $this->logInfo('ShipStation orders stored ({start} -> {end}); {count} orders', [
+            'start' => $startDate,
+            'end'   => $endDate,
+            'count' => count($all),
+        ]);
+
+        return $all;
+    }
+
+    private function hasCheckpointPages(string $cpDir): bool
+    {
+        return (glob($cpDir . '/page_*.json') ?: []) !== [];
+    }
+
+    private function temporaryCheckpointDir(string $cpDir): string
+    {
+        return dirname($cpDir) . '/.' . basename($cpDir) . '.tmp_' . bin2hex(random_bytes(4));
+    }
+
+    private function fetchAllOrderPages(
+        string $startDate,
+        string $endDate,
+        ?string $checkpointDir,
+        int $startPage = 1
+    ): array {
         $page       = $startPage;
         $totalPages = null;
+        $all        = [];
 
         do {
             $params = http_build_query([
@@ -101,22 +169,15 @@ class ShipStation
 
             $totalPages = $data['pages'] ?? $totalPages ?? 1;
 
-            // Write page to disk immediately - survives a crash
-            file_put_contents($cpDir . '/page_' . $page . '.json', json_encode($batch), LOCK_EX);
+            if ($checkpointDir !== null) {
+                AtomicFile::writeJson($checkpointDir . '/page_' . $page . '.json', $batch, 0);
+            } else {
+                array_push($all, ...$batch);
+            }
+
             unset($batch, $data);
             $page++;
         } while ($page <= $totalPages);
-
-        // Write meta (TTL marker) - page files ARE the cache now
-        $ttl = $this->cache ? $this->cache->getTtl() : 3600;
-        file_put_contents($metaFile, json_encode(['expires_at' => time() + $ttl]), LOCK_EX);
-
-        $all = $this->mergePageFiles($cpDir);
-        $this->logInfo('ShipStation orders stored ({start} -> {end}); {count} orders', [
-            'start' => $startDate,
-            'end'   => $endDate,
-            'count' => count($all),
-        ]);
 
         return $all;
     }
@@ -139,6 +200,49 @@ class ShipStation
             unset($batch);
         }
         return $all;
+    }
+
+    private function removeCheckpoint(string $cpDir): void
+    {
+        if (!is_dir($cpDir)) {
+            return;
+        }
+
+        foreach (scandir($cpDir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $path = $cpDir . '/' . $entry;
+            if (is_dir($path)) {
+                $this->removeCheckpoint($path);
+            } elseif (is_file($path)) {
+                @unlink($path);
+            }
+        }
+
+        @rmdir($cpDir);
+    }
+
+    private function replaceCheckpoint(string $tmpDir, string $cpDir): void
+    {
+        $backupDir = '';
+        if (is_dir($cpDir)) {
+            $backupDir = dirname($cpDir) . '/.' . basename($cpDir) . '.bak_' . bin2hex(random_bytes(4));
+            if (!@rename($cpDir, $backupDir)) {
+                throw new RuntimeException('Could not move stale ShipStation checkpoint aside.');
+            }
+        }
+
+        if (!@rename($tmpDir, $cpDir)) {
+            if ($backupDir !== '' && is_dir($backupDir)) {
+                @rename($backupDir, $cpDir);
+            }
+            throw new RuntimeException('Could not activate refreshed ShipStation checkpoint.');
+        }
+
+        if ($backupDir !== '') {
+            $this->removeCheckpoint($backupDir);
+        }
     }
 
     /**

@@ -23,6 +23,7 @@ class ConfigValidator
             self::validateOrderTypes($rootDir . '/order_types.json'),
             self::validateTagPolicy($rootDir . '/tag_policy.json'),
             self::validateStores($rootDir . '/stores.json'),
+            self::validateEnvironment($rootDir . '/data/users.json'),
         ];
     }
 
@@ -142,6 +143,34 @@ class ConfigValidator
         }
 
         return self::result('stores.json', true, $issues, []);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function validateEnvironment(string $usersFile = ''): array
+    {
+        $issues = [];
+        $notes = [];
+        $webPassword = trim((string) (getenv('WEB_PASSWORD') ?: ''));
+        $multiUserMode = $usersFile !== '' && file_exists($usersFile);
+
+        if ($multiUserMode) {
+            $notes[] = 'data/users.json is present; multi-user login takes precedence over WEB_PASSWORD.';
+        } elseif ($webPassword === '') {
+            $issues[] = 'WEB_PASSWORD is not set; legacy single-user login is disabled outside localhost.';
+        } elseif (in_array($webPassword, ['changeme', 'change_me_now'], true)) {
+            $issues[] = 'WEB_PASSWORD uses an unsafe default placeholder.';
+        }
+
+        $allowPublicMetrics = filter_var(getenv('METRICS_ALLOW_PUBLIC') ?: '', FILTER_VALIDATE_BOOLEAN);
+        if (!getenv('METRICS_TOKEN')) {
+            $notes[] = $allowPublicMetrics
+                ? 'METRICS_TOKEN is not set and METRICS_ALLOW_PUBLIC=1; metrics.php is public.'
+                : 'METRICS_TOKEN is not set; metrics.php is disabled unless METRICS_ALLOW_PUBLIC=1.';
+        }
+
+        return self::result('environment', true, $issues, $notes);
     }
 
     /**

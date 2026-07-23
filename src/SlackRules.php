@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/AtomicFile.php';
+
 /**
  * File-backed Slack notification rules.
  */
@@ -54,7 +56,7 @@ class SlackRules
         if (!is_dir(dirname($file))) {
             mkdir(dirname($file), 0755, true);
         }
-        file_put_contents($file, json_encode(self::normalise($rules), JSON_PRETTY_PRINT), LOCK_EX);
+        AtomicFile::writeJson($file, self::normalise($rules));
     }
 
     /**

@@ -175,4 +175,98 @@ class ShipStationClientTest extends TestCase
         $this->assertStringContainsString('orderStatus=awaiting_shipment', $uris[1]);
         $this->assertStringContainsString('orderStatus=on_hold', $uris[2]);
     }
+
+    public function testFetchAllOrdersWritesCheckpointUnderProvidedCacheDir(): void
+    {
+        $tmpDir = sys_get_temp_dir() . '/ss_checkpoint_' . uniqid();
+        $cache = new Cache($tmpDir, ttl: 60);
+        $history = [];
+        $ss = new ShipStation('key', 'secret', $cache, $this->makeStack([
+            $this->json(['orders' => [['orderId' => 1]], 'pages' => 2]),
+            $this->json(['orders' => [['orderId' => 2]], 'pages' => 2]),
+        ], $history));
+
+        try {
+            $orders = $ss->fetchAllOrders('2026-01-01', '2026-01-02');
+            $dir = $cache->checkpointDir('ss', '2026-01-01|2026-01-02');
+
+            $this->assertSame([['orderId' => 1], ['orderId' => 2]], $orders);
+            $this->assertTrue(file_exists($dir . '/page_1.json'));
+            $this->assertTrue(file_exists($dir . '/page_2.json'));
+            $this->assertTrue(file_exists($dir . '/_meta.json'));
+        } finally {
+            $this->removeDir($tmpDir);
+        }
+    }
+
+    public function testExpiredFetchAllOrdersCheckpointRestartsFromFirstPage(): void
+    {
+        $tmpDir = sys_get_temp_dir() . '/ss_checkpoint_' . uniqid();
+        $cache = new Cache($tmpDir, ttl: 60);
+        $dir = $cache->checkpointDir('ss', '2026-02-01|2026-02-02');
+        mkdir($dir, 0755, true);
+        file_put_contents($dir . '/page_1.json', json_encode([['orderId' => 'old']]));
+        file_put_contents($dir . '/_meta.json', json_encode(['expires_at' => time() - 10]));
+
+        $history = [];
+        $ss = new ShipStation('key', 'secret', $cache, $this->makeStack([
+            $this->json(['orders' => [['orderId' => 'fresh']], 'pages' => 1]),
+        ], $history));
+
+        try {
+            $orders = $ss->fetchAllOrders('2026-02-01', '2026-02-02');
+            $uri = urldecode((string) $history[0]['request']->getUri());
+
+            $this->assertSame([['orderId' => 'fresh']], $orders);
+            $this->assertStringContainsString('page=1', $uri);
+        } finally {
+            $this->removeDir($tmpDir);
+        }
+    }
+
+    public function testExpiredFetchAllOrdersCheckpointFallsBackToStaleOnRefreshFailure(): void
+    {
+        $tmpDir = sys_get_temp_dir() . '/ss_checkpoint_' . uniqid();
+        $cache = new Cache($tmpDir, ttl: 60);
+        $dir = $cache->checkpointDir('ss', '2026-03-01|2026-03-02');
+        mkdir($dir, 0755, true);
+        file_put_contents($dir . '/page_1.json', json_encode([['orderId' => 'stale']]));
+        file_put_contents($dir . '/_meta.json', json_encode(['expires_at' => time() - 10]));
+
+        $ss = new ShipStation('key', 'secret', $cache, $this->makeStack([
+            $this->json(['message' => 'temporary outage'], 500),
+        ]));
+
+        try {
+            $orders = $ss->fetchAllOrders('2026-03-01', '2026-03-02');
+
+            $this->assertSame([['orderId' => 'stale']], $orders);
+            $this->assertTrue(file_exists($dir . '/page_1.json'));
+            $this->assertSame([], glob(dirname($dir) . '/.' . basename($dir) . '.tmp_*') ?: []);
+        } finally {
+            $this->removeDir($tmpDir);
+        }
+    }
+
+    private function removeDir(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+
+        foreach (scandir($dir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+
+            $path = $dir . '/' . $entry;
+            if (is_dir($path)) {
+                $this->removeDir($path);
+            } else {
+                unlink($path);
+            }
+        }
+
+        rmdir($dir);
+    }
 }

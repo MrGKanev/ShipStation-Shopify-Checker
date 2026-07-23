@@ -158,14 +158,9 @@ class PageLoader
         $auditFromCache = ['shopify' => false, 'ss' => false];
         $auditSlack     = ['configured' => SlackNotifier::isConfigured(), 'sent' => false, 'error' => ''];
         $cacheEntries   = $ctx['cacheObj']->entries();
-        $cacheFlushed   = 0;
+        $cacheFlushed   = max(0, (int) ($_GET['cache_flushed'] ?? 0));
         $auditStart     = $_POST['audit_start'] ?? $_GET['start'] ?? date('Y-m-d', strtotime('-12 months'));
         $auditEnd       = $_POST['audit_end']   ?? $_GET['end']   ?? date('Y-m-d');
-
-        if ($action === 'flush_cache') {
-            $cacheFlushed = $ctx['cacheObj']->flush();
-            $cacheEntries = $ctx['cacheObj']->entries();
-        }
 
         if ($action === 'run_audit') {
             $auditStart = $_POST['audit_start'] ?? '';
@@ -323,13 +318,8 @@ class PageLoader
         $pushLog       = $already['pushLog']   ?? [];
         $ignoredOrders = $ctx['ignoredOrders'] ?? [];
         $cacheObj      = $ctx['cacheObj'];
-        $action        = $ctx['action'] ?? '';
 
-        // Cache flush from dashboard
-        $dbCacheFlushed = 0;
-        if ($action === 'flush_cache' && $cacheObj) {
-            $dbCacheFlushed = $cacheObj->flush();
-        }
+        $dbCacheFlushed = max(0, (int) ($_GET['cache_flushed'] ?? 0));
 
         // Push stats - last 30 days
         $cutoff30      = date('Y-m-d', strtotime('-30 days'));

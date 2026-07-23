@@ -15,6 +15,8 @@
 | `APP_LOGO` | - | URL to an image that replaces the brand text |
 | `APP_STORE_NUMBER` | - | Store number - shown as subtitle on login and in the browser tab |
 | `SLACK_WEBHOOK_URL` | - | Slack Incoming Webhook URL. When set, completed audits send a concise summary to Slack. |
+| `METRICS_TOKEN` | - | Bearer/query token for `metrics.php`. If empty, the endpoint is disabled by default. |
+| `METRICS_ALLOW_PUBLIC` | - | Set to `1` only for local/dev public metrics without `METRICS_TOKEN`. |
 
 ---
 
@@ -67,16 +69,21 @@ Set `SLACK_WEBHOOK_URL` in `.env`, then configure thresholds in **Settings → S
 
 ## Security
 
-- Username/password authentication stored in `.env`
+- Username/password authentication stored in `.env`; set a non-placeholder `WEB_PASSWORD`
 - 3 failed login attempts per IP triggers a 1-week lockout (manageable from Settings)
+- `metrics.php` requires `METRICS_TOKEN` by default; use `METRICS_ALLOW_PUBLIC=1` only for local/dev deployments.
 - All user-supplied values escaped with `htmlspecialchars`
-- Protect data directories from direct web access:
+- Protect runtime directories from direct web access:
 
 ```apache
 <DirectoryMatch "^/var/www/shopify-ops/(reports|cache|data|logs)/">
     Require all denied
 </DirectoryMatch>
 ```
+
+If `data/users.json` does not exist, the legacy `.env` login is disabled outside
+localhost when `WEB_PASSWORD` is missing or still set to `changeme` /
+`change_me_now`.
 
 ---
 

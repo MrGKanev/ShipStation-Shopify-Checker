@@ -2,8 +2,10 @@
 stores.json
 order_types.json
 tag_policy.json
-cache/
-logs/
+cache/*
+!cache/.htaccess
+logs/*
+!logs/.htaccess
 
 # Keep .htaccess files but ignore generated content
 reports/*
@@ -18,7 +20,6 @@ data/*
 
 # Node / pnpm
 node_modules/
-pnpm-lock.yaml
 /vendor
 .phpunit.result.cache
 /.claude/worktrees

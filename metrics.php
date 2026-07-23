@@ -10,6 +10,15 @@ Dotenv\Dotenv::createUnsafeImmutable(__DIR__)->safeLoad();
 
 // ── Token auth ─────────────────────────────────────────────────────────────
 $configuredToken = trim((string) getenv('METRICS_TOKEN'));
+$allowPublic = filter_var(getenv('METRICS_ALLOW_PUBLIC') ?: '', FILTER_VALIDATE_BOOLEAN);
+
+if ($configuredToken === '' && !$allowPublic) {
+    http_response_code(503);
+    header('Content-Type: text/plain');
+    echo "Metrics endpoint disabled. Set METRICS_TOKEN or METRICS_ALLOW_PUBLIC=1.\n";
+    exit;
+}
+
 if ($configuredToken !== '') {
     $provided = '';
     $authHeader = trim((string) ($_SERVER['HTTP_AUTHORIZATION'] ?? ''));

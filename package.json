@@ -1,12 +1,13 @@
 {
   "name": "shopify-ops",
   "private": true,
+  "packageManager": "pnpm@11.15.1",
   "scripts": {
     "build": "tailwindcss -i assets/src/app.css -o assets/app.css --minify",
     "dev": "tailwindcss -i assets/src/app.css -o assets/app.css --watch"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "^4.3.1",
-    "tailwindcss": "^4.3.1"
+    "@tailwindcss/cli": "^4.3.3",
+    "tailwindcss": "^4.3.3"
   }
 }

@@ -108,14 +108,20 @@ if ($action === 'login') {
         $error = 'Incorrect username or password.';
     } else {
         // Legacy single-user mode via ENV vars
-        $error = Auth::attempt($_POST['username'] ?? '', $_POST['password'] ?? '', getenv('WEB_USERNAME') ?: 'admin', getenv('WEB_PASSWORD') ?: 'changeme', $ip);
-        if ($error === '') {
-            session_regenerate_id(true);
-            $_SESSION['authed']    = true;
-            $_SESSION['user_role'] = 'admin';
-            $csrfToken = Auth::rotateCsrfToken();
-            header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
-            exit;
+        $legacyUser = getenv('WEB_USERNAME') ?: 'admin';
+        $legacyPass = (string) (getenv('WEB_PASSWORD') ?: '');
+        if (!$isLocalhost && Auth::isUnsafeLegacyPassword($legacyPass)) {
+            $error = 'Dashboard password is not configured. Set WEB_PASSWORD or create data/users.json.';
+        } else {
+            $error = Auth::attempt($_POST['username'] ?? '', $_POST['password'] ?? '', $legacyUser, $legacyPass ?: 'changeme', $ip);
+            if ($error === '') {
+                session_regenerate_id(true);
+                $_SESSION['authed']    = true;
+                $_SESSION['user_role'] = 'admin';
+                $csrfToken = Auth::rotateCsrfToken();
+                header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
+                exit;
+            }
         }
     }
 }
@@ -137,6 +143,11 @@ if ($action === 'logout') {
 
 $authed   = !empty($_SESSION['authed']);
 $userRole = $_SESSION['user_role'] ?? 'admin'; // legacy sessions default to admin
+$flash    = [];
+if ($authed) {
+    $flash = $_SESSION['_flash'] ?? [];
+    unset($_SESSION['_flash']);
+}
 
 // ── Store config (multi-store or single .env) ─────────────────────────────────
 
@@ -162,13 +173,14 @@ if (Stores::isMultiStore()) {
 }
 
 $webUsername   = getenv('WEB_USERNAME') ?: 'admin';
-$webPassword   = getenv('WEB_PASSWORD') ?: 'changeme';
+$webPassword   = getenv('WEB_PASSWORD') ?: '';
 $_appTitleEnv  = getenv('APP_TITLE') ?: '';
 $appTitle      = $_appTitleEnv ? "{$_appTitleEnv} - Shopify OPS" : 'Shopify OPS';
 $appBrand      = $_appTitleEnv ?: 'Shopify OPS';
 $appLogo       = getenv('APP_LOGO') ?: '';
 $loginBgImage  = getenv('LOGIN_BG_IMAGE') ?: '';
-$appVersion    = json_decode((string) file_get_contents(__DIR__ . '/composer.json'), true)['version'] ?? 'dev';
+$composerMeta  = json_decode((string) file_get_contents(__DIR__ . '/composer.json'), true) ?: [];
+$appVersion    = getenv('APP_VERSION') ?: ($composerMeta['extra']['app-version'] ?? $composerMeta['version'] ?? 'dev');
 $cacheTtl       = (int) (getenv('CACHE_TTL')           ?: 82800);   // data validity, default 23 h
 $cacheRetention = (int) (getenv('CACHE_RETENTION')    ?: 1209600); // keep on disk after expiry, default 2 weeks
 
@@ -198,27 +210,12 @@ if ($authed) {
 
 $ctx = compact('authed', 'action', 'ssKey', 'ssSecret', 'shopifyToken', 'shopifyStore',
                'cacheObj', 'cacheTtl', 'reportDir', 'ignoredOrders', 'appVersion',
-               'storeId', 'storeLabel', 'userRole');
+               'storeId', 'storeLabel', 'userRole', 'flash');
 
-// Role-based access control for sensitive POST actions
+// Role-based access control for POST actions. Unknown actions are denied so
+// new handlers must be explicitly classified in Auth's action permission map.
 if ($authed && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $action !== '') {
-    $operatorActions = [
-        'push_to_shipstation', 'bulk_push',
-        'ignore_order', 'unignore_order', 'bulk_ignore_orders', 'bulk_unignore_orders', 'import_ignore_csv',
-        'flush_cache', 'run_audit', 'queue_audit',
-    ];
-    $adminActions = [
-        'save_settings', 'ban_ip', 'unban_ip',
-        'save_slack_rules',
-        'add_user', 'delete_user',
-    ];
-
-    if (in_array($action, $operatorActions, true) && !Auth::can('push')) {
-        http_response_code(403);
-        echo '<h1>403 Forbidden</h1><p>Your role does not have permission to perform this action.</p>';
-        exit;
-    }
-    if (in_array($action, $adminActions, true) && !Auth::can('manage_settings')) {
+    if (!Auth::canPerformAction($action)) {
         http_response_code(403);
         echo '<h1>403 Forbidden</h1><p>Your role does not have permission to perform this action.</p>';
         exit;

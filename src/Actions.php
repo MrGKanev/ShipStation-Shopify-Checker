@@ -25,6 +25,11 @@ class Actions
             'preview_push'        => self::previewPush($ctx),
             'order_detail'        => self::orderDetail($ctx),
             'flush_cache'         => self::flushCache($ctx),
+            'test_connection'     => self::testConnection($ctx),
+            'refresh_api_health'  => self::refreshApiHealth($ctx),
+            'pq_add'              => self::printQueueAdd(),
+            'pq_remove'           => self::printQueueRemove(),
+            'pq_clear'            => self::printQueueClear(),
             'add_user'            => self::addUser($ctx),
             'delete_user'         => self::deleteUser($ctx),
             'save_order_note'     => self::saveOrderNote($ctx),
@@ -232,7 +237,80 @@ class Actions
 
     private static function flushCache(array $ctx): void
     {
-        // Handled in PageLoader (needs to return flushed count to view) - no early exit.
+        $count = $ctx['cacheObj'] ? $ctx['cacheObj']->flush() : 0;
+        UserActionLog::append('flush_cache', ['count' => $count, 'store_id' => $ctx['storeId'] ?? '']);
+
+        $loc = self::redirectBack($_GET['page'] ?? 'dashboard');
+        $loc = self::appendQuery($loc, [
+            'cache_flushed' => $count,
+            'start' => $_POST['audit_start'] ?? '',
+            'end' => $_POST['audit_end'] ?? '',
+        ]);
+        header('Location: ' . $loc);
+        exit;
+    }
+
+    private static function testConnection(array $ctx): void
+    {
+        self::flash('conn_results', self::connectionResults($ctx));
+        header('Location: ?page=settings&connection_test=1');
+        exit;
+    }
+
+    private static function refreshApiHealth(array $ctx): void
+    {
+        $apiHealth = [
+            'shopify'     => ApiHealth::checkShopify($ctx['shopifyStore'], $ctx['shopifyToken']),
+            'shipstation' => ApiHealth::checkShipStation($ctx['ssKey'], $ctx['ssSecret']),
+            'checked_at'   => date('Y-m-d H:i:s'),
+        ];
+
+        RunLog::append([
+            'tool'       => 'api_health',
+            'status'     => (($apiHealth['shopify']['ok'] ?? false) && ($apiHealth['shipstation']['ok'] ?? false)) ? 'ok' : 'issues_found',
+            'rows_found' => count($apiHealth['shopify']['missing_scopes'] ?? []),
+            'meta'       => ['api_version' => Shopify::API_VERSION],
+        ]);
+
+        self::flash('api_health', $apiHealth);
+        header('Location: ?page=apihealth&api_health=1');
+        exit;
+    }
+
+    private static function printQueueAdd(): void
+    {
+        $num = trim($_POST['pq_order_number'] ?? '');
+        if ($num === '') {
+            self::flash('pq_error', 'Order number cannot be empty.');
+            header('Location: ?page=printqueue');
+            exit;
+        }
+
+        PrintQueue::add($num, trim($_POST['pq_note'] ?? ''));
+        UserActionLog::append('pq_add', ['order_number' => $num]);
+        self::flash('pq_message', "Order #{$num} added to the print queue.");
+        header('Location: ?page=printqueue');
+        exit;
+    }
+
+    private static function printQueueRemove(): void
+    {
+        $num = trim($_POST['pq_order_number'] ?? '');
+        PrintQueue::remove($num);
+        UserActionLog::append('pq_remove', ['order_number' => $num]);
+        self::flash('pq_message', "Order #{$num} removed from the queue.");
+        header('Location: ?page=printqueue');
+        exit;
+    }
+
+    private static function printQueueClear(): void
+    {
+        $count = count(PrintQueue::all());
+        PrintQueue::clear();
+        UserActionLog::append('pq_clear', ['count' => $count]);
+        self::flash('pq_message', 'Print queue cleared.');
+        header('Location: ?page=printqueue');
+        exit;
     }
 
     private static function addUser(array $ctx): void
@@ -332,6 +410,84 @@ class Actions
         $loc  = '?page=' . urlencode($page);
         if ($date) $loc .= '&date=' . urlencode($date);
         return $loc;
+    }
+
+    /**
+     * @param array<string, mixed> $ctx
+     * @return array<string, array{ok: bool, code: int, ms: int, error: ?string}>
+     */
+    private static function connectionResults(array $ctx): array
+    {
+        $results = [];
+        $ping = function (string $url, array $headers, string $method = 'GET', ?string $body = null): array {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => 10,
+                CURLOPT_HTTPHEADER     => $headers,
+                CURLOPT_USERAGENT      => 'ShopifyOps/1.0',
+            ]);
+            if ($method !== 'GET') {
+                curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+            }
+            if ($body !== null) {
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+            }
+            $t0   = microtime(true);
+            curl_exec($ch);
+            $ms   = (int) round((microtime(true) - $t0) * 1000);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $err  = curl_error($ch);
+            curl_close($ch);
+            return ['ok' => ($code >= 200 && $code < 300), 'code' => $code, 'ms' => $ms, 'error' => $err ?: null];
+        };
+
+        if ($ctx['ssKey'] && $ctx['ssSecret']) {
+            $auth = base64_encode("{$ctx['ssKey']}:{$ctx['ssSecret']}");
+            $results['ss'] = $ping(
+                'https://ssapi.shipstation.com/orders?pageSize=1',
+                ["Authorization: Basic {$auth}", 'Accept: application/json']
+            );
+        } else {
+            $results['ss'] = ['ok' => false, 'code' => 0, 'ms' => 0, 'error' => 'SS_API_KEY / SS_API_SECRET not set in .env'];
+        }
+
+        if ($ctx['shopifyToken'] && $ctx['shopifyStore'] !== 'N/A') {
+            $host = str_contains($ctx['shopifyStore'], '.') ? $ctx['shopifyStore'] : "{$ctx['shopifyStore']}.myshopify.com";
+            $results['shopify'] = $ping(
+                "https://{$host}/admin/api/" . Shopify::API_VERSION . "/graphql.json",
+                [
+                    "X-Shopify-Access-Token: {$ctx['shopifyToken']}",
+                    'Accept: application/json',
+                    'Content-Type: application/json',
+                ],
+                'POST',
+                json_encode(['query' => '{ shop { name } }'])
+            );
+        } else {
+            $results['shopify'] = ['ok' => false, 'code' => 0, 'ms' => 0, 'error' => 'SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env'];
+        }
+
+        return $results;
+    }
+
+    /**
+     * @param array<string, mixed> $params
+     */
+    private static function appendQuery(string $loc, array $params): string
+    {
+        foreach ($params as $key => $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
+            $loc .= (str_contains($loc, '?') ? '&' : '?') . urlencode((string) $key) . '=' . urlencode((string) $value);
+        }
+        return $loc;
+    }
+
+    private static function flash(string $key, mixed $value): void
+    {
+        $_SESSION['_flash'][$key] = $value;
     }
 
 }

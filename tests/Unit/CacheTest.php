@@ -16,12 +16,7 @@ class CacheTest extends TestCase
 
     protected function tearDown(): void
     {
-        foreach (glob($this->tmpDir . '/*.json') ?: [] as $f) {
-            unlink($f);
-        }
-        if (is_dir($this->tmpDir)) {
-            rmdir($this->tmpDir);
-        }
+        $this->removeDir($this->tmpDir);
     }
 
     // ── remember ──────────────────────────────────────────────────────────────
@@ -163,6 +158,35 @@ class CacheTest extends TestCase
         $this->assertSame(0, $this->cache->flush());
     }
 
+    public function testFlushRemovesCheckpointDirectories(): void
+    {
+        $dir = $this->cache->checkpointDir('ss', '2026-01-01|2026-01-02');
+        mkdir($dir, 0755, true);
+        file_put_contents($dir . '/page_1.json', '[]');
+        file_put_contents($dir . '/_meta.json', json_encode(['expires_at' => time() + 60]));
+
+        $deleted = $this->cache->flush();
+
+        $this->assertSame(2, $deleted);
+        $this->assertFalse(is_dir($dir));
+    }
+
+    public function testFlushWithPrefixRemovesOnlyMatchingCheckpoints(): void
+    {
+        $ssDir = $this->cache->checkpointDir('ss', 'one');
+        $shopDir = $this->cache->checkpointDir('shopify', 'one');
+        mkdir($ssDir, 0755, true);
+        mkdir($shopDir, 0755, true);
+        file_put_contents($ssDir . '/page_1.json', '[]');
+        file_put_contents($shopDir . '/page_1.json', '[]');
+
+        $deleted = $this->cache->flush('ss');
+
+        $this->assertSame(1, $deleted);
+        $this->assertFalse(is_dir($ssDir));
+        $this->assertTrue(is_dir($shopDir));
+    }
+
     // ── entries ───────────────────────────────────────────────────────────────
 
     public function testEntriesReturnsMetadataForCachedFiles(): void
@@ -277,5 +301,41 @@ class CacheTest extends TestCase
 
         $this->assertSame(0, $deleted);
         $this->assertCount(1, glob($this->tmpDir . '/*.json'));
+    }
+
+    public function testPruneExpiredDeletesCheckpointDirectoriesPastRetention(): void
+    {
+        $pruneCache = new Cache($this->tmpDir, ttl: 60, retention: 60);
+        $dir = $pruneCache->checkpointDir('ss', 'old');
+        mkdir($dir, 0755, true);
+        file_put_contents($dir . '/page_1.json', '[]');
+        file_put_contents($dir . '/_meta.json', json_encode(['expires_at' => time() - 120]));
+
+        $deleted = $pruneCache->pruneExpired();
+
+        $this->assertSame(2, $deleted);
+        $this->assertFalse(is_dir($dir));
+    }
+
+    private function removeDir(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+
+        foreach (scandir($dir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+
+            $path = $dir . '/' . $entry;
+            if (is_dir($path)) {
+                $this->removeDir($path);
+            } else {
+                unlink($path);
+            }
+        }
+
+        rmdir($dir);
     }
 }

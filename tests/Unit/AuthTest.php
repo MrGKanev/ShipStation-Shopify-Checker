@@ -19,9 +19,13 @@ class AuthTest extends TestCase
 
     protected function tearDown(): void
     {
-        $file = $this->tmpDir . '/login_attempts.json';
-        if (file_exists($file)) {
-            unlink($file);
+        foreach ([
+            $this->tmpDir . '/login_attempts.json',
+            $this->tmpDir . '/login_attempts.json.lock',
+        ] as $file) {
+            if (file_exists($file)) {
+                unlink($file);
+            }
         }
         if (is_dir($this->tmpDir)) {
             rmdir($this->tmpDir);
@@ -201,5 +205,122 @@ class AuthTest extends TestCase
     public function testValidateCsrfReturnsFalseWhenNoSessionTokenSet(): void
     {
         $this->assertFalse(Auth::validateCsrf('any-token'));
+    }
+
+    // ── Action permissions ───────────────────────────────────────────────────
+
+    public function testViewerCanPerformReadOnlyLookupAction(): void
+    {
+        $_SESSION['user_role'] = 'viewer';
+
+        $this->assertTrue(Auth::canPerformAction('spotcheck'));
+        $this->assertTrue(Auth::canPerformAction('order_detail'));
+    }
+
+    public function testViewerCannotPerformOperatorAction(): void
+    {
+        $_SESSION['user_role'] = 'viewer';
+
+        $this->assertFalse(Auth::canPerformAction('push_to_shipstation'));
+        $this->assertFalse(Auth::canPerformAction('scan_addresses'));
+        $this->assertFalse(Auth::canPerformAction('save_order_note'));
+    }
+
+    public function testOperatorCanPerformOperationalActions(): void
+    {
+        $_SESSION['user_role'] = 'operator';
+
+        $this->assertTrue(Auth::canPerformAction('queue_audit'));
+        $this->assertTrue(Auth::canPerformAction('pq_add'));
+        $this->assertFalse(Auth::canPerformAction('add_user'));
+    }
+
+    public function testAdminCanPerformAdminActions(): void
+    {
+        $_SESSION['user_role'] = 'admin';
+
+        $this->assertTrue(Auth::canPerformAction('add_user'));
+        $this->assertTrue(Auth::canPerformAction('refresh_api_health'));
+    }
+
+    public function testUnknownPostActionIsDeniedByDefault(): void
+    {
+        $_SESSION['user_role'] = 'admin';
+
+        $this->assertFalse(Auth::canPerformAction('new_unclassified_action'));
+        $this->assertFalse(Auth::permissionForAction('new_unclassified_action'));
+    }
+
+    public function testPostActionsRenderedByViewsAndJavascriptAreClassified(): void
+    {
+        $actions = $this->discoverRenderedPostActions();
+        $unknown = array_values(array_filter(
+            $actions,
+            fn(string $action): bool => Auth::permissionForAction($action) === false
+        ));
+
+        $this->assertGreaterThan(40, count($actions), 'Action discovery did not cover the expected form surface.');
+        $this->assertSame([], $unknown, 'Unclassified POST actions: ' . implode(', ', $unknown));
+    }
+
+    public function testUnsafeLegacyPasswordDetectsMissingAndPlaceholders(): void
+    {
+        $this->assertTrue(Auth::isUnsafeLegacyPassword(''));
+        $this->assertTrue(Auth::isUnsafeLegacyPassword('changeme'));
+        $this->assertTrue(Auth::isUnsafeLegacyPassword('change_me_now'));
+        $this->assertFalse(Auth::isUnsafeLegacyPassword('real-password'));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function discoverRenderedPostActions(): array
+    {
+        $root = dirname(__DIR__, 2);
+        $files = [];
+        foreach (['views', 'assets'] as $dir) {
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($root . '/' . $dir, FilesystemIterator::SKIP_DOTS)
+            );
+            foreach ($iterator as $file) {
+                if ($file->isFile() && in_array($file->getExtension(), ['php', 'js'], true)) {
+                    $files[] = $file->getPathname();
+                }
+            }
+        }
+
+        $actions = [];
+        foreach ($files as $file) {
+            $contents = (string) file_get_contents($file);
+
+            if (preg_match_all('/<input\b[^>]*>/i', $contents, $tags)) {
+                foreach ($tags[0] as $tag) {
+                    if (preg_match('/\bname\s*=\s*["\']action["\']/i', $tag)
+                        && preg_match('/\bvalue\s*=\s*["\']([^"\']+)["\']/i', $tag, $m)
+                    ) {
+                        $actions[$m[1]] = true;
+                    }
+                }
+            }
+
+            if (preg_match_all('/\bfd\.append\(\s*["\']action["\']\s*,\s*["\']([^"\']+)["\']\s*\)/', $contents, $matches)) {
+                foreach ($matches[1] as $action) {
+                    $actions[$action] = true;
+                }
+            }
+
+            if (preg_match_all('/\.value\s*=\s*["\']([a-z0-9_]+)["\']/', $contents, $matches)) {
+                foreach ($matches[1] as $action) {
+                    if (str_contains($action, '_')) {
+                        $actions[$action] = true;
+                    }
+                }
+            }
+        }
+
+        $actions = array_keys($actions);
+        sort($actions);
+
+        return $actions;
     }
 }

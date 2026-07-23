@@ -33,6 +33,7 @@ class ManageSettingsPageLoaderTest extends TestCase
 
         $this->previousSlackWebhook = getenv('SLACK_WEBHOOK_URL');
         putenv('SLACK_WEBHOOK_URL');
+        $_GET = [];
     }
 
     protected function tearDown(): void
@@ -60,13 +61,20 @@ class ManageSettingsPageLoaderTest extends TestCase
 
         $flushed = ManageSettingsPageLoader::load('settings', 'flush_cache', $this->ctx());
 
-        $this->assertSame(2, $flushed['cacheFlushed']);
-        $this->assertSame([], $flushed['cacheEntries']);
+        $this->assertSame(0, $flushed['cacheFlushed']);
+        $this->assertCount(2, $flushed['cacheEntries']);
     }
 
-    public function testSettingsConnectionCheckReportsMissingCredentialsWithoutNetwork(): void
+    public function testSettingsReadsConnectionResultsFromFlash(): void
     {
-        $settings = ManageSettingsPageLoader::load('settings', 'test_connection', $this->ctx());
+        $settings = ManageSettingsPageLoader::load('settings', '', $this->ctx([
+            'flash' => [
+                'conn_results' => [
+                    'ss' => ['ok' => false, 'code' => 0, 'ms' => 0, 'error' => 'SS_API_KEY / SS_API_SECRET not set in .env'],
+                    'shopify' => ['ok' => false, 'code' => 0, 'ms' => 0, 'error' => 'SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env'],
+                ],
+            ],
+        ]));
 
         $this->assertFalse($settings['connResults']['ss']['ok']);
         $this->assertSame('SS_API_KEY / SS_API_SECRET not set in .env', $settings['connResults']['ss']['error']);
@@ -110,6 +118,23 @@ class ManageSettingsPageLoaderTest extends TestCase
         $this->assertSame('never_run', $productFlow['status']);
     }
 
+    public function testApiHealthReadsCheckResultsFromFlash(): void
+    {
+        $data = ManageSettingsPageLoader::load('apihealth', '', $this->ctx([
+            'flash' => [
+                'api_health' => [
+                    'shopify' => ['ok' => true],
+                    'shipstation' => ['ok' => false],
+                    'checked_at' => '2026-07-23 10:00:00',
+                ],
+            ],
+        ]));
+
+        $this->assertSame('2026-07-23 10:00:00', $data['apiHealth']['checked_at']);
+        $this->assertTrue($data['apiHealth']['shopify']['ok']);
+        $this->assertFalse($data['apiHealth']['shipstation']['ok']);
+    }
+
     public function testLoadsManageAndSettingsDataSources(): void
     {
         JobQueue::enqueue('audit', ['start' => '2026-06-01'], 'Audit');
@@ -135,15 +160,19 @@ class ManageSettingsPageLoaderTest extends TestCase
         $this->assertSame([], ManageSettingsPageLoader::load('unknown', '', $this->ctx()));
     }
 
-    private function ctx(): array
+    /**
+     * @param array<string, mixed> $overrides
+     */
+    private function ctx(array $overrides = []): array
     {
-        return [
+        return $overrides + [
             'cacheObj'     => $this->cache,
             'cacheTtl'     => 3600,
             'shopifyStore' => 'N/A',
             'shopifyToken' => '',
             'ssKey'        => '',
             'ssSecret'     => '',
+            'flash'        => [],
         ];
     }
 
