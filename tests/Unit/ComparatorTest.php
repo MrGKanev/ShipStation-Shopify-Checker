@@ -433,4 +433,206 @@ class ComparatorTest extends TestCase
         );
         $this->assertSame([], Comparator::findMissingRequired($order));
     }
+
+    // ── diffShippedItems ──────────────────────────────────────────────────────
+
+    private function makeShopifyLineItem(array $overrides = []): array
+    {
+        return array_merge(['sku' => '', 'title' => '', 'quantity' => 1], $overrides);
+    }
+
+    private function shopifyOrderWith(array ...$items): array
+    {
+        return ['line_items' => array_map(fn($i) => $this->makeShopifyLineItem($i), $items)];
+    }
+
+    private function makeSsItem(array $overrides = []): array
+    {
+        return array_merge(['sku' => '', 'quantity' => 1, 'name' => ''], $overrides);
+    }
+
+    public function testDiffShippedItemsExactMatchNoMismatch(): void
+    {
+        $order = $this->shopifyOrderWith(
+            ['sku' => 'widget-a-red', 'quantity' => 1],
+            ['sku' => 'part-x', 'title' => 'Part X', 'quantity' => 1],
+        );
+        $ssItems = [
+            $this->makeSsItem(['sku' => 'widget-a-red', 'quantity' => 1, 'name' => 'Widget A Red']),
+            $this->makeSsItem(['sku' => 'part-x', 'quantity' => 1, 'name' => 'Part X']),
+        ];
+
+        $result = Comparator::diffShippedItems($order, $ssItems);
+
+        $this->assertSame([], $result['missing']);
+        $this->assertSame([], $result['extra']);
+        $this->assertSame([], $result['missingRequired']);
+    }
+
+    public function testDiffShippedItemsMissingAccessoryFlagsBundleGap(): void
+    {
+        // Ordered: full TypeA bundle (widget + Part X + Part Y + Part Z component)
+        $order = $this->shopifyOrderWith(
+            ['sku' => 'widget-a-red', 'quantity' => 1],
+            ['sku' => 'px', 'title' => 'Part X', 'quantity' => 1],
+            ['sku' => 'py', 'title' => 'Part Y', 'quantity' => 1],
+            ['sku' => 'cmp-64-steel', 'title' => 'Part Z', 'quantity' => 1],
+        );
+        // Shipped: everything except the Part Z component SKU
+        $ssItems = [
+            $this->makeSsItem(['sku' => 'widget-a-red', 'quantity' => 1, 'name' => 'Widget A Red']),
+            $this->makeSsItem(['sku' => 'px', 'quantity' => 1, 'name' => 'Part X']),
+            $this->makeSsItem(['sku' => 'py', 'quantity' => 1, 'name' => 'Part Y']),
+        ];
+
+        $result = Comparator::diffShippedItems($order, $ssItems);
+
+        $this->assertSame(['cmp-64-steel' => 1], $result['missing']);
+        $this->assertSame([], $result['extra']);
+        $this->assertArrayHasKey('TypeA', $result['missingRequired']);
+        $this->assertSame(['Part Z'], $result['missingRequired']['TypeA']);
+    }
+
+    public function testDiffShippedItemsExtraOrWrongItemShipped(): void
+    {
+        $order = $this->shopifyOrderWith(['sku' => 'widget-a-red', 'quantity' => 1]);
+        $ssItems = [
+            $this->makeSsItem(['sku' => 'widget-a-red', 'quantity' => 1]),
+            $this->makeSsItem(['sku' => 'widget-b-blue', 'quantity' => 1, 'name' => 'Wrong Item']),
+        ];
+
+        $result = Comparator::diffShippedItems($order, $ssItems);
+
+        $this->assertSame([], $result['missing']);
+        $this->assertSame(['widget-b-blue' => 1], $result['extra']);
+    }
+
+    public function testDiffShippedItemsPartialQuantityShortfall(): void
+    {
+        $order   = $this->shopifyOrderWith(['sku' => 'widget-a-red', 'quantity' => 2]);
+        $ssItems = [$this->makeSsItem(['sku' => 'widget-a-red', 'quantity' => 1])];
+
+        $result = Comparator::diffShippedItems($order, $ssItems);
+
+        $this->assertSame(['widget-a-red' => 1], $result['missing']);
+        $this->assertSame([], $result['extra']);
+    }
+
+    public function testDiffShippedItemsNormalisesSkuCaseAndWhitespace(): void
+    {
+        $order   = $this->shopifyOrderWith(['sku' => '  WIDGET-A-RED  ', 'quantity' => 1]);
+        $ssItems = [$this->makeSsItem(['sku' => 'widget-a-red', 'quantity' => 1])];
+
+        $result = Comparator::diffShippedItems($order, $ssItems);
+
+        $this->assertSame([], $result['missing']);
+        $this->assertSame([], $result['extra']);
+        $this->assertSame(['widget-a-red' => 1], $result['ordered']);
+        $this->assertSame(['widget-a-red' => 1], $result['shipped']);
+    }
+
+    public function testDiffShippedItemsEmptyLineItemsAndEmptyItems(): void
+    {
+        $result = Comparator::diffShippedItems(['line_items' => []], []);
+
+        $this->assertSame([], $result['ordered']);
+        $this->assertSame([], $result['shipped']);
+        $this->assertSame([], $result['missing']);
+        $this->assertSame([], $result['extra']);
+        $this->assertSame([], $result['missingRequired']);
+    }
+
+    public function testDiffShippedItemsDoesNotDuplicateOrderLevelGap(): void
+    {
+        // Order itself never had the Part Z component - findMissingRequired($order)
+        // already flags TypeA => ['Part Z']. Shipment also lacks it, but this is an
+        // ordering gap the bundle check already surfaces, not a shipping gap.
+        $order = $this->shopifyOrderWith(
+            ['sku' => 'widget-a-red', 'quantity' => 1],
+            ['sku' => 'px', 'title' => 'Part X', 'quantity' => 1],
+            ['sku' => 'py', 'title' => 'Part Y', 'quantity' => 1],
+        );
+        $ssItems = [
+            $this->makeSsItem(['sku' => 'widget-a-red', 'quantity' => 1]),
+            $this->makeSsItem(['sku' => 'px', 'quantity' => 1, 'name' => 'Part X']),
+            $this->makeSsItem(['sku' => 'py', 'quantity' => 1, 'name' => 'Part Y']),
+        ];
+
+        // Sanity: the order-level bundle check already flags this gap.
+        $this->assertSame(['TypeA' => ['Part Z']], Comparator::findMissingRequired($order));
+
+        $result = Comparator::diffShippedItems($order, $ssItems);
+
+        $this->assertSame([], $result['missing']);
+        $this->assertSame([], $result['extra']);
+        $this->assertSame([], $result['missingRequired']);
+    }
+
+    // ── shippingLoss ─────────────────────────────────────────────────────────
+
+    public function testShippingLossComputesCostChargedAndLoss(): void
+    {
+        $shipment = ['shipmentCost' => 18.50, 'insuranceCost' => 1.50, 'orderNumber' => '1001'];
+        $shippingLines = [['price' => 5.00]];
+
+        $result = Comparator::shippingLoss($shipment, $shippingLines);
+
+        $this->assertSame(20.0, $result['shipCost']);
+        $this->assertSame(5.0, $result['shippingCharged']);
+        $this->assertSame(15.0, $result['loss']);
+    }
+
+    public function testShippingLossSumsMultipleShippingLines(): void
+    {
+        $shipment = ['shipmentCost' => 10.0, 'insuranceCost' => 0.0];
+        $shippingLines = [['price' => 3.00], ['price' => 2.50]];
+
+        $result = Comparator::shippingLoss($shipment, $shippingLines);
+
+        $this->assertSame(5.5, $result['shippingCharged']);
+        $this->assertSame(4.5, $result['loss']);
+    }
+
+    public function testShippingLossZeroCostEdgeCase(): void
+    {
+        $shipment = ['shipmentCost' => 0.0, 'insuranceCost' => 0.0];
+        $result = Comparator::shippingLoss($shipment, []);
+
+        $this->assertSame(0.0, $result['shipCost']);
+        $this->assertSame(0.0, $result['shippingCharged']);
+        $this->assertSame(0.0, $result['loss']);
+    }
+
+    public function testShippingLossMissingCostFieldsDefaultToZero(): void
+    {
+        $result = Comparator::shippingLoss([], [['price' => 4.99]]);
+
+        $this->assertSame(0.0, $result['shipCost']);
+        $this->assertSame(4.99, $result['shippingCharged']);
+        $this->assertSame(-4.99, $result['loss']);
+    }
+
+    public function testShippingLossReturnsNullForVoidedShipment(): void
+    {
+        $shipment = ['shipmentCost' => 50.0, 'insuranceCost' => 0.0, 'voided' => true];
+
+        $this->assertNull(Comparator::shippingLoss($shipment, []));
+    }
+
+    public function testShippingLossDoesNotSkipNonVoidedShipment(): void
+    {
+        $shipment = ['shipmentCost' => 50.0, 'insuranceCost' => 0.0, 'voided' => false];
+
+        $this->assertNotNull(Comparator::shippingLoss($shipment, []));
+    }
+
+    public function testShippingLossNoShippingLinesTreatsChargedAsZero(): void
+    {
+        $shipment = ['shipmentCost' => 12.0, 'insuranceCost' => 3.0];
+
+        $result = Comparator::shippingLoss($shipment, []);
+
+        $this->assertSame(0.0, $result['shippingCharged']);
+        $this->assertSame(15.0, $result['loss']);
+    }
 }

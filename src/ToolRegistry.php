@@ -48,9 +48,11 @@ class ToolRegistry
                     ['page' => 'onholdstall',    'icon' => '⏸',  'name' => 'On-Hold Stall',              'desc' => 'Fulfillment orders sitting on hold - sorted by how long the order has been waiting'],
                     ['page' => 'notracking',     'icon' => '📪', 'name' => 'Fulfilled Without Tracking', 'desc' => 'Fulfilled orders with no tracking number after a configurable grace period'],
                     ['page' => 'shipmentaging',  'icon' => '🕒', 'name' => 'Shipment Aging',             'desc' => 'ShipStation awaiting-shipment orders older than a configurable threshold'],
+                    ['page' => 'itemmismatch',   'icon' => '📦', 'name' => 'Shipped Item Mismatch',      'desc' => 'ShipStation shipped items that don\'t match what was ordered in Shopify - catches picking errors, especially missing accessories on Z1/Z2 bundles'],
                 ],
                 'Carrier Analytics' => [
                     ['page' => 'carrierperf', 'icon' => '🚚', 'name' => 'Carrier Performance', 'desc' => 'Avg delivery time, late rate, and order count grouped by carrier for a date range'],
+                    ['page' => 'shipmargin', 'icon' => '💸', 'name' => 'Shipping Margin Erosion', 'desc' => 'Orders where the ShipStation label cost exceeds what the customer was charged for shipping — flags orders shipped at a loss'],
                 ],
                 'Products & Inventory' => [
                     ['page' => 'productcheck',      'icon' => '🖼', 'name' => 'Product Completeness',   'desc' => 'Active products missing images, descriptions, or variant SKUs'],

@@ -151,6 +151,326 @@ class FulfillmentIssuePageLoaderTest extends TestCase
         $this->assertSame([], FulfillmentIssuePageLoader::load('unknown', '', $this->ctx()));
     }
 
+    // ── itemmismatch ──────────────────────────────────────────────────────────
+
+    public function testItemMismatchInitialStateUsesRequestRange(): void
+    {
+        $_GET = ['im_start' => '2026-06-01', 'im_end' => '2026-06-20'];
+
+        $data = FulfillmentIssuePageLoader::load('itemmismatch', '', $this->ctx());
+
+        $this->assertNull($data['imResult']);
+        $this->assertSame('', $data['imError']);
+        $this->assertSame('2026-06-01', $data['imStart']);
+        $this->assertSame('2026-06-20', $data['imEnd']);
+    }
+
+    public function testItemMismatchRequiresShipStationCredentialsFirst(): void
+    {
+        $_POST = ['im_start' => '2026-06-01', 'im_end' => '2026-06-20'];
+
+        $data = FulfillmentIssuePageLoader::load('itemmismatch', 'scan_itemmismatch', $this->ctx(['ssKey' => '', 'ssSecret' => '']));
+
+        $this->assertNull($data['imResult']);
+        $this->assertSame('SS_API_KEY / SS_API_SECRET not set in .env.', $data['imError']);
+        $this->assertSame('2026-06-01', $data['imStart']);
+        $this->assertSame('2026-06-20', $data['imEnd']);
+    }
+
+    /**
+     * Happy-path row-building test. loadItemMismatch() itself instantiates real
+     * Shopify/ShipStation HTTP clients with no injectable transport, so - mirroring
+     * CustomerLTVPageLoaderTest's approach for the same problem - we exercise the
+     * pure row-builder it delegates to directly via reflection, using raw
+     * Shopify/ShipStation order shapes as documented in ShopifyClientTest.php and
+     * ShipStationClientTest.php fixtures.
+     */
+    public function testBuildItemMismatchRowsFlagsMissingAccessoryOnShippedOrder(): void
+    {
+        $ref    = new \ReflectionClass(FulfillmentIssuePageLoader::class);
+        $method = $ref->getMethod('buildItemMismatchRows');
+
+        $ssOrders = [
+            [
+                'orderId'      => 555,
+                'orderNumber'  => '2001',
+                'orderStatus'  => 'shipped',
+                'customerEmail'=> 'buyer@example.com',
+                'items'        => [
+                    ['sku' => 'zerno-z1-blk', 'quantity' => 1, 'name' => 'Zerno Z1 Grinder'],
+                    ['sku' => 'part-x', 'quantity' => 1, 'name' => 'Accent Piece'],
+                    // Burr Set intentionally not shipped
+                ],
+            ],
+        ];
+
+        $shOrders = [
+            [
+                'id'                 => 9001,
+                'order_number'       => 2001,
+                'name'               => '#2001',
+                'created_at'         => '2026-06-05T10:00:00Z',
+                'email'              => 'buyer@example.com',
+                'total_price'        => '199.00',
+                'financial_status'   => 'paid',
+                'fulfillment_status' => 'fulfilled',
+                'cancelled_at'       => null,
+                'line_items'         => [
+                    ['sku' => 'zerno-z1-blk', 'quantity' => 1, 'title' => 'Zerno Z1 Grinder'],
+                    ['sku' => 'part-x', 'quantity' => 1, 'title' => 'Accent Piece'],
+                    ['sku' => 'ssp-64', 'quantity' => 1, 'title' => 'Burr Set'],
+                ],
+            ],
+        ];
+
+        Comparator::setOrderTypesConfig([
+            'fallback' => 'Other',
+            'rules'    => [
+                [
+                    'name'  => 'Z1',
+                    'match' => 'sku_starts_with',
+                    'value' => 'zerno-z1-',
+                    'required_items' => [
+                        ['label' => 'Accent Piece', 'match' => 'title_contains', 'value' => 'accent piece'],
+                        ['label' => 'Burr Set', 'match' => 'sku_starts_with', 'value' => ['ssp-']],
+                    ],
+                ],
+            ],
+        ]);
+
+        try {
+            $rows = $method->invoke(null, $ssOrders, $shOrders);
+        } finally {
+            Comparator::resetOrderTypesConfig();
+        }
+
+        $this->assertCount(1, $rows);
+        $row = $rows[0];
+        $this->assertSame(2001, $row['order_number']);
+        $this->assertSame('buyer@example.com', $row['email']);
+        $this->assertSame('Z1', $row['order_type']);
+        $this->assertSame(['ssp-64' => 1], $row['missing']);
+        $this->assertSame([], $row['extra']);
+        $this->assertSame(['Z1: Burr Set'], $row['missing_required']);
+        $this->assertSame('https://app.shipstation.com/#!/orders/order-details/555', $row['ss_url']);
+    }
+
+    public function testBuildItemMismatchRowsSkipsExactMatches(): void
+    {
+        $ref    = new \ReflectionClass(FulfillmentIssuePageLoader::class);
+        $method = $ref->getMethod('buildItemMismatchRows');
+
+        $ssOrders = [[
+            'orderId' => 1, 'orderNumber' => '3001', 'orderStatus' => 'shipped',
+            'items'   => [['sku' => 'widget', 'quantity' => 1]],
+        ]];
+        $shOrders = [[
+            'id' => 1, 'order_number' => 3001, 'total_price' => '10.00',
+            'financial_status' => 'paid', 'cancelled_at' => null,
+            'line_items' => [['sku' => 'widget', 'quantity' => 1]],
+        ]];
+
+        $rows = $method->invoke(null, $ssOrders, $shOrders);
+        $this->assertSame([], $rows);
+    }
+
+    public function testBuildItemMismatchRowsSkipsRefundedShopifyOrders(): void
+    {
+        $ref    = new \ReflectionClass(FulfillmentIssuePageLoader::class);
+        $method = $ref->getMethod('buildItemMismatchRows');
+
+        $ssOrders = [[
+            'orderId' => 1, 'orderNumber' => '4001', 'orderStatus' => 'shipped',
+            'items'   => [['sku' => 'widget', 'quantity' => 1]],
+        ]];
+        $shOrders = [[
+            'id' => 1, 'order_number' => 4001, 'total_price' => '10.00',
+            'financial_status' => 'refunded', 'cancelled_at' => null,
+            // Would otherwise be a mismatch (nothing shipped matches nothing ordered here)
+            'line_items' => [['sku' => 'other-widget', 'quantity' => 1]],
+        ]];
+
+        $rows = $method->invoke(null, $ssOrders, $shOrders);
+        $this->assertSame([], $rows);
+    }
+
+    public function testBuildItemMismatchRowsIgnoresNonShippedSsOrders(): void
+    {
+        $ref    = new \ReflectionClass(FulfillmentIssuePageLoader::class);
+        $method = $ref->getMethod('buildItemMismatchRows');
+
+        $ssOrders = [[
+            'orderId' => 1, 'orderNumber' => '5001', 'orderStatus' => 'awaiting_shipment',
+            'items'   => [['sku' => 'widget', 'quantity' => 1]],
+        ]];
+        $shOrders = [[
+            'id' => 1, 'order_number' => 5001, 'total_price' => '10.00',
+            'financial_status' => 'paid', 'cancelled_at' => null,
+            'line_items' => [['sku' => 'other-widget', 'quantity' => 1]],
+        ]];
+
+        $rows = $method->invoke(null, $ssOrders, $shOrders);
+        $this->assertSame([], $rows);
+    }
+
+    // ── shipmargin ───────────────────────────────────────────────────────────
+
+    public function testShippingMarginInitialStateUsesRequestRangeAndThreshold(): void
+    {
+        $_GET = ['sm_start' => '2026-06-01', 'sm_end' => '2026-06-20', 'sm_threshold' => '20'];
+
+        $data = FulfillmentIssuePageLoader::load('shipmargin', '', $this->ctx());
+
+        $this->assertNull($data['smResult']);
+        $this->assertSame('', $data['smError']);
+        $this->assertSame('2026-06-01', $data['smStart']);
+        $this->assertSame('2026-06-20', $data['smEnd']);
+        $this->assertSame(20, $data['smThreshold']);
+    }
+
+    public function testShippingMarginRequiresShipStationCredentialsFirst(): void
+    {
+        $_POST = ['sm_start' => '2026-06-01', 'sm_end' => '2026-06-20', 'sm_threshold' => '25'];
+
+        $data = FulfillmentIssuePageLoader::load('shipmargin', 'scan_shipmargin', $this->ctx(['ssKey' => '', 'ssSecret' => '']));
+
+        $this->assertNull($data['smResult']);
+        $this->assertSame('SS_API_KEY / SS_API_SECRET not set in .env.', $data['smError']);
+        $this->assertSame('2026-06-01', $data['smStart']);
+        $this->assertSame('2026-06-20', $data['smEnd']);
+        $this->assertSame(25, $data['smThreshold']);
+        $this->assertSame('validation_error', RunLog::all()[0]['status']);
+    }
+
+    /**
+     * Happy-path row-building test. loadShippingMargin() itself instantiates real
+     * Shopify/ShipStation HTTP clients with no injectable transport, so - mirroring
+     * the approach already used for buildItemMismatchRows() - we exercise the pure
+     * row-builder it delegates to directly via reflection.
+     */
+    public function testBuildShippingMarginRowsIncludesOverThresholdExcludesUnderThreshold(): void
+    {
+        $ref    = new \ReflectionClass(FulfillmentIssuePageLoader::class);
+        $method = $ref->getMethod('buildShippingMarginRows');
+
+        $shipments = [
+            [
+                'orderId'      => 111,
+                'orderNumber'  => '6001',
+                'carrierCode'  => 'fedex',
+                'serviceCode'  => 'fedex_ground',
+                'shipDate'     => '2026-06-10T00:00:00Z',
+                'shipmentCost' => 40.0,
+                'insuranceCost'=> 0.0,
+            ],
+            [
+                'orderId'      => 222,
+                'orderNumber'  => '6002',
+                'carrierCode'  => 'ups',
+                'serviceCode'  => 'ups_ground',
+                'shipDate'     => '2026-06-11T00:00:00Z',
+                'shipmentCost' => 12.0,
+                'insuranceCost'=> 0.0,
+            ],
+        ];
+
+        $shOrders = [
+            [
+                'id' => 7001, 'order_number' => 6001, 'email' => 'loss@example.com',
+                'total_price' => '199.00',
+                'shipping_lines' => [['price' => '10.00']],
+            ],
+            [
+                'id' => 7002, 'order_number' => 6002, 'email' => 'fine@example.com',
+                'total_price' => '50.00',
+                'shipping_lines' => [['price' => '10.00']],
+            ],
+        ];
+
+        $rows = $method->invoke(null, $shipments, $shOrders, 15.0);
+
+        $this->assertCount(1, $rows);
+        $row = $rows[0];
+        $this->assertSame('6001', $row['order_number']);
+        $this->assertSame('fedex', $row['carrier']);
+        $this->assertSame('fedex_ground', $row['service']);
+        $this->assertSame(40.0, $row['ship_cost']);
+        $this->assertSame(10.0, $row['shipping_charged']);
+        $this->assertSame(30.0, $row['loss']);
+        $this->assertSame('loss@example.com', $row['email']);
+        $this->assertSame('https://app.shipstation.com/#!/orders/order-details/111', $row['ss_url']);
+    }
+
+    public function testBuildShippingMarginRowsSkipsVoidedShipments(): void
+    {
+        $ref    = new \ReflectionClass(FulfillmentIssuePageLoader::class);
+        $method = $ref->getMethod('buildShippingMarginRows');
+
+        $shipments = [[
+            'orderId' => 1, 'orderNumber' => '7001', 'shipmentCost' => 100.0,
+            'insuranceCost' => 0.0, 'voided' => true,
+        ]];
+        $shOrders = [[
+            'id' => 1, 'order_number' => 7001, 'shipping_lines' => [],
+        ]];
+
+        $rows = $method->invoke(null, $shipments, $shOrders, 1.0);
+        $this->assertSame([], $rows);
+    }
+
+    public function testBuildShippingMarginRowsSkipsShipmentsWithNoShopifyMatch(): void
+    {
+        $ref    = new \ReflectionClass(FulfillmentIssuePageLoader::class);
+        $method = $ref->getMethod('buildShippingMarginRows');
+
+        $shipments = [[
+            'orderId' => 1, 'orderNumber' => '8001', 'shipmentCost' => 100.0, 'insuranceCost' => 0.0,
+        ]];
+
+        $rows = $method->invoke(null, $shipments, [], 1.0);
+        $this->assertSame([], $rows);
+    }
+
+    public function testBuildShippingMarginRowsSumsMultipleShippingLines(): void
+    {
+        $ref    = new \ReflectionClass(FulfillmentIssuePageLoader::class);
+        $method = $ref->getMethod('buildShippingMarginRows');
+
+        $shipments = [[
+            'orderId' => 1, 'orderNumber' => '9001', 'shipmentCost' => 30.0, 'insuranceCost' => 2.0,
+        ]];
+        $shOrders = [[
+            'id' => 1, 'order_number' => 9001,
+            'shipping_lines' => [['price' => '5.00'], ['price' => '2.50']],
+        ]];
+
+        $rows = $method->invoke(null, $shipments, $shOrders, 1.0);
+
+        $this->assertCount(1, $rows);
+        $this->assertSame(32.0, $rows[0]['ship_cost']);
+        $this->assertSame(7.5, $rows[0]['shipping_charged']);
+        $this->assertSame(24.5, $rows[0]['loss']);
+    }
+
+    public function testBuildShippingMarginCarrierSummaryAggregatesByCarrier(): void
+    {
+        $ref    = new \ReflectionClass(FulfillmentIssuePageLoader::class);
+        $method = $ref->getMethod('buildShippingMarginCarrierSummary');
+
+        $rows = [
+            ['carrier' => 'fedex', 'loss' => 30.0],
+            ['carrier' => 'fedex', 'loss' => 10.0],
+            ['carrier' => 'ups',   'loss' => 50.0],
+        ];
+
+        $summary = $method->invoke(null, $rows);
+
+        $this->assertSame([
+            ['carrier' => 'ups',   'count' => 1, 'total_loss' => 50.0, 'avg_loss' => 50.0],
+            ['carrier' => 'fedex', 'count' => 2, 'total_loss' => 40.0, 'avg_loss' => 20.0],
+        ], $summary);
+    }
+
     private function ctx(array $overrides = []): array
     {
         return $overrides + [

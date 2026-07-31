@@ -298,6 +298,104 @@ class Comparator
         return $result;
     }
 
+    /**
+     * Diffs what was ordered in Shopify against what ShipStation actually shipped,
+     * at the SKU/quantity level. Catches picking errors: missing accessories, wrong
+     * items substituted, or short quantities that the standard audit never checks
+     * (that audit only confirms an order *exists* in both systems, not that the
+     * physically shipped contents match).
+     *
+     * @param  array<string, mixed> $order   Shopify order (has line_items)
+     * @param  array<int, array<string, mixed>> $ssItems  ShipStation order's raw `items` array
+     * @return array{
+     *     ordered: array<string, int>,
+     *     shipped: array<string, int>,
+     *     missing: array<string, int>,
+     *     extra: array<string, int>,
+     *     missingRequired: array<string, string[]>
+     * }
+     */
+    public static function diffShippedItems(array $order, array $ssItems): array
+    {
+        $ordered = [];
+        foreach ($order['line_items'] ?? [] as $li) {
+            $sku = strtolower(trim((string) ($li['sku'] ?? '')));
+            if ($sku === '') continue;
+            $ordered[$sku] = ($ordered[$sku] ?? 0) + (int) ($li['quantity'] ?? 1);
+        }
+
+        $shipped = [];
+        foreach ($ssItems as $item) {
+            $sku = strtolower(trim((string) ($item['sku'] ?? '')));
+            if ($sku === '') continue;
+            $shipped[$sku] = ($shipped[$sku] ?? 0) + (int) ($item['quantity'] ?? 1);
+        }
+
+        $missing = [];
+        foreach ($ordered as $sku => $qty) {
+            $shortfall = $qty - ($shipped[$sku] ?? 0);
+            if ($shortfall > 0) $missing[$sku] = $shortfall;
+        }
+
+        $extra = [];
+        foreach ($shipped as $sku => $qty) {
+            $over = $qty - ($ordered[$sku] ?? 0);
+            if ($over > 0) $extra[$sku] = $over;
+        }
+
+        // Only surface bundle gaps that are NEW at shipment time (not gaps the
+        // order-level bundle check already flags — those are ordering gaps, not
+        // picking/shipping gaps).
+        $shippedOrder = ['line_items' => array_map(fn($item) => [
+            'sku'   => $item['sku']  ?? '',
+            'title' => $item['name'] ?? ($item['title'] ?? ''),
+        ], $ssItems)];
+
+        $orderLevelMissing   = self::findMissingRequired($order);
+        $shippedLevelMissing = self::findMissingRequired($shippedOrder);
+
+        $missingRequired = [];
+        foreach ($shippedLevelMissing as $ruleName => $labels) {
+            $new = array_values(array_diff($labels, $orderLevelMissing[$ruleName] ?? []));
+            if (!empty($new)) {
+                $missingRequired[$ruleName] = $new;
+            }
+        }
+
+        return compact('ordered', 'shipped', 'missing', 'extra', 'missingRequired');
+    }
+
+    /**
+     * Compares what ShipStation charged to ship a package (label cost + insurance)
+     * against what the customer actually paid for shipping in Shopify. Surfaces
+     * orders that quietly shipped at a loss - free-shipping promos, underpriced
+     * flat-rate options, or zone surcharges on heavy/bulky items.
+     *
+     * Returns null for voided shipments (they never cost anything real).
+     *
+     * @param  array<string, mixed>              $shipment      ShipStation shipment record
+     *                                                            (shipmentCost, insuranceCost, voided)
+     * @param  array<int, array<string, mixed>>  $shippingLines Shopify order's shipping_lines (price per line)
+     * @return array{shipCost: float, shippingCharged: float, loss: float}|null
+     */
+    public static function shippingLoss(array $shipment, array $shippingLines): ?array
+    {
+        if (($shipment['voided'] ?? false) === true) {
+            return null;
+        }
+
+        $shipCost = (float) ($shipment['shipmentCost'] ?? 0) + (float) ($shipment['insuranceCost'] ?? 0);
+
+        $shippingCharged = 0.0;
+        foreach ($shippingLines as $line) {
+            $shippingCharged += (float) ($line['price'] ?? 0);
+        }
+
+        $loss = $shipCost - $shippingCharged;
+
+        return compact('shipCost', 'shippingCharged', 'loss');
+    }
+
     // ── Private helpers ───────────────────────────────────────────────
 
     private static ?array $loadedConfig   = null;

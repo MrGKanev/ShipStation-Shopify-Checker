@@ -16,6 +16,8 @@ class FulfillmentIssuePageLoader
             'slabreaches'  => self::loadSlaBreaches($action, $ctx),
             'shipmentaging'=> self::loadShipmentAging($action, $ctx),
             'carrierperf'  => self::loadCarrierPerf($action, $ctx),
+            'itemmismatch' => self::loadItemMismatch($action, $ctx),
+            'shipmargin'   => self::loadShippingMargin($action, $ctx),
             default        => [],
         };
     }
@@ -218,6 +220,110 @@ class FulfillmentIssuePageLoader
             }, 30, true);
 
         return compact('ssuResult', 'ssuError', 'ssuStart', 'ssuEnd');
+    }
+
+    private static function loadItemMismatch(string $action, array $ctx): array
+    {
+        $imResult = null;
+        $imError  = '';
+        [$imStart, $imEnd] = DateRange::fromRequest('im');
+
+        ['result' => $imResult, 'error' => $imError, 'start' => $imStart, 'end' => $imEnd] =
+            ScanRunner::run($action, 'scan_itemmismatch', $ctx, 'im', function ($ctx, $start, $end) {
+                self::setLimits(300);
+
+                [$ssOrders, $shOrders] = self::suppressOutput(function () use ($ctx, $start, $end) {
+                    $ss      = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], $ctx['cacheObj']);
+                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
+                    return [
+                        $ss->fetchAllOrders($start, $end),
+                        $shopify->fetchAllOrders($start, $end),
+                    ];
+                });
+
+                $rows = self::buildItemMismatchRows($ssOrders, $shOrders);
+
+                return ['rows' => $rows, 'scanned' => count($ssOrders), 'start' => $start, 'end' => $end];
+            }, 30, true);
+
+        return compact('imResult', 'imError', 'imStart', 'imEnd');
+    }
+
+    /**
+     * Pure row-builder for the item-mismatch scan: matches SS "shipped" orders to
+     * their Shopify counterpart, skips orders that shouldn't have shipped anyway
+     * (cancelled/refunded/voided/zero-value - mirrors Comparator::compare()'s skip
+     * philosophy), diffs shipped-vs-ordered items, and keeps only rows with an
+     * actual mismatch. Sorted so business-critical rows (missing required bundle
+     * accessories) come first, then by mismatch size.
+     *
+     * Factored out from loadItemMismatch() so it's testable without HTTP.
+     *
+     * @param  array<int, array<string, mixed>> $ssOrders  raw ShipStation orders
+     * @param  array<int, array<string, mixed>> $shOrders  raw Shopify orders
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildItemMismatchRows(array $ssOrders, array $shOrders): array
+    {
+        $shIndex = [];
+        foreach ($shOrders as $o) {
+            $num = Comparator::normalise((string)($o['order_number'] ?? ltrim($o['name'] ?? '', '#')));
+            if ($num) {
+                $shIndex[$num] = $o;
+            }
+        }
+
+        $rows = [];
+        foreach ($ssOrders as $o) {
+            if (($o['orderStatus'] ?? '') !== 'shipped') continue;
+            $num = Comparator::normalise((string)($o['orderNumber'] ?? ''));
+            if (!$num || !isset($shIndex[$num])) continue;
+
+            $shOrder = $shIndex[$num];
+
+            // Mirror Comparator::compare()'s skip philosophy: an order that
+            // never should have shipped (cancelled/refunded/free) isn't a
+            // picking-error candidate.
+            if (!empty($shOrder['cancelled_at'])) continue;
+            if (in_array($shOrder['financial_status'] ?? '', ['refunded', 'voided'], true)) continue;
+            if (isset($shOrder['total_price']) && (float)$shOrder['total_price'] === 0.0) continue;
+
+            $diff = Comparator::diffShippedItems($shOrder, $o['items'] ?? []);
+            if (empty($diff['missing']) && empty($diff['extra'])) continue;
+
+            $missingRequiredFlat = [];
+            foreach ($diff['missingRequired'] as $ruleName => $labels) {
+                foreach ($labels as $label) {
+                    $missingRequiredFlat[] = "{$ruleName}: {$label}";
+                }
+            }
+
+            $rows[] = [
+                'shopify_id'       => $shOrder['id']            ?? '',
+                'order_number'     => $shOrder['order_number']  ?? $shOrder['name'] ?? '',
+                'created_at'       => self::dateOnly($shOrder['created_at'] ?? ''),
+                'email'            => $shOrder['email']         ?? '',
+                'total'            => $shOrder['total_price']   ?? '',
+                'order_type'       => Comparator::classifyOrder($shOrder),
+                'ordered'          => $diff['ordered'],
+                'shipped'          => $diff['shipped'],
+                'missing'          => $diff['missing'],
+                'extra'            => $diff['extra'],
+                'missing_required' => $missingRequiredFlat,
+                'ss_url'           => $o['orderId'] ? 'https://app.shipstation.com/#!/orders/order-details/' . urlencode((string)$o['orderId']) : null,
+            ];
+        }
+
+        usort($rows, function ($a, $b) {
+            $aHasReq = !empty($a['missing_required']);
+            $bHasReq = !empty($b['missing_required']);
+            if ($aHasReq !== $bHasReq) return $bHasReq <=> $aHasReq;
+            $aCount = count($a['missing']) + count($a['extra']);
+            $bCount = count($b['missing']) + count($b['extra']);
+            return $bCount <=> $aCount;
+        });
+
+        return $rows;
     }
 
     private static function loadSlaBreaches(string $action, array $ctx): array
@@ -453,6 +559,137 @@ class FulfillmentIssuePageLoader
             }, 30, true);
 
         return compact('cpResult', 'cpError', 'cpStart', 'cpEnd');
+    }
+
+    private static function loadShippingMargin(string $action, array $ctx): array
+    {
+        $smThreshold = max(1, (int)($_POST['sm_threshold'] ?? $_GET['sm_threshold'] ?? 15));
+        $smResult = null;
+        $smError  = '';
+        [$smStart, $smEnd] = DateRange::fromRequest('sm', 30);
+
+        ['result' => $smResult, 'error' => $smError, 'start' => $smStart, 'end' => $smEnd] =
+            ScanRunner::run($action, 'scan_shipmargin', $ctx, 'sm', function ($ctx, $start, $end) use (&$smThreshold) {
+                $smThreshold = max(1, (int)($_POST['sm_threshold'] ?? 15));
+                self::setLimits(240);
+
+                [$shipments, $shOrders] = self::suppressOutput(function () use ($ctx, $start, $end) {
+                    $ss      = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], $ctx['cacheObj']);
+                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
+                    return [
+                        $ss->fetchShipmentsByDate($start, $end),
+                        $shopify->fetchAllOrders($start, $end),
+                    ];
+                });
+
+                $rows      = self::buildShippingMarginRows($shipments, $shOrders, (float) $smThreshold);
+                $byCarrier = self::buildShippingMarginCarrierSummary($rows);
+
+                return [
+                    'rows'       => $rows,
+                    'by_carrier' => $byCarrier,
+                    'scanned'    => count($shipments),
+                    'start'      => $start,
+                    'end'        => $end,
+                    'threshold'  => $smThreshold,
+                ];
+            }, 30, true);
+
+        return compact('smResult', 'smError', 'smStart', 'smEnd', 'smThreshold');
+    }
+
+    /**
+     * Pure row-builder for the shipping-margin scan: matches ShipStation shipments to
+     * their Shopify order by normalised order number, computes label cost vs. shipping
+     * charged via Comparator::shippingLoss(), and keeps only shipments that lost more
+     * than $threshold. Voided shipments and shipments with no Shopify match are skipped.
+     * Sorted by loss descending.
+     *
+     * Factored out from loadShippingMargin() so it's testable without HTTP.
+     *
+     * @param  array<int, array<string, mixed>> $shipments  raw ShipStation shipments
+     * @param  array<int, array<string, mixed>> $shOrders   raw Shopify orders
+     * @param  float                            $threshold  minimum loss (in dollars) to include
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildShippingMarginRows(array $shipments, array $shOrders, float $threshold): array
+    {
+        $shIndex = [];
+        foreach ($shOrders as $o) {
+            $num = Comparator::normalise((string)($o['order_number'] ?? ltrim($o['name'] ?? '', '#')));
+            if ($num) {
+                $shIndex[$num] = $o;
+            }
+        }
+
+        $rows = [];
+        foreach ($shipments as $s) {
+            $num = Comparator::normalise((string)($s['orderNumber'] ?? ''));
+            if (!$num || !isset($shIndex[$num])) continue;
+
+            $shOrder = $shIndex[$num];
+            $diff    = Comparator::shippingLoss($s, $shOrder['shipping_lines'] ?? []);
+            if ($diff === null) continue;
+            if ($diff['loss'] <= $threshold) continue;
+
+            $carrier = trim((string)($s['carrierCode'] ?? 'Unknown'));
+            if ($carrier === '') $carrier = 'Unknown';
+
+            $rows[] = [
+                'shopify_id'       => $shOrder['id']    ?? '',
+                'order_number'     => $s['orderNumber'] ?? '',
+                'ship_date'        => self::dateOnly($s['shipDate'] ?? ''),
+                'carrier'          => $carrier,
+                'service'          => $s['serviceCode'] ?? '',
+                'ship_cost'        => $diff['shipCost'],
+                'shipping_charged' => $diff['shippingCharged'],
+                'loss'             => $diff['loss'],
+                'email'            => $shOrder['email']       ?? '',
+                'total'            => $shOrder['total_price'] ?? '',
+                'ss_url'           => ($s['orderId'] ?? null)
+                    ? 'https://app.shipstation.com/#!/orders/order-details/' . urlencode((string)$s['orderId'])
+                    : null,
+            ];
+        }
+
+        usort($rows, fn($a, $b) => $b['loss'] <=> $a['loss']);
+
+        return $rows;
+    }
+
+    /**
+     * Aggregates shipping-margin rows by carrier: shipment count, total loss and
+     * average loss. Sorted by total loss descending, mirroring the aggregation
+     * style already used in loadCarrierPerf().
+     *
+     * @param  array<int, array<string, mixed>> $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildShippingMarginCarrierSummary(array $rows): array
+    {
+        $byCarrier = [];
+        foreach ($rows as $row) {
+            $carrier = $row['carrier'];
+            if (!isset($byCarrier[$carrier])) {
+                $byCarrier[$carrier] = ['carrier' => $carrier, 'count' => 0, 'total_loss' => 0.0];
+            }
+            $byCarrier[$carrier]['count']++;
+            $byCarrier[$carrier]['total_loss'] += $row['loss'];
+        }
+
+        $summary = [];
+        foreach ($byCarrier as $stat) {
+            $summary[] = [
+                'carrier'    => $stat['carrier'],
+                'count'      => $stat['count'],
+                'total_loss' => round($stat['total_loss'], 2),
+                'avg_loss'   => round($stat['total_loss'] / $stat['count'], 2),
+            ];
+        }
+
+        usort($summary, fn($a, $b) => $b['total_loss'] <=> $a['total_loss']);
+
+        return $summary;
     }
 
     private static function firstFulfillmentAt(array $order): string
