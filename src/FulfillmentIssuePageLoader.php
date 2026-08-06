@@ -747,11 +747,13 @@ class FulfillmentIssuePageLoader
 
     private static function loadFulfilledItems(string $action, array $ctx): array
     {
+        $fiShowOrders = !empty($_POST['fi_show_orders']) || !empty($_GET['fi_show_orders']);
+
         ['result' => $fiResult, 'error' => $fiError, 'start' => $fiStart, 'end' => $fiEnd] =
-            ScanRunner::run($action, 'scan_fulfilleditems', $ctx, 'fi', function ($ctx, $start, $end) {
+            ScanRunner::run($action, 'scan_fulfilleditems', $ctx, 'fi', function ($ctx, $start, $end) use ($fiShowOrders) {
                 self::setLimits(240);
-                $data = self::fetchFulfilledItems($ctx, $start, $end);
-                return ['rows' => $data['rows'], 'scanned' => $data['scanned'], 'start' => $start, 'end' => $end];
+                $data = self::fetchFulfilledItems($ctx, $start, $end, $fiShowOrders);
+                return ['rows' => $data['rows'], 'scanned' => $data['scanned'], 'start' => $start, 'end' => $end, 'byOrder' => $fiShowOrders];
             }, 30);
 
         $fiEmailMessage = '';
@@ -769,36 +771,47 @@ class FulfillmentIssuePageLoader
             } else {
                 try {
                     self::setLimits(240);
-                    $data     = self::fetchFulfilledItems($ctx, $fiStart, $fiEnd);
+                    $data     = self::fetchFulfilledItems($ctx, $fiStart, $fiEnd, $fiShowOrders);
                     $filename = "fulfilled_items_{$fiStart}_to_{$fiEnd}.csv";
                     $subject  = "Fulfilled Items Report ({$fiStart} \u{2192} {$fiEnd})";
-                    $body     = ItemizedFulfillmentReport::emailHtml($data['totals'], $fiStart, $fiEnd);
 
-                    $notifier->sendReport($subject, $body, $filename, ItemizedFulfillmentReport::toCsvString($data['totals']));
+                    if ($fiShowOrders) {
+                        $body = ItemizedFulfillmentReport::detailedEmailHtml($data['rows'], $fiStart, $fiEnd);
+                        $csv  = ItemizedFulfillmentReport::toDetailedCsvString($data['rows']);
+                    } else {
+                        $body = ItemizedFulfillmentReport::emailHtml($data['totals'], $fiStart, $fiEnd);
+                        $csv  = ItemizedFulfillmentReport::toCsvString($data['totals']);
+                    }
+
+                    $notifier->sendReport($subject, $body, $filename, $csv);
 
                     $fiEmailMessage = 'Emailed to ' . getenv('ALERT_EMAIL') . '.';
-                    $fiResult       = ['rows' => $data['rows'], 'scanned' => $data['scanned'], 'start' => $fiStart, 'end' => $fiEnd];
+                    $fiResult       = ['rows' => $data['rows'], 'scanned' => $data['scanned'], 'start' => $fiStart, 'end' => $fiEnd, 'byOrder' => $fiShowOrders];
                 } catch (Throwable $e) {
                     $fiEmailError = $e->getMessage();
                 }
             }
         }
 
-        return compact('fiResult', 'fiError', 'fiStart', 'fiEnd', 'fiEmailMessage', 'fiEmailError');
+        return compact('fiResult', 'fiError', 'fiStart', 'fiEnd', 'fiEmailMessage', 'fiEmailError', 'fiShowOrders');
     }
 
     /**
-     * @return array{rows: array<int, array{product: string, quantity: int}>, totals: array<string, int>, scanned: int}
+     * @return array{rows: array<int, array{product: string, quantity: int}>|array<int, array{order: string, product: string, quantity: int}>, totals: array<string, int>, scanned: int}
      */
-    private static function fetchFulfilledItems(array $ctx, string $start, string $end): array
+    private static function fetchFulfilledItems(array $ctx, string $start, string $end, bool $showOrders = false): array
     {
         $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
         $orders  = self::suppressOutput(fn() => $shopify->fetchAllOrders($start, $end));
         $totals  = ItemizedFulfillmentReport::aggregate($orders);
 
-        $rows = [];
-        foreach ($totals as $label => $qty) {
-            $rows[] = ['product' => $label, 'quantity' => $qty];
+        if ($showOrders) {
+            $rows = ItemizedFulfillmentReport::itemizeByOrder($orders);
+        } else {
+            $rows = [];
+            foreach ($totals as $label => $qty) {
+                $rows[] = ['product' => $label, 'quantity' => $qty];
+            }
         }
 
         return ['rows' => $rows, 'totals' => $totals, 'scanned' => count($orders)];

@@ -5,6 +5,7 @@
   <ul>
     <li>Date range filters by order <strong>creation</strong> date (Shopify's search API doesn't support filtering by fulfillment date).</li>
     <li>Partially fulfilled and unfulfilled orders are excluded.</li>
+    <li>Enable <strong>Show order #</strong> to show each fulfilled order's item rows instead of summing across the whole range.</li>
   </ul>
 <?= featureInfoEnd() ?>
 
@@ -19,6 +20,13 @@
   <form method="post">
     <input type="hidden" name="action" value="scan_fulfilleditems">
     <?php dateRangePartial('fi', $fiStart, $fiEnd) ?>
+    <div class="filter-row">
+      <label class="toggle-pill">
+        <input type="checkbox" name="fi_show_orders" value="1"<?= $fiShowOrders ? ' checked' : '' ?>>
+        <span class="toggle-pill-track"><span class="toggle-pill-thumb"></span></span>
+        <span class="toggle-pill-label">Show order #</span>
+      </label>
+    </div>
   </form>
 
   <?php if ($fiEmailMessage): ?>
@@ -28,18 +36,23 @@
   <?php endif; ?>
 
   <?php if ($fiResult !== null): ?>
+    <?php $fiResultByOrder = !empty($fiResult['byOrder']); ?>
     <div class="duration-note mt-4 mb-0 flex items-center gap-3 flex-wrap">
       <span>
         <strong><?= (int)$fiResult['scanned'] ?></strong> order<?= $fiResult['scanned'] !== 1 ? 's' : '' ?> scanned
         &nbsp;(<?= esc($fiResult['start']) ?> &rarr; <?= esc($fiResult['end']) ?>)
       </span>
       <?php if (!empty($fiResult['rows'])): ?>
-        <span class="source-badge"><?= count($fiResult['rows']) ?> product<?= count($fiResult['rows']) !== 1 ? 's' : '' ?></span>
+        <?php $fiRowLabel = $fiResultByOrder ? 'line' : 'product'; ?>
+        <span class="source-badge"><?= count($fiResult['rows']) ?> <?= $fiRowLabel ?><?= count($fiResult['rows']) !== 1 ? 's' : '' ?></span>
       <?php endif; ?>
       <form method="post">
         <input type="hidden" name="action" value="email_fulfilleditems">
         <input type="hidden" name="fi_start" value="<?= esc($fiResult['start']) ?>">
         <input type="hidden" name="fi_end" value="<?= esc($fiResult['end']) ?>">
+        <?php if ($fiResultByOrder): ?>
+          <input type="hidden" name="fi_show_orders" value="1">
+        <?php endif; ?>
         <button class="btn btn-sm btn-ghost" type="submit">Email CSV</button>
       </form>
     </div>
@@ -47,6 +60,7 @@
 </div>
 
 <?php if ($fiResult !== null): ?>
+  <?php $fiResultByOrder = !empty($fiResult['byOrder']); ?>
   <?php if (empty($fiResult['rows'])): ?>
     <div class="table-wrap">
       <div class="empty">
@@ -60,16 +74,18 @@
       <?= tableWrapHeader(
             $fiResult['rows'],
             'tbl-fulfilleditems',
-            'Product Totals',
+            $fiResultByOrder ? 'Fulfilled Items' : 'Product Totals',
             'fulfilled-items',
             $fiResult['start'],
-            'product',
-            'Filter by product...'
+            $fiResultByOrder ? 'line' : 'product',
+            $fiResultByOrder ? 'Filter by order # or product...' : 'Filter by product...'
           ) ?>
-      <?= searchInput('tbl-fulfilleditems', 'Filter by product...') ?>
       <table id="tbl-fulfilleditems">
         <thead>
           <tr>
+            <?php if ($fiResultByOrder): ?>
+              <th>Order</th>
+            <?php endif; ?>
             <th>Product</th>
             <th>Quantity</th>
           </tr>
@@ -77,6 +93,9 @@
         <tbody>
           <?php foreach ($fiResult['rows'] as $row): ?>
           <tr>
+            <?php if ($fiResultByOrder): ?>
+              <td><?= esc($row['order']) ?></td>
+            <?php endif; ?>
             <td class="font-semibold"><?= esc($row['product']) ?></td>
             <td><?= (int)$row['quantity'] ?></td>
           </tr>

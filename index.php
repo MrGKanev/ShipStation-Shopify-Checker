@@ -38,6 +38,7 @@ require_once __DIR__ . '/src/OrderAnomalyPageLoader.php';
 require_once __DIR__ . '/src/OrderPolicyPageLoader.php';
 require_once __DIR__ . '/src/OrderInsightPageLoader.php';
 require_once __DIR__ . '/src/CustomerLTVPageLoader.php';
+require_once __DIR__ . '/src/ItemizedFulfillmentReport.php';
 require_once __DIR__ . '/src/PageLoader.php';
 
 Dotenv\Dotenv::createUnsafeImmutable(__DIR__)->safeLoad();

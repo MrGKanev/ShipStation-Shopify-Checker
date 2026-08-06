@@ -6,9 +6,9 @@ use PHPUnit\Framework\TestCase;
 
 class ItemizedFulfillmentReportTest extends TestCase
 {
-    private function order(?string $fulfillmentStatus, array $lineItems): array
+    private function order(?string $fulfillmentStatus, array $lineItems, string $name = ''): array
     {
-        return ['fulfillment_status' => $fulfillmentStatus, 'line_items' => $lineItems];
+        return ['fulfillment_status' => $fulfillmentStatus, 'line_items' => $lineItems, 'name' => $name];
     }
 
     private function item(string $title, ?string $variant, int $qty): array
@@ -49,6 +49,27 @@ class ItemizedFulfillmentReportTest extends TestCase
         $totals = ItemizedFulfillmentReport::aggregate($orders);
 
         $this->assertSame(['Gadget red' => 50, 'Spare Part' => 50], $totals);
+    }
+
+    public function testItemizeByOrderShowsEveryProductRowFromFulfilledOrder(): void
+    {
+        $orders = [
+            $this->order('fulfilled', [
+                $this->item('Gadget', 'red', 2),
+                $this->item('Spare Part', null, 1),
+                $this->item('Gadget', 'red', 3),
+            ], '#1002'),
+            $this->order('partial', [
+                $this->item('Hidden', null, 99),
+            ], '#1001'),
+        ];
+
+        $rows = ItemizedFulfillmentReport::itemizeByOrder($orders);
+
+        $this->assertSame([
+            ['order' => '#1002', 'product' => 'Gadget red', 'quantity' => 5],
+            ['order' => '#1002', 'product' => 'Spare Part', 'quantity' => 1],
+        ], $rows);
     }
 
     public function testSaveCsvWritesProductAndQuantityColumns(): void
