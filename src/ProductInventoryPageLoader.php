@@ -246,51 +246,7 @@ class ProductInventoryPageLoader
                     $products = self::suppressOutput(fn() => $shopify->fetchAllProducts('active'));
                     $ssOrders = self::suppressOutput(fn() => $ss->fetchAwaitingOrders());
 
-                    $skuStock = [];
-                    $skuInfo  = [];
-                    foreach ($products as $p) {
-                        foreach ($p['variants'] ?? [] as $v) {
-                            $sku = trim($v['sku'] ?? '');
-                            if ($sku === '') continue;
-                            if (($v['inventory_management'] ?? '') === '') continue;
-                            if (($v['inventory_policy'] ?? 'deny') === 'continue') continue;
-                            $qty = (int)($v['inventory_quantity'] ?? 0);
-                            $skuStock[$sku] = ($skuStock[$sku] ?? 0) + $qty;
-                            $skuInfo[$sku]  = [
-                                'product_id'    => (string)($p['id'] ?? ''),
-                                'product_title' => $p['title'] ?? '',
-                                'variant_title' => $v['title'] ?? '',
-                            ];
-                        }
-                    }
-
-                    $skuAwaiting = [];
-                    foreach ($ssOrders as $o) {
-                        foreach ($o['items'] ?? [] as $item) {
-                            $sku = trim($item['sku'] ?? '');
-                            if ($sku === '') continue;
-                            $skuAwaiting[$sku] = ($skuAwaiting[$sku] ?? 0) + (int)($item['quantity'] ?? 1);
-                        }
-                    }
-
-                    $rows = [];
-                    foreach ($skuAwaiting as $sku => $awaitingQty) {
-                        if (!isset($skuStock[$sku])) continue;
-                        $stock = $skuStock[$sku];
-                        $shortfall = $awaitingQty - $stock;
-                        if ($shortfall <= 0) continue;
-                        $info = $skuInfo[$sku] ?? [];
-                        $rows[] = [
-                            'sku'           => $sku,
-                            'product_id'    => $info['product_id']    ?? '',
-                            'product_title' => $info['product_title'] ?? '(unknown)',
-                            'variant_title' => $info['variant_title'] ?? '',
-                            'stock'         => $stock,
-                            'awaiting'      => $awaitingQty,
-                            'shortfall'     => $shortfall,
-                        ];
-                    }
-                    usort($rows, fn($a, $b) => $b['shortfall'] <=> $a['shortfall']);
+                    $rows = self::buildOversellRows($products, $ssOrders);
 
                     $ioResult = [
                         'rows'             => $rows,
@@ -314,6 +270,75 @@ class ProductInventoryPageLoader
         }
 
         return compact('ioResult', 'ioError');
+    }
+
+    /**
+     * Compares Shopify stock against ShipStation awaiting-shipment demand per SKU.
+     * When a SKU maps to more than one Shopify product (a data problem the
+     * skudupes checker flags separately), stock is still summed across all of
+     * them - but the product/variant identity is left ambiguous rather than
+     * silently pointing at whichever one happened to be seen last.
+     *
+     * @param array<int, array<string, mixed>> $products
+     * @param array<int, array<string, mixed>> $ssOrders
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildOversellRows(array $products, array $ssOrders): array
+    {
+        $skuStock = [];
+        $skuInfo  = [];
+        foreach ($products as $p) {
+            foreach ($p['variants'] ?? [] as $v) {
+                $sku = trim($v['sku'] ?? '');
+                if ($sku === '') continue;
+                if (($v['inventory_management'] ?? '') === '') continue;
+                if (($v['inventory_policy'] ?? 'deny') === 'continue') continue;
+                $qty = (int)($v['inventory_quantity'] ?? 0);
+                $skuStock[$sku]  = ($skuStock[$sku] ?? 0) + $qty;
+                $skuInfo[$sku][] = [
+                    'product_id'    => (string)($p['id'] ?? ''),
+                    'product_title' => $p['title'] ?? '',
+                    'variant_title' => $v['title'] ?? '',
+                ];
+            }
+        }
+
+        $skuAwaiting = [];
+        foreach ($ssOrders as $o) {
+            foreach ($o['items'] ?? [] as $item) {
+                $sku = trim($item['sku'] ?? '');
+                if ($sku === '') continue;
+                $skuAwaiting[$sku] = ($skuAwaiting[$sku] ?? 0) + (int)($item['quantity'] ?? 1);
+            }
+        }
+
+        $rows = [];
+        foreach ($skuAwaiting as $sku => $awaitingQty) {
+            if (!isset($skuStock[$sku])) continue;
+            $stock = $skuStock[$sku];
+            $shortfall = $awaitingQty - $stock;
+            if ($shortfall <= 0) continue;
+
+            $matches   = $skuInfo[$sku] ?? [];
+            $duplicate = count($matches) > 1;
+            $info      = $matches[0] ?? [];
+
+            $rows[] = [
+                'sku'           => $sku,
+                'product_id'    => $duplicate ? '' : ($info['product_id']    ?? ''),
+                'product_title' => $duplicate
+                    ? count($matches) . ' products share this SKU'
+                    : ($info['product_title'] ?? '(unknown)'),
+                'variant_title' => $duplicate ? '' : ($info['variant_title'] ?? ''),
+                'stock'         => $stock,
+                'awaiting'      => $awaitingQty,
+                'shortfall'     => $shortfall,
+                'duplicate_sku' => $duplicate,
+            ];
+        }
+        usort($rows, fn($a, $b) => $b['shortfall'] <=> $a['shortfall']);
+
+        return $rows;
     }
 
     private static function loadZombieProducts(string $action, array $ctx): array

@@ -71,7 +71,9 @@
           <tr>
             <td class="font-mono text-sm"><?= esc($row['sku']) ?></td>
             <td>
-              <?php if ($row['product_id']): ?>
+              <?php if ($row['duplicate_sku']): ?>
+                <span class="text-sm text-muted"><?= esc($row['product_title']) ?></span>
+              <?php elseif ($row['product_id']): ?>
                 <a href="<?= esc('https://' . (str_contains($shopifyStore, '.') ? $shopifyStore : $shopifyStore . '.myshopify.com') . '/admin/products/' . $row['product_id']) ?>"
                    target="_blank" rel="noopener"><?= esc($row['product_title']) ?></a>
               <?php else: ?>
@@ -87,7 +89,9 @@
               <span class="refund-risk-badge refund-risk-active">&minus;<?= (int)$row['shortfall'] ?></span>
             </td>
             <td class="td-actions">
-              <a class="ignore-btn" href="?page=spotcheck">Spot-check</a>
+              <?php if ($row['duplicate_sku']): ?>
+                <a class="ignore-btn" href="?page=skudupes">Check duplicates</a>
+              <?php endif; ?>
             </td>
           </tr>
           <?php endforeach; ?>

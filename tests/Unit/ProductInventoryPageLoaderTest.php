@@ -20,6 +20,13 @@ class ProductInventoryPageLoaderTest extends TestCase
     private array $previousGet;
     private array $previousPost;
     private string|false $previousSlackWebhook;
+    private static \ReflectionMethod $buildOversellRows;
+
+    public static function setUpBeforeClass(): void
+    {
+        $ref = new \ReflectionClass(ProductInventoryPageLoader::class);
+        self::$buildOversellRows = $ref->getMethod('buildOversellRows');
+    }
 
     protected function setUp(): void
     {
@@ -124,6 +131,90 @@ class ProductInventoryPageLoaderTest extends TestCase
 
         $this->assertNull($missingShipStation['ioResult']);
         $this->assertSame('SS_API_KEY / SS_API_SECRET not set in .env.', $missingShipStation['ioError']);
+    }
+
+    public function testBuildOversellRowsFlagsShortfallWhenAwaitingExceedsStock(): void
+    {
+        $products = [$this->ioProduct('1', 'Widget', [$this->ioVariant('SKU-A', 'Blue', 5)])];
+        $ssOrders = [$this->ioAwaitingOrder([['sku' => 'SKU-A', 'quantity' => 8]])];
+
+        $rows = self::$buildOversellRows->invoke(null, $products, $ssOrders);
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('SKU-A', $rows[0]['sku']);
+        $this->assertSame(5, $rows[0]['stock']);
+        $this->assertSame(8, $rows[0]['awaiting']);
+        $this->assertSame(3, $rows[0]['shortfall']);
+        $this->assertFalse($rows[0]['duplicate_sku']);
+        $this->assertSame('1', $rows[0]['product_id']);
+    }
+
+    public function testBuildOversellRowsSkipsWhenStockCoversDemand(): void
+    {
+        $products = [$this->ioProduct('1', 'Widget', [$this->ioVariant('SKU-A', 'Blue', 10)])];
+        $ssOrders = [$this->ioAwaitingOrder([['sku' => 'SKU-A', 'quantity' => 8]])];
+
+        $rows = self::$buildOversellRows->invoke(null, $products, $ssOrders);
+
+        $this->assertSame([], $rows);
+    }
+
+    public function testBuildOversellRowsSkipsSkuNotTrackedInShopify(): void
+    {
+        $ssOrders = [$this->ioAwaitingOrder([['sku' => 'SKU-A', 'quantity' => 8]])];
+
+        $rows = self::$buildOversellRows->invoke(null, [], $ssOrders);
+
+        $this->assertSame([], $rows);
+    }
+
+    public function testBuildOversellRowsSkipsVariantsWithContinueSellingPolicy(): void
+    {
+        $products = [$this->ioProduct('1', 'Widget', [$this->ioVariant('SKU-A', 'Blue', 0, 'continue')])];
+        $ssOrders = [$this->ioAwaitingOrder([['sku' => 'SKU-A', 'quantity' => 8]])];
+
+        $rows = self::$buildOversellRows->invoke(null, $products, $ssOrders);
+
+        $this->assertSame([], $rows);
+    }
+
+    public function testBuildOversellRowsSumsStockButFlagsDuplicateSkuAcrossProducts(): void
+    {
+        $products = [
+            $this->ioProduct('1', 'Widget A', [$this->ioVariant('SKU-A', 'Blue', 3)]),
+            $this->ioProduct('2', 'Widget B', [$this->ioVariant('SKU-A', 'Red', 2)]),
+        ];
+        $ssOrders = [$this->ioAwaitingOrder([['sku' => 'SKU-A', 'quantity' => 8]])];
+
+        $rows = self::$buildOversellRows->invoke(null, $products, $ssOrders);
+
+        $this->assertCount(1, $rows);
+        $this->assertSame(5, $rows[0]['stock']);
+        $this->assertSame(3, $rows[0]['shortfall']);
+        $this->assertTrue($rows[0]['duplicate_sku']);
+        $this->assertSame('', $rows[0]['product_id']);
+        $this->assertSame('2 products share this SKU', $rows[0]['product_title']);
+    }
+
+    private function ioProduct(string $id, string $title, array $variants): array
+    {
+        return ['id' => $id, 'title' => $title, 'variants' => $variants];
+    }
+
+    private function ioVariant(string $sku, string $title, int $stock, string $policy = 'deny'): array
+    {
+        return [
+            'sku'                  => $sku,
+            'title'                => $title,
+            'inventory_management' => 'shopify',
+            'inventory_policy'     => $policy,
+            'inventory_quantity'   => $stock,
+        ];
+    }
+
+    private function ioAwaitingOrder(array $items): array
+    {
+        return ['items' => $items];
     }
 
     public function testZombieProductsInitialAndMissingShopifyCredentials(): void
