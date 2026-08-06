@@ -1,7 +1,7 @@
 {
     "name": "mrgkanev/shipstation-shopify-checker",
     "description": "Shopify ↔ ShipStation order audit dashboard",
-    "license": "proprietary",
+    "license": "MIT",
     "type": "project",
     "require": {
         "php": ">=8.3",

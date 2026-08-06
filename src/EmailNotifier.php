@@ -64,6 +64,14 @@ class EmailNotifier
     }
 
     /**
+     * Sends an HTML summary with a CSV report attached.
+     */
+    public function sendReport(string $subject, string $htmlBody, string $filename, string $csvContent): void
+    {
+        $this->send($subject, $htmlBody, [['filename' => $filename, 'content' => $csvContent, 'mime' => 'text/csv']]);
+    }
+
+    /**
      * @param array<string, mixed> $summary
      */
     public function notifyAuditSafely(array $summary, ?LoggerInterface $logger = null): bool
@@ -199,16 +207,31 @@ class EmailNotifier
         return [$subject, $body];
     }
 
-    private function send(string $subject, string $htmlBody): void
+    /**
+     * @param array<int, array{filename: string, content: string, mime?: string}> $attachments
+     */
+    private function send(string $subject, string $htmlBody, array $attachments = []): void
     {
-        if (class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
-            $this->sendViaPHPMailer($subject, $htmlBody);
+        if ($this->usePhpMailer()) {
+            $this->sendViaPHPMailer($subject, $htmlBody, $attachments);
         } else {
-            $this->sendViaMail($subject, $htmlBody);
+            $this->sendViaMail($subject, $htmlBody, $attachments);
         }
     }
 
-    private function sendViaPHPMailer(string $subject, string $htmlBody): void
+    /**
+     * Overridable so tests can force a transport regardless of whether the
+     * (test-only) PHPMailer stub happens to be loaded elsewhere in the run.
+     */
+    protected function usePhpMailer(): bool
+    {
+        return class_exists('PHPMailer\\PHPMailer\\PHPMailer');
+    }
+
+    /**
+     * @param array<int, array{filename: string, content: string, mime?: string}> $attachments
+     */
+    private function sendViaPHPMailer(string $subject, string $htmlBody, array $attachments = []): void
     {
         $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
         $mail->isSMTP();
@@ -225,20 +248,67 @@ class EmailNotifier
         $mail->isHTML(true);
         $mail->Subject = $subject;
         $mail->Body    = $htmlBody;
+        foreach ($attachments as $attachment) {
+            $mail->addStringAttachment($attachment['content'], $attachment['filename'], 'base64', $attachment['mime'] ?? 'application/octet-stream');
+        }
         $mail->send();
     }
 
-    private function sendViaMail(string $subject, string $htmlBody): void
+    /**
+     * @param array<int, array{filename: string, content: string, mime?: string}> $attachments
+     */
+    private function sendViaMail(string $subject, string $htmlBody, array $attachments = []): void
     {
-        $from    = $this->from ?: $this->user;
-        $headers = "From: Shopify Ops <{$from}>\r\n"
-            . "Content-Type: text/html; charset=UTF-8\r\n"
-            . 'MIME-Version: 1.0';
+        $from = $this->from ?: $this->user;
 
-        $ok = mail($this->to, $subject, $htmlBody, $headers);
+        if ($attachments === []) {
+            $headers = "From: Shopify Ops <{$from}>\r\n"
+                . "Content-Type: text/html; charset=UTF-8\r\n"
+                . 'MIME-Version: 1.0';
+            $ok = $this->transportMail($this->to, $subject, $htmlBody, $headers);
+        } else {
+            $boundary = 'sops-' . bin2hex(random_bytes(16));
+            $headers  = "From: Shopify Ops <{$from}>\r\n"
+                . "MIME-Version: 1.0\r\n"
+                . "Content-Type: multipart/mixed; boundary=\"{$boundary}\"";
+            $ok = $this->transportMail($this->to, $subject, self::buildMultipartBody($boundary, $htmlBody, $attachments), $headers);
+        }
+
         if (!$ok) {
             throw new RuntimeException('mail() returned false — check PHP mail configuration.');
         }
+    }
+
+    /**
+     * Thin seam over the global mail() so tests can capture the composed message
+     * without a real MTA.
+     */
+    protected function transportMail(string $to, string $subject, string $body, string $headers): bool
+    {
+        return mail($to, $subject, $body, $headers);
+    }
+
+    /**
+     * @param array<int, array{filename: string, content: string, mime?: string}> $attachments
+     */
+    private static function buildMultipartBody(string $boundary, string $htmlBody, array $attachments): string
+    {
+        $body = "--{$boundary}\r\n"
+            . "Content-Type: text/html; charset=UTF-8\r\n"
+            . "Content-Transfer-Encoding: 8bit\r\n\r\n"
+            . $htmlBody . "\r\n";
+
+        foreach ($attachments as $attachment) {
+            $mime = $attachment['mime'] ?? 'application/octet-stream';
+            $body .= "--{$boundary}\r\n"
+                . "Content-Type: {$mime}; name=\"{$attachment['filename']}\"\r\n"
+                . "Content-Transfer-Encoding: base64\r\n"
+                . "Content-Disposition: attachment; filename=\"{$attachment['filename']}\"\r\n\r\n"
+                . chunk_split(base64_encode($attachment['content']))
+                . "\r\n";
+        }
+
+        return $body . "--{$boundary}--";
     }
 
     private static function h(string $s): string

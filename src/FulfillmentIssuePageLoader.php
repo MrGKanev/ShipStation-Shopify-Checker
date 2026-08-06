@@ -18,6 +18,7 @@ class FulfillmentIssuePageLoader
             'carrierperf'  => self::loadCarrierPerf($action, $ctx),
             'itemmismatch' => self::loadItemMismatch($action, $ctx),
             'shipmargin'   => self::loadShippingMargin($action, $ctx),
+            'fulfilleditems' => self::loadFulfilledItems($action, $ctx),
             default        => [],
         };
     }
@@ -742,5 +743,64 @@ class FulfillmentIssuePageLoader
         } finally {
             ob_end_clean();
         }
+    }
+
+    private static function loadFulfilledItems(string $action, array $ctx): array
+    {
+        ['result' => $fiResult, 'error' => $fiError, 'start' => $fiStart, 'end' => $fiEnd] =
+            ScanRunner::run($action, 'scan_fulfilleditems', $ctx, 'fi', function ($ctx, $start, $end) {
+                self::setLimits(240);
+                $data = self::fetchFulfilledItems($ctx, $start, $end);
+                return ['rows' => $data['rows'], 'scanned' => $data['scanned'], 'start' => $start, 'end' => $end];
+            }, 30);
+
+        $fiEmailMessage = '';
+        $fiEmailError   = '';
+
+        if ($action === 'email_fulfilleditems') {
+            $notifier = $ctx['emailNotifier'] ?? EmailNotifier::fromEnvironment();
+
+            if ($err = DateRange::validate($fiStart, $fiEnd)) {
+                $fiEmailError = $err;
+            } elseif (!$ctx['shopifyToken'] || $ctx['shopifyStore'] === 'N/A') {
+                $fiEmailError = 'SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.';
+            } elseif (!$notifier) {
+                $fiEmailError = 'SMTP_HOST / ALERT_EMAIL not set in .env.';
+            } else {
+                try {
+                    self::setLimits(240);
+                    $data     = self::fetchFulfilledItems($ctx, $fiStart, $fiEnd);
+                    $filename = "fulfilled_items_{$fiStart}_to_{$fiEnd}.csv";
+                    $subject  = "Fulfilled Items Report ({$fiStart} \u{2192} {$fiEnd})";
+                    $body     = ItemizedFulfillmentReport::emailHtml($data['totals'], $fiStart, $fiEnd);
+
+                    $notifier->sendReport($subject, $body, $filename, ItemizedFulfillmentReport::toCsvString($data['totals']));
+
+                    $fiEmailMessage = 'Emailed to ' . getenv('ALERT_EMAIL') . '.';
+                    $fiResult       = ['rows' => $data['rows'], 'scanned' => $data['scanned'], 'start' => $fiStart, 'end' => $fiEnd];
+                } catch (Throwable $e) {
+                    $fiEmailError = $e->getMessage();
+                }
+            }
+        }
+
+        return compact('fiResult', 'fiError', 'fiStart', 'fiEnd', 'fiEmailMessage', 'fiEmailError');
+    }
+
+    /**
+     * @return array{rows: array<int, array{product: string, quantity: int}>, totals: array<string, int>, scanned: int}
+     */
+    private static function fetchFulfilledItems(array $ctx, string $start, string $end): array
+    {
+        $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
+        $orders  = self::suppressOutput(fn() => $shopify->fetchAllOrders($start, $end));
+        $totals  = ItemizedFulfillmentReport::aggregate($orders);
+
+        $rows = [];
+        foreach ($totals as $label => $qty) {
+            $rows[] = ['product' => $label, 'quantity' => $qty];
+        }
+
+        return ['rows' => $rows, 'totals' => $totals, 'scanned' => count($orders)];
     }
 }

@@ -11,6 +11,9 @@ require_once __DIR__ . '/../../src/Shopify.php';
 require_once __DIR__ . '/../../src/ScanRunner.php';
 require_once __DIR__ . '/../../src/FulfillmentIssuePageLoader.php';
 
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 
 class FulfillmentIssuePageLoaderTest extends TestCase
@@ -197,9 +200,9 @@ class FulfillmentIssuePageLoaderTest extends TestCase
                 'orderStatus'  => 'shipped',
                 'customerEmail'=> 'buyer@example.com',
                 'items'        => [
-                    ['sku' => 'zerno-z1-blk', 'quantity' => 1, 'name' => 'Zerno Z1 Grinder'],
-                    ['sku' => 'part-x', 'quantity' => 1, 'name' => 'Accent Piece'],
-                    // Burr Set intentionally not shipped
+                    ['sku' => 'widget-a-blue', 'quantity' => 1, 'name' => 'Widget A'],
+                    ['sku' => 'trim-1', 'quantity' => 1, 'name' => 'Trim Piece'],
+                    // Spare Part intentionally not shipped
                 ],
             ],
         ];
@@ -216,9 +219,9 @@ class FulfillmentIssuePageLoaderTest extends TestCase
                 'fulfillment_status' => 'fulfilled',
                 'cancelled_at'       => null,
                 'line_items'         => [
-                    ['sku' => 'zerno-z1-blk', 'quantity' => 1, 'title' => 'Zerno Z1 Grinder'],
-                    ['sku' => 'part-x', 'quantity' => 1, 'title' => 'Accent Piece'],
-                    ['sku' => 'ssp-64', 'quantity' => 1, 'title' => 'Burr Set'],
+                    ['sku' => 'widget-a-blue', 'quantity' => 1, 'title' => 'Widget A'],
+                    ['sku' => 'trim-1', 'quantity' => 1, 'title' => 'Trim Piece'],
+                    ['sku' => 'spare-64', 'quantity' => 1, 'title' => 'Spare Part'],
                 ],
             ],
         ];
@@ -227,12 +230,12 @@ class FulfillmentIssuePageLoaderTest extends TestCase
             'fallback' => 'Other',
             'rules'    => [
                 [
-                    'name'  => 'Z1',
+                    'name'  => 'Widget A',
                     'match' => 'sku_starts_with',
-                    'value' => 'zerno-z1-',
+                    'value' => 'widget-a-',
                     'required_items' => [
-                        ['label' => 'Accent Piece', 'match' => 'title_contains', 'value' => 'accent piece'],
-                        ['label' => 'Burr Set', 'match' => 'sku_starts_with', 'value' => ['ssp-']],
+                        ['label' => 'Trim Piece', 'match' => 'title_contains', 'value' => 'trim piece'],
+                        ['label' => 'Spare Part', 'match' => 'sku_starts_with', 'value' => ['spare-']],
                     ],
                 ],
             ],
@@ -248,10 +251,10 @@ class FulfillmentIssuePageLoaderTest extends TestCase
         $row = $rows[0];
         $this->assertSame(2001, $row['order_number']);
         $this->assertSame('buyer@example.com', $row['email']);
-        $this->assertSame('Z1', $row['order_type']);
-        $this->assertSame(['ssp-64' => 1], $row['missing']);
+        $this->assertSame('Widget A', $row['order_type']);
+        $this->assertSame(['spare-64' => 1], $row['missing']);
         $this->assertSame([], $row['extra']);
-        $this->assertSame(['Z1: Burr Set'], $row['missing_required']);
+        $this->assertSame(['Widget A: Spare Part'], $row['missing_required']);
         $this->assertSame('https://app.shipstation.com/#!/orders/order-details/555', $row['ss_url']);
     }
 
@@ -469,6 +472,167 @@ class FulfillmentIssuePageLoaderTest extends TestCase
             ['carrier' => 'ups',   'count' => 1, 'total_loss' => 50.0, 'avg_loss' => 50.0],
             ['carrier' => 'fedex', 'count' => 2, 'total_loss' => 40.0, 'avg_loss' => 20.0],
         ], $summary);
+    }
+
+    // ── fulfilleditems ──────────────────────────────────────────────────────
+
+    public function testFulfilledItemsInitialStateUsesRequestRange(): void
+    {
+        $_GET = ['fi_start' => '2026-07-01', 'fi_end' => '2026-07-31'];
+
+        $data = FulfillmentIssuePageLoader::load('fulfilleditems', '', $this->ctx());
+
+        $this->assertNull($data['fiResult']);
+        $this->assertSame('', $data['fiError']);
+        $this->assertSame('2026-07-01', $data['fiStart']);
+        $this->assertSame('2026-07-31', $data['fiEnd']);
+    }
+
+    public function testFulfilledItemsRequiresShopifyCredentialsFirst(): void
+    {
+        $_POST = ['fi_start' => '2026-07-01', 'fi_end' => '2026-07-31'];
+
+        $data = FulfillmentIssuePageLoader::load(
+            'fulfilleditems',
+            'scan_fulfilleditems',
+            $this->ctx(['shopifyToken' => '', 'shopifyStore' => 'N/A'])
+        );
+
+        $this->assertNull($data['fiResult']);
+        $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $data['fiError']);
+        $this->assertSame('2026-07-01', $data['fiStart']);
+        $this->assertSame('2026-07-31', $data['fiEnd']);
+        $this->assertSame('validation_error', RunLog::all()[0]['status']);
+    }
+
+    public function testEmailFulfilledItemsValidatesDateRangeFirst(): void
+    {
+        $_POST = ['fi_start' => 'not-a-date', 'fi_end' => '2026-07-31'];
+
+        $data = FulfillmentIssuePageLoader::load('fulfilleditems', 'email_fulfilleditems', $this->ctx());
+
+        $this->assertSame('', $data['fiEmailMessage']);
+        $this->assertSame('Invalid date format. Use YYYY-MM-DD.', $data['fiEmailError']);
+    }
+
+    public function testEmailFulfilledItemsRequiresShopifyCredentials(): void
+    {
+        $_POST = ['fi_start' => '2026-07-01', 'fi_end' => '2026-07-31'];
+
+        $data = FulfillmentIssuePageLoader::load(
+            'fulfilleditems',
+            'email_fulfilleditems',
+            $this->ctx(['shopifyToken' => '', 'shopifyStore' => 'N/A'])
+        );
+
+        $this->assertSame('', $data['fiEmailMessage']);
+        $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $data['fiEmailError']);
+    }
+
+    public function testEmailFulfilledItemsRequiresSmtpConfiguration(): void
+    {
+        $previousSmtpHost   = getenv('SMTP_HOST');
+        $previousAlertEmail = getenv('ALERT_EMAIL');
+        putenv('SMTP_HOST');
+        putenv('ALERT_EMAIL');
+
+        try {
+            $_POST = ['fi_start' => '2026-07-01', 'fi_end' => '2026-07-31'];
+
+            $data = FulfillmentIssuePageLoader::load('fulfilleditems', 'email_fulfilleditems', $this->ctx());
+
+            $this->assertSame('', $data['fiEmailMessage']);
+            $this->assertSame('SMTP_HOST / ALERT_EMAIL not set in .env.', $data['fiEmailError']);
+        } finally {
+            $previousSmtpHost === false ? putenv('SMTP_HOST') : putenv("SMTP_HOST={$previousSmtpHost}");
+            $previousAlertEmail === false ? putenv('ALERT_EMAIL') : putenv("ALERT_EMAIL={$previousAlertEmail}");
+        }
+    }
+
+    public function testFulfilledItemsScanReturnsAggregatedRowsFromShopify(): void
+    {
+        $_POST = ['fi_start' => '2026-07-01', 'fi_end' => '2026-07-31'];
+
+        $data = FulfillmentIssuePageLoader::load(
+            'fulfilleditems',
+            'scan_fulfilleditems',
+            $this->ctx(['httpStack' => $this->fulfilledOrdersStack()])
+        );
+
+        $this->assertSame('', $data['fiError']);
+        $this->assertSame(1, $data['fiResult']['scanned']);
+        $this->assertSame([['product' => 'Widget blue', 'quantity' => 2]], $data['fiResult']['rows']);
+    }
+
+    public function testEmailFulfilledItemsSendsCsvAttachmentOnSuccess(): void
+    {
+        $previousAlertEmail = getenv('ALERT_EMAIL');
+        putenv('ALERT_EMAIL=ops@test.com');
+
+        try {
+            $_POST    = ['fi_start' => '2026-07-01', 'fi_end' => '2026-07-31'];
+            $notifier = new RecordingEmailNotifier('smtp.test', 587, 'user@test.com', 'pw', 'from@test.com', 'ops@test.com', 'tls');
+
+            $data = FulfillmentIssuePageLoader::load(
+                'fulfilleditems',
+                'email_fulfilleditems',
+                $this->ctx(['httpStack' => $this->fulfilledOrdersStack(), 'emailNotifier' => $notifier])
+            );
+
+            $this->assertSame('', $data['fiEmailError']);
+            $this->assertSame('Emailed to ops@test.com.', $data['fiEmailMessage']);
+            $this->assertSame([['product' => 'Widget blue', 'quantity' => 2]], $data['fiResult']['rows']);
+
+            $this->assertCount(1, $notifier->sent);
+            $this->assertSame('ops@test.com', $notifier->sent[0]['to']);
+            $this->assertStringContainsString('Widget blue', $notifier->sent[0]['body']);
+
+            preg_match('/Content-Disposition: attachment.*?\r\n\r\n(.*?)\r\n--/s', $notifier->sent[0]['body'], $m);
+            $csv = base64_decode($m[1] ?? '', true);
+            $this->assertNotFalse($csv);
+            $this->assertStringContainsString('Widget blue', $csv);
+            $this->assertStringContainsString(',2', $csv);
+        } finally {
+            $previousAlertEmail === false ? putenv('ALERT_EMAIL') : putenv("ALERT_EMAIL={$previousAlertEmail}");
+        }
+    }
+
+    private function fulfilledOrdersStack(): HandlerStack
+    {
+        $mock = new MockHandler([
+            new Response(200, ['Content-Type' => 'application/json'], json_encode([
+                'data' => [
+                    'orders' => [
+                        'pageInfo' => ['hasNextPage' => false, 'endCursor' => null],
+                        'edges'    => [[
+                            'node' => [
+                                'id'                       => 'gid://shopify/Order/1',
+                                'legacyResourceId'         => '1',
+                                'name'                     => '#1001',
+                                'createdAt'                => '2026-07-05T10:00:00Z',
+                                'cancelledAt'              => null,
+                                'email'                    => 'buyer@example.com',
+                                'displayFinancialStatus'   => 'PAID',
+                                'displayFulfillmentStatus' => 'FULFILLED',
+                                'totalPriceSet'            => ['shopMoney' => ['amount' => '80.00', 'currencyCode' => 'USD']],
+                                'lineItems'                => ['nodes' => [[
+                                    'id'                    => 'gid://shopify/LineItem/1',
+                                    'title'                 => 'Widget',
+                                    'name'                  => 'Widget - blue',
+                                    'sku'                   => 'WIDGET-BLUE',
+                                    'quantity'              => 2,
+                                    'variantTitle'          => 'blue',
+                                    'originalUnitPriceSet'  => ['shopMoney' => ['amount' => '40.00', 'currencyCode' => 'USD']],
+                                ]]],
+                                'shippingLines' => ['nodes' => []],
+                            ],
+                        ]],
+                    ],
+                ],
+            ])),
+        ]);
+
+        return HandlerStack::create($mock);
     }
 
     private function ctx(array $overrides = []): array

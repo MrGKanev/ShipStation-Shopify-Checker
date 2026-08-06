@@ -64,6 +64,7 @@ class PageLoader
             'shipmentaging'     => FulfillmentIssuePageLoader::load($page, $action, $ctx),
             'carrierperf'       => FulfillmentIssuePageLoader::load($page, $action, $ctx),
             'shipmargin'        => FulfillmentIssuePageLoader::load($page, $action, $ctx),
+            'fulfilleditems'    => FulfillmentIssuePageLoader::load($page, $action, $ctx),
             'returns'           => SimpleScanPageLoader::load($page, $action, $ctx),
             'jobs',
             'slackrules',

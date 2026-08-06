@@ -4,7 +4,7 @@
   <p><strong>Shipped Item Mismatch</strong> checks what ShipStation actually shipped against what the customer ordered in Shopify, at the SKU and quantity level.</p>
   <ul>
     <li>The standard audit only confirms an order exists in both systems - it never checks whether the physical contents match. This scan closes that gap.</li>
-    <li>Especially valuable for Z1/Z2 grinder bundles: a picker grabbing the wrong burr set or forgetting the accent piece/funnel cap goes undetected today. This scan catches it.</li>
+    <li>Especially valuable for multi-part bundles: a picker grabbing the wrong variant or forgetting an accessory goes undetected today. This scan catches it.</li>
     <li>Only ShipStation orders marked <em>shipped</em> are checked. Cancelled, refunded/voided, or zero-value Shopify orders are excluded - they were never expected to ship correctly.</li>
     <li><strong>Missing Required</strong> rows are the most urgent: a bundle accessory the customer ordered was left out of the shipment, even though the order itself was correctly configured.</li>
   </ul>

@@ -83,6 +83,8 @@ class Auth
         'scan_shipmentaging'    => 'run_audit',
         'scan_carrierperf'      => 'run_audit',
         'scan_shipmargin'       => 'run_audit',
+        'scan_fulfilleditems'   => 'run_audit',
+        'email_fulfilleditems'  => 'run_audit',
         'scan_itemmismatch'     => 'run_audit',
         'scan_activess'         => 'run_audit',
         'scan_bundle'           => 'run_audit',

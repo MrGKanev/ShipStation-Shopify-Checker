@@ -79,7 +79,7 @@ class ReporterTest extends TestCase
             'financial_status'   => 'paid',
             'fulfillment_status' => null,
             'email'              => 'test@example.com',
-            '_order_type'        => 'Z1',
+            '_order_type'        => 'Widget',
         ];
 
         $this->save([$order]);
@@ -92,7 +92,7 @@ class ReporterTest extends TestCase
         $this->assertSame('99.00',            $rows[0]['total_price']);
         $this->assertSame('paid',             $rows[0]['financial_status']);
         $this->assertSame('test@example.com', $rows[0]['email']);
-        $this->assertSame('Z1',               $rows[0]['order_type']);
+        $this->assertSame('Widget',               $rows[0]['order_type']);
     }
 
     public function testCsvHandlesMissingFields(): void
