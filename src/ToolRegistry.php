@@ -26,6 +26,7 @@ class ToolRegistry
                     ['page' => 'refunds',       'icon' => '💸', 'name' => 'Refunds Tracker',             'desc' => 'Refunded Shopify orders cross-checked against ShipStation'],
                     ['page' => 'repeatrefunds', 'icon' => '♻',  'name' => 'Repeat Refunds',              'desc' => 'Customers with multiple refunded orders in a date range'],
                     ['page' => 'returns',       'icon' => '↩',  'name' => 'Return / RMA Tracker',        'desc' => 'Refunded orders with item-level return details and per-SKU return rate summary'],
+                    ['page' => 'returneditems', 'icon' => '📦', 'name' => 'Returned Items Report',       'desc' => 'Itemized quantity totals for refunded line items in a date range'],
                     ['page' => 'orphans',       'icon' => '👻', 'name' => 'Orphan Detector',             'desc' => 'ShipStation orders with no matching Shopify order'],
                     ['page' => 'activess',      'icon' => '🛑', 'name' => 'Active SS Conflicts',         'desc' => 'Refunded or cancelled Shopify orders still active in ShipStation'],
                     ['page' => 'ssshipped',     'icon' => '🔄', 'name' => 'SS Shipped / Shopify Unful.', 'title' => 'SS Shipped / Shopify Unfulfilled', 'desc' => 'ShipStation shipped orders that Shopify still shows as unfulfilled (sync failure)'],

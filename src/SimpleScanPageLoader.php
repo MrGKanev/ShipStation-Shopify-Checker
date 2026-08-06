@@ -15,6 +15,7 @@ class SimpleScanPageLoader
             'countrymismatch' => self::loadCountryMismatch($action, $ctx),
             'partialfulfill'  => self::loadPartialFulfill($action, $ctx),
             'returns'         => self::loadReturns($action, $ctx),
+            'returneditems'   => self::loadReturnedItems($action, $ctx),
             default           => [],
         };
     }
@@ -299,6 +300,65 @@ class SimpleScanPageLoader
             }, 30);
 
         return compact('rtResult', 'rtError', 'rtStart', 'rtEnd');
+    }
+
+    private static function loadReturnedItems(string $action, array $ctx): array
+    {
+        ['result' => $riResult, 'error' => $riError, 'start' => $riStart, 'end' => $riEnd] =
+            ScanRunner::run($action, 'scan_returneditems', $ctx, 'ri', function ($ctx, $start, $end) {
+                self::setLimits(240);
+                $data = self::fetchReturnedItems($ctx, $start, $end);
+                return ['rows' => $data['rows'], 'scanned' => $data['scanned'], 'start' => $start, 'end' => $end];
+            }, 30);
+
+        $riEmailMessage = '';
+        $riEmailError   = '';
+
+        if ($action === 'email_returneditems') {
+            $notifier = $ctx['emailNotifier'] ?? EmailNotifier::fromEnvironment();
+
+            if ($err = DateRange::validate($riStart, $riEnd)) {
+                $riEmailError = $err;
+            } elseif (!$ctx['shopifyToken'] || $ctx['shopifyStore'] === 'N/A') {
+                $riEmailError = 'SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.';
+            } elseif (!$notifier) {
+                $riEmailError = 'SMTP_HOST / ALERT_EMAIL not set in .env.';
+            } else {
+                try {
+                    self::setLimits(240);
+                    $data     = self::fetchReturnedItems($ctx, $riStart, $riEnd);
+                    $filename = "returned_items_{$riStart}_to_{$riEnd}.csv";
+                    $subject  = "Returned Items Report ({$riStart} \u{2192} {$riEnd})";
+                    $body     = ReturnedItemsReport::emailHtml($data['totals'], $riStart, $riEnd);
+
+                    $notifier->sendReport($subject, $body, $filename, ReturnedItemsReport::toCsvString($data['totals']));
+
+                    $riEmailMessage = 'Emailed to ' . getenv('ALERT_EMAIL') . '.';
+                    $riResult       = ['rows' => $data['rows'], 'scanned' => $data['scanned'], 'start' => $riStart, 'end' => $riEnd];
+                } catch (Throwable $e) {
+                    $riEmailError = $e->getMessage();
+                }
+            }
+        }
+
+        return compact('riResult', 'riError', 'riStart', 'riEnd', 'riEmailMessage', 'riEmailError');
+    }
+
+    /**
+     * @return array{rows: array<int, array{product: string, quantity: int}>, totals: array<string, int>, scanned: int}
+     */
+    private static function fetchReturnedItems(array $ctx, string $start, string $end): array
+    {
+        $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
+        $orders  = self::suppressOutput(fn() => $shopify->fetchRefundedOrders($start, $end));
+        $totals  = ReturnedItemsReport::aggregate($orders);
+
+        $rows = [];
+        foreach ($totals as $label => $qty) {
+            $rows[] = ['product' => $label, 'quantity' => $qty];
+        }
+
+        return ['rows' => $rows, 'totals' => $totals, 'scanned' => count($orders)];
     }
 
     private static function dateOnly(string $dt): string

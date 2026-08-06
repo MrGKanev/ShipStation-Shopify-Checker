@@ -10,6 +10,9 @@ require_once __DIR__ . '/../../src/Shopify.php';
 require_once __DIR__ . '/../../src/ScanRunner.php';
 require_once __DIR__ . '/../../src/SimpleScanPageLoader.php';
 
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 
 class SimpleScanPageLoaderTest extends TestCase
@@ -139,6 +142,174 @@ class SimpleScanPageLoaderTest extends TestCase
     public function testUnknownPageReturnsEmptyData(): void
     {
         $this->assertSame([], SimpleScanPageLoader::load('unknown', '', $this->ctx()));
+    }
+
+    // ── returneditems ────────────────────────────────────────────────────────
+
+    public function testReturnedItemsInitialStateUsesRequestRange(): void
+    {
+        $_GET = ['ri_start' => '2026-07-01', 'ri_end' => '2026-07-31'];
+
+        $data = SimpleScanPageLoader::load('returneditems', '', $this->ctx());
+
+        $this->assertNull($data['riResult']);
+        $this->assertSame('', $data['riError']);
+        $this->assertSame('2026-07-01', $data['riStart']);
+        $this->assertSame('2026-07-31', $data['riEnd']);
+    }
+
+    public function testReturnedItemsRequiresShopifyCredentialsFirst(): void
+    {
+        $_POST = ['ri_start' => '2026-07-01', 'ri_end' => '2026-07-31'];
+
+        $data = SimpleScanPageLoader::load(
+            'returneditems',
+            'scan_returneditems',
+            $this->ctx(['shopifyToken' => '', 'shopifyStore' => 'N/A'])
+        );
+
+        $this->assertNull($data['riResult']);
+        $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $data['riError']);
+        $this->assertSame('validation_error', RunLog::all()[0]['status']);
+    }
+
+    public function testEmailReturnedItemsValidatesDateRangeFirst(): void
+    {
+        $_POST = ['ri_start' => 'not-a-date', 'ri_end' => '2026-07-31'];
+
+        $data = SimpleScanPageLoader::load('returneditems', 'email_returneditems', $this->ctx());
+
+        $this->assertSame('', $data['riEmailMessage']);
+        $this->assertSame('Invalid date format. Use YYYY-MM-DD.', $data['riEmailError']);
+    }
+
+    public function testEmailReturnedItemsRequiresShopifyCredentials(): void
+    {
+        $_POST = ['ri_start' => '2026-07-01', 'ri_end' => '2026-07-31'];
+
+        $data = SimpleScanPageLoader::load(
+            'returneditems',
+            'email_returneditems',
+            $this->ctx(['shopifyToken' => '', 'shopifyStore' => 'N/A'])
+        );
+
+        $this->assertSame('', $data['riEmailMessage']);
+        $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $data['riEmailError']);
+    }
+
+    public function testEmailReturnedItemsRequiresSmtpConfiguration(): void
+    {
+        $previousSmtpHost   = getenv('SMTP_HOST');
+        $previousAlertEmail = getenv('ALERT_EMAIL');
+        putenv('SMTP_HOST');
+        putenv('ALERT_EMAIL');
+
+        try {
+            $_POST = ['ri_start' => '2026-07-01', 'ri_end' => '2026-07-31'];
+
+            $data = SimpleScanPageLoader::load('returneditems', 'email_returneditems', $this->ctx());
+
+            $this->assertSame('', $data['riEmailMessage']);
+            $this->assertSame('SMTP_HOST / ALERT_EMAIL not set in .env.', $data['riEmailError']);
+        } finally {
+            $previousSmtpHost === false ? putenv('SMTP_HOST') : putenv("SMTP_HOST={$previousSmtpHost}");
+            $previousAlertEmail === false ? putenv('ALERT_EMAIL') : putenv("ALERT_EMAIL={$previousAlertEmail}");
+        }
+    }
+
+    public function testReturnedItemsScanReturnsAggregatedRowsFromShopify(): void
+    {
+        $_POST = ['ri_start' => '2026-07-01', 'ri_end' => '2026-07-31'];
+
+        $data = SimpleScanPageLoader::load(
+            'returneditems',
+            'scan_returneditems',
+            $this->ctx(['httpStack' => $this->refundedOrdersStack()])
+        );
+
+        $this->assertSame('', $data['riError']);
+        $this->assertSame(1, $data['riResult']['scanned']);
+        $this->assertSame([['product' => 'Widget - blue', 'quantity' => 2]], $data['riResult']['rows']);
+    }
+
+    public function testEmailReturnedItemsSendsCsvAttachmentOnSuccess(): void
+    {
+        $previousAlertEmail = getenv('ALERT_EMAIL');
+        putenv('ALERT_EMAIL=ops@test.com');
+
+        try {
+            $_POST    = ['ri_start' => '2026-07-01', 'ri_end' => '2026-07-31'];
+            $notifier = new RecordingEmailNotifier('smtp.test', 587, 'user@test.com', 'pw', 'from@test.com', 'ops@test.com', 'tls');
+
+            $data = SimpleScanPageLoader::load(
+                'returneditems',
+                'email_returneditems',
+                $this->ctx(['httpStack' => $this->refundedOrdersStack(), 'emailNotifier' => $notifier])
+            );
+
+            $this->assertSame('', $data['riEmailError']);
+            $this->assertSame('Emailed to ops@test.com.', $data['riEmailMessage']);
+            $this->assertSame([['product' => 'Widget - blue', 'quantity' => 2]], $data['riResult']['rows']);
+
+            $this->assertCount(1, $notifier->sent);
+            $this->assertSame('ops@test.com', $notifier->sent[0]['to']);
+            $this->assertStringContainsString('Widget - blue', $notifier->sent[0]['body']);
+
+            preg_match('/Content-Disposition: attachment.*?\r\n\r\n(.*?)\r\n--/s', $notifier->sent[0]['body'], $m);
+            $csv = base64_decode($m[1] ?? '', true);
+            $this->assertNotFalse($csv);
+            $this->assertStringContainsString('Widget - blue', $csv);
+            $this->assertStringContainsString(',2', $csv);
+        } finally {
+            $previousAlertEmail === false ? putenv('ALERT_EMAIL') : putenv("ALERT_EMAIL={$previousAlertEmail}");
+        }
+    }
+
+    private function refundedOrdersStack(): HandlerStack
+    {
+        $mock = new MockHandler([
+            new Response(200, ['Content-Type' => 'application/json'], json_encode([
+                'data' => [
+                    'orders' => [
+                        'pageInfo' => ['hasNextPage' => false, 'endCursor' => null],
+                        'edges'    => [[
+                            'node' => [
+                                'id'                       => 'gid://shopify/Order/1',
+                                'legacyResourceId'         => '1',
+                                'name'                     => '#1001',
+                                'createdAt'                => '2026-07-05T10:00:00Z',
+                                'cancelledAt'              => null,
+                                'email'                    => 'buyer@example.com',
+                                'displayFinancialStatus'   => 'PARTIALLY_REFUNDED',
+                                'displayFulfillmentStatus' => 'FULFILLED',
+                                'totalPriceSet'            => ['shopMoney' => ['amount' => '80.00', 'currencyCode' => 'USD']],
+                                'refunds' => [[
+                                    'id'                 => 'gid://shopify/Refund/1',
+                                    'legacyResourceId'   => '1',
+                                    'createdAt'          => '2026-07-06T10:00:00Z',
+                                    'note'               => 'Wrong size',
+                                    'totalRefundedSet'   => ['shopMoney' => ['amount' => '40.00', 'currencyCode' => 'USD']],
+                                    'refundLineItems'    => ['nodes' => [[
+                                        'quantity'   => 2,
+                                        'subtotalSet' => ['shopMoney' => ['amount' => '40.00', 'currencyCode' => 'USD']],
+                                        'lineItem'   => [
+                                            'id'       => 'gid://shopify/LineItem/1',
+                                            'title'    => 'Widget',
+                                            'name'     => 'Widget - blue',
+                                            'sku'      => 'WIDGET-BLUE',
+                                            'quantity' => 2,
+                                        ],
+                                    ]]],
+                                    'transactions' => ['nodes' => []],
+                                ]],
+                            ],
+                        ]],
+                    ],
+                ],
+            ])),
+        ]);
+
+        return HandlerStack::create($mock);
     }
 
     private function ctx(array $overrides = []): array

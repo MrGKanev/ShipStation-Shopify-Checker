@@ -66,6 +66,7 @@ class PageLoader
             'shipmargin'        => FulfillmentIssuePageLoader::load($page, $action, $ctx),
             'fulfilleditems'    => FulfillmentIssuePageLoader::load($page, $action, $ctx),
             'returns'           => SimpleScanPageLoader::load($page, $action, $ctx),
+            'returneditems'     => SimpleScanPageLoader::load($page, $action, $ctx),
             'jobs',
             'slackrules',
             'apihealth',
