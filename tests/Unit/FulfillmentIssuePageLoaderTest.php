@@ -564,6 +564,21 @@ class FulfillmentIssuePageLoaderTest extends TestCase
         $this->assertSame([['product' => 'Widget blue', 'quantity' => 2]], $data['fiResult']['rows']);
     }
 
+    public function testFulfilledItemsScanCanGroupProductsWithOrders(): void
+    {
+        $_POST = ['fi_start' => '2026-07-01', 'fi_end' => '2026-07-31', 'fi_mode' => 'grouped'];
+
+        $data = FulfillmentIssuePageLoader::load(
+            'fulfilleditems',
+            'scan_fulfilleditems',
+            $this->ctx(['httpStack' => $this->fulfilledOrdersStack()])
+        );
+
+        $this->assertSame('', $data['fiError']);
+        $this->assertSame('grouped', $data['fiResult']['mode']);
+        $this->assertSame([['product' => 'Widget blue', 'quantity' => 2, 'orders' => '#1001']], $data['fiResult']['rows']);
+    }
+
     public function testEmailFulfilledItemsSendsCsvAttachmentOnSuccess(): void
     {
         $previousAlertEmail = getenv('ALERT_EMAIL');

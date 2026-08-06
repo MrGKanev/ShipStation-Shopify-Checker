@@ -72,6 +72,49 @@ class ItemizedFulfillmentReportTest extends TestCase
         ], $rows);
     }
 
+    public function testGroupByProductWithOrdersTotalsQuantityAndListsOrders(): void
+    {
+        $orders = [
+            $this->order('fulfilled', [
+                $this->item('Widget', 'blue', 1),
+                $this->item('Case', null, 2),
+            ], '#1001'),
+            $this->order('fulfilled', [
+                $this->item('Widget', 'blue', 1),
+            ], '#1002'),
+            $this->order('fulfilled', [
+                $this->item('Widget', 'blue', 1),
+            ], '#1003'),
+            $this->order('partial', [
+                $this->item('Widget', 'blue', 99),
+            ], '#1004'),
+        ];
+
+        $rows = ItemizedFulfillmentReport::groupByProductWithOrders($orders);
+
+        $this->assertSame([
+            ['product' => 'Case', 'quantity' => 2, 'orders' => '#1001'],
+            ['product' => 'Widget blue', 'quantity' => 3, 'orders' => '#1001, #1002, #1003'],
+        ], $rows);
+    }
+
+    public function testToGroupedCsvStringWritesOrderList(): void
+    {
+        $csv = ItemizedFulfillmentReport::toGroupedCsvString([
+            ['product' => 'Widget blue', 'quantity' => 3, 'orders' => '#1001, #1002, #1003'],
+        ]);
+
+        $reader = Reader::fromString($csv);
+        $reader->setHeaderOffset(0);
+        $rows = [...$reader->getRecords()];
+
+        $this->assertSame([
+            'product' => 'Widget blue',
+            'quantity' => '3',
+            'orders' => '#1001, #1002, #1003',
+        ], $rows[0]);
+    }
+
     public function testSaveCsvWritesProductAndQuantityColumns(): void
     {
         $tmpDir = sys_get_temp_dir() . '/itemized_' . uniqid();

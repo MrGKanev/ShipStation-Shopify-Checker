@@ -6,6 +6,7 @@
     <li>Date range filters by order <strong>creation</strong> date (Shopify's search API doesn't support filtering by fulfillment date).</li>
     <li>Partially fulfilled and unfulfilled orders are excluded.</li>
     <li>Enable <strong>Show order #</strong> to show each fulfilled order's item rows instead of summing across the whole range.</li>
+    <li>Use <strong>Group by product</strong> to total each product and list the orders that contain it.</li>
   </ul>
 <?= featureInfoEnd() ?>
 
@@ -26,6 +27,11 @@
         <span class="toggle-pill-track"><span class="toggle-pill-thumb"></span></span>
         <span class="toggle-pill-label">Show order #</span>
       </label>
+      <label class="toggle-pill">
+        <input type="checkbox" name="fi_group_products" value="1"<?= $fiGroupProducts ? ' checked' : '' ?>>
+        <span class="toggle-pill-track"><span class="toggle-pill-thumb"></span></span>
+        <span class="toggle-pill-label">Group by product</span>
+      </label>
     </div>
   </form>
 
@@ -36,7 +42,11 @@
   <?php endif; ?>
 
   <?php if ($fiResult !== null): ?>
-    <?php $fiResultByOrder = !empty($fiResult['byOrder']); ?>
+    <?php
+      $fiResultMode = $fiResult['mode'] ?? (!empty($fiResult['byOrder']) ? 'by_order' : 'summary');
+      $fiResultByOrder = $fiResultMode === 'by_order';
+      $fiResultGrouped = $fiResultMode === 'grouped';
+    ?>
     <div class="duration-note mt-4 mb-0 flex items-center gap-3 flex-wrap">
       <span>
         <strong><?= (int)$fiResult['scanned'] ?></strong> order<?= $fiResult['scanned'] !== 1 ? 's' : '' ?> scanned
@@ -50,9 +60,7 @@
         <input type="hidden" name="action" value="email_fulfilleditems">
         <input type="hidden" name="fi_start" value="<?= esc($fiResult['start']) ?>">
         <input type="hidden" name="fi_end" value="<?= esc($fiResult['end']) ?>">
-        <?php if ($fiResultByOrder): ?>
-          <input type="hidden" name="fi_show_orders" value="1">
-        <?php endif; ?>
+        <input type="hidden" name="fi_mode" value="<?= esc($fiResultMode) ?>">
         <button class="btn btn-sm btn-ghost" type="submit">Email CSV</button>
       </form>
     </div>
@@ -60,7 +68,11 @@
 </div>
 
 <?php if ($fiResult !== null): ?>
-  <?php $fiResultByOrder = !empty($fiResult['byOrder']); ?>
+  <?php
+    $fiResultMode = $fiResult['mode'] ?? (!empty($fiResult['byOrder']) ? 'by_order' : 'summary');
+    $fiResultByOrder = $fiResultMode === 'by_order';
+    $fiResultGrouped = $fiResultMode === 'grouped';
+  ?>
   <?php if (empty($fiResult['rows'])): ?>
     <div class="table-wrap">
       <div class="empty">
@@ -74,11 +86,11 @@
       <?= tableWrapHeader(
             $fiResult['rows'],
             'tbl-fulfilleditems',
-            $fiResultByOrder ? 'Fulfilled Items' : 'Product Totals',
+            $fiResultGrouped ? 'Grouped Product Totals' : ($fiResultByOrder ? 'Fulfilled Items' : 'Product Totals'),
             'fulfilled-items',
             $fiResult['start'],
             $fiResultByOrder ? 'line' : 'product',
-            $fiResultByOrder ? 'Filter by order # or product...' : 'Filter by product...'
+            $fiResultByOrder || $fiResultGrouped ? 'Filter by order # or product...' : 'Filter by product...'
           ) ?>
       <table id="tbl-fulfilleditems">
         <thead>
@@ -88,6 +100,9 @@
             <?php endif; ?>
             <th>Product</th>
             <th>Quantity</th>
+            <?php if ($fiResultGrouped): ?>
+              <th>Orders</th>
+            <?php endif; ?>
           </tr>
         </thead>
         <tbody>
@@ -98,6 +113,9 @@
             <?php endif; ?>
             <td class="font-semibold"><?= esc($row['product']) ?></td>
             <td><?= (int)$row['quantity'] ?></td>
+            <?php if ($fiResultGrouped): ?>
+              <td><?= esc($row['orders']) ?></td>
+            <?php endif; ?>
           </tr>
           <?php endforeach; ?>
         </tbody>

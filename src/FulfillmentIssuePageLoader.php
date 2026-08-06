@@ -747,13 +747,15 @@ class FulfillmentIssuePageLoader
 
     private static function loadFulfilledItems(string $action, array $ctx): array
     {
-        $fiShowOrders = !empty($_POST['fi_show_orders']) || !empty($_GET['fi_show_orders']);
+        $fiMode = self::fulfilledItemsMode();
+        $fiShowOrders = $fiMode === 'by_order';
+        $fiGroupProducts = $fiMode === 'grouped';
 
         ['result' => $fiResult, 'error' => $fiError, 'start' => $fiStart, 'end' => $fiEnd] =
-            ScanRunner::run($action, 'scan_fulfilleditems', $ctx, 'fi', function ($ctx, $start, $end) use ($fiShowOrders) {
+            ScanRunner::run($action, 'scan_fulfilleditems', $ctx, 'fi', function ($ctx, $start, $end) use ($fiMode, $fiShowOrders) {
                 self::setLimits(240);
-                $data = self::fetchFulfilledItems($ctx, $start, $end, $fiShowOrders);
-                return ['rows' => $data['rows'], 'scanned' => $data['scanned'], 'start' => $start, 'end' => $end, 'byOrder' => $fiShowOrders];
+                $data = self::fetchFulfilledItems($ctx, $start, $end, $fiMode);
+                return ['rows' => $data['rows'], 'scanned' => $data['scanned'], 'start' => $start, 'end' => $end, 'mode' => $fiMode, 'byOrder' => $fiShowOrders];
             }, 30);
 
         $fiEmailMessage = '';
@@ -771,11 +773,14 @@ class FulfillmentIssuePageLoader
             } else {
                 try {
                     self::setLimits(240);
-                    $data     = self::fetchFulfilledItems($ctx, $fiStart, $fiEnd, $fiShowOrders);
+                    $data     = self::fetchFulfilledItems($ctx, $fiStart, $fiEnd, $fiMode);
                     $filename = "fulfilled_items_{$fiStart}_to_{$fiEnd}.csv";
                     $subject  = "Fulfilled Items Report ({$fiStart} \u{2192} {$fiEnd})";
 
-                    if ($fiShowOrders) {
+                    if ($fiMode === 'grouped') {
+                        $body = ItemizedFulfillmentReport::groupedEmailHtml($data['rows'], $fiStart, $fiEnd);
+                        $csv  = ItemizedFulfillmentReport::toGroupedCsvString($data['rows']);
+                    } elseif ($fiShowOrders) {
                         $body = ItemizedFulfillmentReport::detailedEmailHtml($data['rows'], $fiStart, $fiEnd);
                         $csv  = ItemizedFulfillmentReport::toDetailedCsvString($data['rows']);
                     } else {
@@ -786,26 +791,28 @@ class FulfillmentIssuePageLoader
                     $notifier->sendReport($subject, $body, $filename, $csv);
 
                     $fiEmailMessage = 'Emailed to ' . getenv('ALERT_EMAIL') . '.';
-                    $fiResult       = ['rows' => $data['rows'], 'scanned' => $data['scanned'], 'start' => $fiStart, 'end' => $fiEnd, 'byOrder' => $fiShowOrders];
+                    $fiResult       = ['rows' => $data['rows'], 'scanned' => $data['scanned'], 'start' => $fiStart, 'end' => $fiEnd, 'mode' => $fiMode, 'byOrder' => $fiShowOrders];
                 } catch (Throwable $e) {
                     $fiEmailError = $e->getMessage();
                 }
             }
         }
 
-        return compact('fiResult', 'fiError', 'fiStart', 'fiEnd', 'fiEmailMessage', 'fiEmailError', 'fiShowOrders');
+        return compact('fiResult', 'fiError', 'fiStart', 'fiEnd', 'fiEmailMessage', 'fiEmailError', 'fiShowOrders', 'fiGroupProducts', 'fiMode');
     }
 
     /**
-     * @return array{rows: array<int, array{product: string, quantity: int}>|array<int, array{order: string, product: string, quantity: int}>, totals: array<string, int>, scanned: int}
+     * @return array{rows: array<int, array{product: string, quantity: int}>|array<int, array{order: string, product: string, quantity: int}>|array<int, array{product: string, quantity: int, orders: string}>, totals: array<string, int>, scanned: int}
      */
-    private static function fetchFulfilledItems(array $ctx, string $start, string $end, bool $showOrders = false): array
+    private static function fetchFulfilledItems(array $ctx, string $start, string $end, string $mode = 'summary'): array
     {
         $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
         $orders  = self::suppressOutput(fn() => $shopify->fetchAllOrders($start, $end));
         $totals  = ItemizedFulfillmentReport::aggregate($orders);
 
-        if ($showOrders) {
+        if ($mode === 'grouped') {
+            $rows = ItemizedFulfillmentReport::groupByProductWithOrders($orders);
+        } elseif ($mode === 'by_order') {
             $rows = ItemizedFulfillmentReport::itemizeByOrder($orders);
         } else {
             $rows = [];
@@ -815,5 +822,20 @@ class FulfillmentIssuePageLoader
         }
 
         return ['rows' => $rows, 'totals' => $totals, 'scanned' => count($orders)];
+    }
+
+    private static function fulfilledItemsMode(): string
+    {
+        $mode = (string)($_POST['fi_mode'] ?? $_GET['fi_mode'] ?? '');
+        if (in_array($mode, ['summary', 'by_order', 'grouped'], true)) {
+            return $mode;
+        }
+        if (!empty($_POST['fi_group_products']) || !empty($_GET['fi_group_products'])) {
+            return 'grouped';
+        }
+        if (!empty($_POST['fi_show_orders']) || !empty($_GET['fi_show_orders'])) {
+            return 'by_order';
+        }
+        return 'summary';
     }
 }

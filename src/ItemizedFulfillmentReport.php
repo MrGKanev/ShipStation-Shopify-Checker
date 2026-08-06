@@ -65,6 +65,45 @@ final class ItemizedFulfillmentReport
         return array_values($rows);
     }
 
+    /**
+     * Groups fulfilled line items by product and records the order numbers that contain each product.
+     *
+     * @param array<int, array<string, mixed>> $orders orders shaped like Shopify::fetchAllOrders()
+     * @return array<int, array{product: string, quantity: int, orders: string}> sorted by product
+     */
+    public static function groupByProductWithOrders(array $orders): array
+    {
+        $groups = [];
+        foreach ($orders as $order) {
+            if (($order['fulfillment_status'] ?? '') !== 'fulfilled') {
+                continue;
+            }
+            $orderLabel = (string)($order['name'] ?? $order['order_number'] ?? '');
+            foreach ($order['line_items'] ?? [] as $item) {
+                $variant = $item['variant_title'] ?? null;
+                $label   = trim($item['title'] . (($variant && $variant !== 'Default Title') ? " {$variant}" : ''));
+                if (!isset($groups[$label])) {
+                    $groups[$label] = ['product' => $label, 'quantity' => 0, 'orders' => []];
+                }
+                $groups[$label]['quantity'] += (int)($item['quantity'] ?? 0);
+                $groups[$label]['orders'][$orderLabel] = true;
+            }
+        }
+
+        ksort($groups);
+        $rows = [];
+        foreach ($groups as $group) {
+            $orders = array_keys($group['orders']);
+            sort($orders);
+            $rows[] = [
+                'product'  => $group['product'],
+                'quantity' => $group['quantity'],
+                'orders'   => implode(', ', $orders),
+            ];
+        }
+        return $rows;
+    }
+
     public static function printSummary(array $totals, string $startDate, string $endDate): void
     {
         echo "\nDate: {$startDate} to {$endDate}\n";
@@ -145,6 +184,19 @@ final class ItemizedFulfillmentReport
     }
 
     /**
+     * @param array<int, array{product: string, quantity: int, orders: string}> $rows
+     */
+    public static function toGroupedCsvString(array $rows): string
+    {
+        $writer = Writer::fromString();
+        $writer->insertOne(['product', 'quantity', 'orders']);
+        foreach ($rows as $row) {
+            $writer->insertOne([$row['product'], $row['quantity'], $row['orders']]);
+        }
+        return $writer->toString();
+    }
+
+    /**
      * @param array<int, array{order: string, product: string, quantity: int}> $rows
      */
     public static function detailedEmailHtml(array $rows, string $startDate, string $endDate): string
@@ -162,6 +214,29 @@ final class ItemizedFulfillmentReport
             . '<p style="margin:0 0 16px;color:#555">' . self::h($startDate) . ' &rarr; ' . self::h($endDate) . ' &middot; fulfillment status: fulfilled</p>'
             . '<table style="border-collapse:collapse;width:100%">'
             . '<tr><th style="text-align:left;padding:4px 12px 4px 0">Order</th><th style="text-align:left;padding:4px 12px 4px 0">Product</th><th style="text-align:right;padding:4px 0">Qty</th></tr>'
+            . $body . '</table>'
+            . '<p style="margin-top:20px;font-size:12px;color:#888">Full itemized CSV attached. Sent by Shopify Ops</p>'
+            . '</body></html>';
+    }
+
+    /**
+     * @param array<int, array{product: string, quantity: int, orders: string}> $rows
+     */
+    public static function groupedEmailHtml(array $rows, string $startDate, string $endDate): string
+    {
+        $body = '';
+        foreach ($rows as $row) {
+            $body .= '<tr><td style="padding:4px 12px 4px 0">' . self::h($row['product']) . '</td>'
+                . '<td style="padding:4px 12px 4px 0;text-align:right">' . $row['quantity'] . '</td>'
+                . '<td style="padding:4px 0">' . self::h($row['orders']) . '</td></tr>';
+        }
+
+        return '<!DOCTYPE html><html><head><meta charset="utf-8"></head>'
+            . '<body style="font-family:sans-serif;color:#111;max-width:700px;margin:0 auto;padding:20px">'
+            . '<h2 style="margin-bottom:4px">Fulfilled Items Report</h2>'
+            . '<p style="margin:0 0 16px;color:#555">' . self::h($startDate) . ' &rarr; ' . self::h($endDate) . ' &middot; grouped by product</p>'
+            . '<table style="border-collapse:collapse;width:100%">'
+            . '<tr><th style="text-align:left;padding:4px 12px 4px 0">Product</th><th style="text-align:right;padding:4px 12px 4px 0">Qty</th><th style="text-align:left;padding:4px 0">Orders</th></tr>'
             . $body . '</table>'
             . '<p style="margin-top:20px;font-size:12px;color:#888">Full itemized CSV attached. Sent by Shopify Ops</p>'
             . '</body></html>';
