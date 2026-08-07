@@ -13,21 +13,20 @@ final class ItemizedFulfillmentReport
     private const string REPORT_DIR = __DIR__ . '/../reports';
 
     /**
-     * Sums line-item quantities across fulfilled orders, keyed by "title variant".
+     * Sums line-item quantities across fulfillments shipped within [startDate, endDate],
+     * keyed by "title variant". Orders are matched by each fulfillment's own created_at,
+     * not the order's creation date or overall status, so an order created before the
+     * window but shipped inside it is still counted — and only its shipped items.
      *
-     * @param array<int, array<string, mixed>> $orders orders shaped like Shopify::fetchAllOrders()
+     * @param array<int, array<string, mixed>> $orders orders shaped like Shopify::fetchOrdersFulfilledSince()
      * @return array<string, int> product label => total quantity, sorted by label
      */
-    public static function aggregate(array $orders): array
+    public static function aggregate(array $orders, string $startDate, string $endDate): array
     {
         $totals = [];
-        foreach ($orders as $order) {
-            if (($order['fulfillment_status'] ?? '') !== 'fulfilled') {
-                continue;
-            }
-            foreach ($order['line_items'] ?? [] as $item) {
-                $variant = $item['variant_title'] ?? null;
-                $label   = trim($item['title'] . (($variant && $variant !== 'Default Title') ? " {$variant}" : ''));
+        foreach (self::fulfillmentsInRange($orders, $startDate, $endDate) as ['items' => $items]) {
+            foreach ($items as $item) {
+                $label = self::itemLabel($item);
                 $totals[$label] = ($totals[$label] ?? 0) + (int)($item['quantity'] ?? 0);
             }
         }
@@ -36,24 +35,19 @@ final class ItemizedFulfillmentReport
     }
 
     /**
-     * Same as aggregate(), but keeps each fulfilled order's line items separate
+     * Same as aggregate(), but keeps each fulfillment's line items separate
      * instead of summing across the whole date range.
      *
-     * @param array<int, array<string, mixed>> $orders orders shaped like Shopify::fetchAllOrders()
+     * @param array<int, array<string, mixed>> $orders orders shaped like Shopify::fetchOrdersFulfilledSince()
      * @return array<int, array{order: string, product: string, quantity: int}> sorted by order, then product
      */
-    public static function itemizeByOrder(array $orders): array
+    public static function itemizeByOrder(array $orders, string $startDate, string $endDate): array
     {
         $rows = [];
-        foreach ($orders as $order) {
-            if (($order['fulfillment_status'] ?? '') !== 'fulfilled') {
-                continue;
-            }
-            $orderLabel = (string)($order['name'] ?? $order['order_number'] ?? '');
-            foreach ($order['line_items'] ?? [] as $item) {
-                $variant = $item['variant_title'] ?? null;
-                $label   = trim($item['title'] . (($variant && $variant !== 'Default Title') ? " {$variant}" : ''));
-                $key     = "{$orderLabel}\0{$label}";
+        foreach (self::fulfillmentsInRange($orders, $startDate, $endDate) as ['orderLabel' => $orderLabel, 'items' => $items]) {
+            foreach ($items as $item) {
+                $label = self::itemLabel($item);
+                $key   = "{$orderLabel}\0{$label}";
                 if (!isset($rows[$key])) {
                     $rows[$key] = ['order' => $orderLabel, 'product' => $label, 'quantity' => 0];
                 }
@@ -66,22 +60,17 @@ final class ItemizedFulfillmentReport
     }
 
     /**
-     * Groups fulfilled line items by product and records the order numbers that contain each product.
+     * Groups shipped line items by product and records the order numbers that contain each product.
      *
-     * @param array<int, array<string, mixed>> $orders orders shaped like Shopify::fetchAllOrders()
+     * @param array<int, array<string, mixed>> $orders orders shaped like Shopify::fetchOrdersFulfilledSince()
      * @return array<int, array{product: string, quantity: int, orders: string}> sorted by product
      */
-    public static function groupByProductWithOrders(array $orders): array
+    public static function groupByProductWithOrders(array $orders, string $startDate, string $endDate): array
     {
         $groups = [];
-        foreach ($orders as $order) {
-            if (($order['fulfillment_status'] ?? '') !== 'fulfilled') {
-                continue;
-            }
-            $orderLabel = (string)($order['name'] ?? $order['order_number'] ?? '');
-            foreach ($order['line_items'] ?? [] as $item) {
-                $variant = $item['variant_title'] ?? null;
-                $label   = trim($item['title'] . (($variant && $variant !== 'Default Title') ? " {$variant}" : ''));
+        foreach (self::fulfillmentsInRange($orders, $startDate, $endDate) as ['orderLabel' => $orderLabel, 'items' => $items]) {
+            foreach ($items as $item) {
+                $label = self::itemLabel($item);
                 if (!isset($groups[$label])) {
                     $groups[$label] = ['product' => $label, 'quantity' => 0, 'orders' => []];
                 }
@@ -257,5 +246,37 @@ final class ItemizedFulfillmentReport
     private static function h(string $s): string
     {
         return htmlspecialchars($s, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    }
+
+    /**
+     * Flattens each order's fulfillments down to the ones shipped within [startDate, endDate],
+     * paired with their own line items and the parent order's label.
+     *
+     * @param array<int, array<string, mixed>> $orders
+     * @return array<int, array{orderLabel: string, items: array<int, array<string, mixed>>}>
+     */
+    private static function fulfillmentsInRange(array $orders, string $startDate, string $endDate): array
+    {
+        $rangeStart = "{$startDate}T00:00:00Z";
+        $rangeEnd   = "{$endDate}T23:59:59Z";
+
+        $result = [];
+        foreach ($orders as $order) {
+            $orderLabel = (string)($order['name'] ?? $order['order_number'] ?? '');
+            foreach ($order['fulfillments'] ?? [] as $fulfillment) {
+                $createdAt = $fulfillment['created_at'] ?? '';
+                if ($createdAt < $rangeStart || $createdAt > $rangeEnd) {
+                    continue;
+                }
+                $result[] = ['orderLabel' => $orderLabel, 'items' => $fulfillment['line_items'] ?? []];
+            }
+        }
+        return $result;
+    }
+
+    private static function itemLabel(array $item): string
+    {
+        $variant = $item['variant_title'] ?? null;
+        return trim($item['title'] . (($variant && $variant !== 'Default Title') ? " {$variant}" : ''));
     }
 }

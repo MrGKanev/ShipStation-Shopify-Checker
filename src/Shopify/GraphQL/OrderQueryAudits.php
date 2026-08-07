@@ -105,6 +105,28 @@ class OrderQueryAudits
     }
 
     /**
+     * Fetches fulfilled/partially-fulfilled orders by fulfillment activity rather than
+     * order creation date, so orders created before $startDate but shipped after it are
+     * still included. Callers should filter fulfillments by their own createdAt for an
+     * exact date range.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersFulfilledSince(string $startDate): array
+    {
+        return $this->orders->fetchOrdersByQuery(
+            Queries::fulfillmentUpdatedSinceQuery($startDate),
+            Queries::orderCoreFields()
+                . Queries::fulfillmentFields(),
+            fn(array $node) => in_array(
+                Normalizer::normalizeFulfillmentStatus($node['displayFulfillmentStatus'] ?? null),
+                ['fulfilled', 'partial'],
+                true
+            )
+        );
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     public function fetchOrdersWithNotes(string $startDate, string $endDate): array

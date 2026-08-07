@@ -807,13 +807,13 @@ class FulfillmentIssuePageLoader
     private static function fetchFulfilledItems(array $ctx, string $start, string $end, string $mode = 'summary'): array
     {
         $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
-        $orders  = self::suppressOutput(fn() => $shopify->fetchAllOrders($start, $end));
-        $totals  = ItemizedFulfillmentReport::aggregate($orders);
+        $orders  = self::suppressOutput(fn() => $shopify->fetchOrdersFulfilledSince($start));
+        $totals  = ItemizedFulfillmentReport::aggregate($orders, $start, $end);
 
         if ($mode === 'grouped') {
-            $rows = ItemizedFulfillmentReport::groupByProductWithOrders($orders);
+            $rows = ItemizedFulfillmentReport::groupByProductWithOrders($orders, $start, $end);
         } elseif ($mode === 'by_order') {
-            $rows = ItemizedFulfillmentReport::itemizeByOrder($orders);
+            $rows = ItemizedFulfillmentReport::itemizeByOrder($orders, $start, $end);
         } else {
             $rows = [];
             foreach ($totals as $label => $qty) {

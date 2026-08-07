@@ -95,6 +95,14 @@ class OrderAudits
     /**
      * @return array<int, array<string, mixed>>
      */
+    public function fetchOrdersFulfilledSince(string $startDate): array
+    {
+        return $this->queryAudits->fetchOrdersFulfilledSince($startDate);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     public function fetchOrdersWithNotes(string $startDate, string $endDate): array
     {
         return $this->queryAudits->fetchOrdersWithNotes($startDate, $endDate);

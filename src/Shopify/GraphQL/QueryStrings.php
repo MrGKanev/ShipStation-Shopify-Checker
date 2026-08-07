@@ -62,6 +62,22 @@ class QueryStrings
         ]);
     }
 
+    /**
+     * Orders fulfilled or partially fulfilled, found by when they were last touched
+     * rather than when they were created — fulfilling an order always bumps
+     * updated_at, but an order can be created long before it actually ships.
+     * No upper bound: a later edit (refund, note, tag) after fulfillment must not
+     * push the order out of range.
+     */
+    public static function fulfillmentUpdatedSinceQuery(string $startDate): string
+    {
+        return implode(' ', [
+            'status:any',
+            '(fulfillment_status:fulfilled OR fulfillment_status:partial)',
+            'updated_at:>=' . $startDate . 'T00:00:00Z',
+        ]);
+    }
+
     public static function orderEventDateRangeQuery(string $startDate, string $endDate): string
     {
         return implode(' ', [

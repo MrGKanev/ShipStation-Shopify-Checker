@@ -33,8 +33,8 @@ $endDate   = argValue($argv, '--end')   ?: date('Y-m-t', strtotime('last day of 
 $cache   = new Cache(__DIR__ . '/cache', (int)(getenv('CACHE_TTL') ?: 82800));
 $shopify = new Shopify(getenv('SHOPIFY_STORE'), getenv('SHOPIFY_ACCESS_TOKEN'), $cache);
 
-$orders = $shopify->fetchAllOrders($startDate, $endDate);
-$totals = ItemizedFulfillmentReport::aggregate($orders);
+$orders = $shopify->fetchOrdersFulfilledSince($startDate);
+$totals = ItemizedFulfillmentReport::aggregate($orders, $startDate, $endDate);
 
 ItemizedFulfillmentReport::printSummary($totals, $startDate, $endDate);
 $csvPath = ItemizedFulfillmentReport::saveCsv($totals, $startDate, $endDate);

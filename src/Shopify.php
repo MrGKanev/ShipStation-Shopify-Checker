@@ -299,6 +299,19 @@ class Shopify
     }
 
     /**
+     * Fetches fulfilled/partially-fulfilled orders by fulfillment activity (updated_at)
+     * rather than order creation date, so orders created before $startDate but shipped
+     * after it are still included. Callers should filter each order's fulfillments by
+     * their own created_at for an exact date range.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersFulfilledSince(string $startDate): array
+    {
+        return $this->orderAudits->fetchOrdersFulfilledSince($startDate);
+    }
+
+    /**
      * Returns orders where the shipping address was changed AFTER the first fulfillment was created.
      * Builds on the same GraphQL events strategy as fetchOrdersWithAddressChanges but includes
      * fulfillments in the batch order fetch to compare timestamps.

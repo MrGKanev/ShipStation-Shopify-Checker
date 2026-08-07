@@ -36,6 +36,11 @@ class Queries
         return QueryStrings::fulfilledOrPartialOrdersQuery($startDate, $endDate);
     }
 
+    public static function fulfillmentUpdatedSinceQuery(string $startDate): string
+    {
+        return QueryStrings::fulfillmentUpdatedSinceQuery($startDate);
+    }
+
     public static function orderEventDateRangeQuery(string $startDate, string $endDate): string
     {
         return QueryStrings::orderEventDateRangeQuery($startDate, $endDate);

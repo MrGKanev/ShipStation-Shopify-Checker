@@ -6,9 +6,21 @@ use PHPUnit\Framework\TestCase;
 
 class ItemizedFulfillmentReportTest extends TestCase
 {
-    private function order(?string $fulfillmentStatus, array $lineItems, string $name = ''): array
+    private const string START = '2026-07-01';
+    private const string END   = '2026-07-31';
+
+    /**
+     * @param array<int, array{created_at: string, items: array<int, array{title: string, variant_title: ?string, quantity: int}>}> $fulfillments
+     */
+    private function order(array $fulfillments, string $name = ''): array
     {
-        return ['fulfillment_status' => $fulfillmentStatus, 'line_items' => $lineItems, 'name' => $name];
+        return [
+            'name'         => $name,
+            'fulfillments' => array_map(
+                fn($f) => ['created_at' => $f['created_at'], 'line_items' => $f['items']],
+                $fulfillments
+            ),
+        ];
     }
 
     private function item(string $title, ?string $variant, int $qty): array
@@ -16,55 +28,85 @@ class ItemizedFulfillmentReportTest extends TestCase
         return ['title' => $title, 'variant_title' => $variant, 'quantity' => $qty];
     }
 
-    public function testSumsQuantitiesForFulfilledOrdersOnly(): void
+    private function shippedInWindow(array $items): array
+    {
+        return ['created_at' => '2026-07-15T10:00:00Z', 'items' => $items];
+    }
+
+    private function shippedOutsideWindow(array $items): array
+    {
+        return ['created_at' => '2026-06-20T10:00:00Z', 'items' => $items];
+    }
+
+    public function testSumsQuantitiesForFulfillmentsShippedInWindowOnly(): void
     {
         $orders = [
-            $this->order('fulfilled', [$this->item('Widget', 'blue', 10)]),
-            $this->order('fulfilled', [$this->item('Widget', 'blue', 30)]),
-            $this->order('partial', [$this->item('Widget', 'blue', 999)]),
-            $this->order(null, [$this->item('Widget', 'blue', 999)]),
+            $this->order([$this->shippedInWindow([$this->item('Widget', 'blue', 10)])]),
+            $this->order([$this->shippedInWindow([$this->item('Widget', 'blue', 30)])]),
+            $this->order([$this->shippedOutsideWindow([$this->item('Widget', 'blue', 999)])]),
         ];
 
-        $totals = ItemizedFulfillmentReport::aggregate($orders);
+        $totals = ItemizedFulfillmentReport::aggregate($orders, self::START, self::END);
 
         $this->assertSame(['Widget blue' => 40], $totals);
     }
 
+    public function testIncludesOrderCreatedBeforeWindowButShippedInsideIt(): void
+    {
+        $order = $this->order([$this->shippedInWindow([$this->item('Widget', 'blue', 5)])]);
+        $order['created_at'] = '2026-03-02T10:00:00Z';
+
+        $totals = ItemizedFulfillmentReport::aggregate([$order], self::START, self::END);
+
+        $this->assertSame(['Widget blue' => 5], $totals);
+    }
+
+    public function testCountsOnlyShippedLineItemsFromAPartiallyFulfilledOrder(): void
+    {
+        $orders = [
+            $this->order([$this->shippedInWindow([$this->item('Widget', 'blue', 3)])]),
+        ];
+
+        $totals = ItemizedFulfillmentReport::aggregate($orders, self::START, self::END);
+
+        $this->assertSame(['Widget blue' => 3], $totals);
+    }
+
     public function testDropsDefaultTitleVariantSuffix(): void
     {
-        $orders = [$this->order('fulfilled', [$this->item('Carrying Case', 'Default Title', 5)])];
+        $orders = [$this->order([$this->shippedInWindow([$this->item('Carrying Case', 'Default Title', 5)])])];
 
-        $totals = ItemizedFulfillmentReport::aggregate($orders);
+        $totals = ItemizedFulfillmentReport::aggregate($orders, self::START, self::END);
 
         $this->assertSame(['Carrying Case' => 5], $totals);
     }
 
     public function testMultipleProductsSortedByLabel(): void
     {
-        $orders = [$this->order('fulfilled', [
+        $orders = [$this->order([$this->shippedInWindow([
             $this->item('Gadget', 'red', 50),
             $this->item('Spare Part', null, 50),
-        ])];
+        ])])];
 
-        $totals = ItemizedFulfillmentReport::aggregate($orders);
+        $totals = ItemizedFulfillmentReport::aggregate($orders, self::START, self::END);
 
         $this->assertSame(['Gadget red' => 50, 'Spare Part' => 50], $totals);
     }
 
-    public function testItemizeByOrderShowsEveryProductRowFromFulfilledOrder(): void
+    public function testItemizeByOrderShowsEveryProductRowFromFulfillmentsInWindow(): void
     {
         $orders = [
-            $this->order('fulfilled', [
+            $this->order([$this->shippedInWindow([
                 $this->item('Gadget', 'red', 2),
                 $this->item('Spare Part', null, 1),
                 $this->item('Gadget', 'red', 3),
-            ], '#1002'),
-            $this->order('partial', [
+            ])], '#1002'),
+            $this->order([$this->shippedOutsideWindow([
                 $this->item('Hidden', null, 99),
-            ], '#1001'),
+            ])], '#1001'),
         ];
 
-        $rows = ItemizedFulfillmentReport::itemizeByOrder($orders);
+        $rows = ItemizedFulfillmentReport::itemizeByOrder($orders, self::START, self::END);
 
         $this->assertSame([
             ['order' => '#1002', 'product' => 'Gadget red', 'quantity' => 5],
@@ -75,22 +117,22 @@ class ItemizedFulfillmentReportTest extends TestCase
     public function testGroupByProductWithOrdersTotalsQuantityAndListsOrders(): void
     {
         $orders = [
-            $this->order('fulfilled', [
+            $this->order([$this->shippedInWindow([
                 $this->item('Widget', 'blue', 1),
                 $this->item('Case', null, 2),
-            ], '#1001'),
-            $this->order('fulfilled', [
+            ])], '#1001'),
+            $this->order([$this->shippedInWindow([
                 $this->item('Widget', 'blue', 1),
-            ], '#1002'),
-            $this->order('fulfilled', [
+            ])], '#1002'),
+            $this->order([$this->shippedInWindow([
                 $this->item('Widget', 'blue', 1),
-            ], '#1003'),
-            $this->order('partial', [
+            ])], '#1003'),
+            $this->order([$this->shippedOutsideWindow([
                 $this->item('Widget', 'blue', 99),
-            ], '#1004'),
+            ])], '#1004'),
         ];
 
-        $rows = ItemizedFulfillmentReport::groupByProductWithOrders($orders);
+        $rows = ItemizedFulfillmentReport::groupByProductWithOrders($orders, self::START, self::END);
 
         $this->assertSame([
             ['product' => 'Case', 'quantity' => 2, 'orders' => '#1001'],

@@ -1162,6 +1162,61 @@ class ShopifyClientTest extends TestCase
         $this->assertStringContainsString('trackingInfo(first: 10)', $body['query']);
     }
 
+    public function testFetchOrdersFulfilledSinceUsesUpdatedAtFilterWithNoUpperBound(): void
+    {
+        $history = [];
+        $shopify = $this->shopify([$this->graphQLOrders([[
+            'id' => 'gid://shopify/Order/660',
+            'legacyResourceId' => '660',
+            'name' => '#1660',
+            'createdAt' => '2026-03-02T10:00:00Z',
+            'cancelledAt' => null,
+            'email' => 'shipped-late@example.com',
+            'displayFinancialStatus' => 'PAID',
+            'displayFulfillmentStatus' => 'FULFILLED',
+            'totalPriceSet' => ['shopMoney' => ['amount' => '60.00', 'currencyCode' => 'USD']],
+            'fulfillments' => [[
+                'id' => 'gid://shopify/Fulfillment/960',
+                'legacyResourceId' => '960',
+                'createdAt' => '2026-07-15T10:00:00Z',
+                'status' => 'SUCCESS',
+                'displayStatus' => 'FULFILLED',
+                'trackingInfo' => [],
+                'fulfillmentLineItems' => ['edges' => [[
+                    'node' => [
+                        'quantity' => 1,
+                        'lineItem' => [
+                            'id' => 'gid://shopify/LineItem/860',
+                            'title' => 'Widget',
+                            'name' => 'Widget',
+                            'sku' => 'WGT',
+                            'quantity' => 1,
+                            'variantTitle' => null,
+                            'originalUnitPriceSet' => ['shopMoney' => ['amount' => '60.00', 'currencyCode' => 'USD']],
+                        ],
+                    ],
+                ]]],
+            ]],
+        ]])], $history);
+
+        $result = $shopify->fetchOrdersFulfilledSince('2026-07-01');
+
+        // Order was created in March but fetched because it was fulfilled in July —
+        // this is the whole point: the query must not filter on created_at.
+        $this->assertSame(660, $result[0]['id']);
+        $this->assertSame('2026-03-02T10:00:00Z', $result[0]['created_at']);
+        $this->assertSame('2026-07-15T10:00:00Z', $result[0]['fulfillments'][0]['created_at']);
+        $this->assertSame('Widget', $result[0]['fulfillments'][0]['line_items'][0]['title']);
+
+        $body = json_decode((string) $history[0]['request']->getBody(), true);
+        $this->assertSame(
+            'status:any (fulfillment_status:fulfilled OR fulfillment_status:partial) updated_at:>=2026-07-01T00:00:00Z',
+            $body['variables']['query']
+        );
+        $this->assertStringNotContainsString('created_at', $body['variables']['query']);
+        $this->assertStringContainsString('fulfillments(first: 250)', $body['query']);
+    }
+
     public function testFetchOrdersForHighValueUsesGraphQLAndUnfulfilledFilter(): void
     {
         $node = [
