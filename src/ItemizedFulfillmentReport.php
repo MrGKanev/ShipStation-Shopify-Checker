@@ -264,6 +264,9 @@ final class ItemizedFulfillmentReport
         foreach ($orders as $order) {
             $orderLabel = (string)($order['name'] ?? $order['order_number'] ?? '');
             foreach ($order['fulfillments'] ?? [] as $fulfillment) {
+                if (($fulfillment['status'] ?? '') !== 'success') {
+                    continue;
+                }
                 $createdAt = $fulfillment['created_at'] ?? '';
                 if ($createdAt < $rangeStart || $createdAt > $rangeEnd) {
                     continue;

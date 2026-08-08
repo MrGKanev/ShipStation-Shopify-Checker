@@ -142,14 +142,15 @@ class PageLoader
             . (str_contains($shopifyStore, '.') ? $shopifyStore : "{$shopifyStore}.myshopify.com")
             . '/admin/orders';
 
-        $pushLog   = PushLog::all();
-        $runLog    = RunLog::all();
-        $jobLog    = JobQueue::all();
-        $actionLog = UserActionLog::all();
-        $bannedIps = Auth::bannedIps();
+        $pushLog      = PushLog::all();
+        $runLog       = RunLog::all();
+        $jobLog       = JobQueue::all();
+        $actionLog    = UserActionLog::all();
+        $bannedIps    = Auth::bannedIps();
+        $recentRuns   = AuditSnapshot::recentAcrossTools();
 
         return compact('reports', 'orderHistory', 'latestReport', 'selectedDate', 'selectedReport',
-                       'shopifyAdminBase', 'pushLog', 'runLog', 'jobLog', 'actionLog', 'bannedIps');
+                       'shopifyAdminBase', 'pushLog', 'runLog', 'jobLog', 'actionLog', 'bannedIps', 'recentRuns');
     }
 
     // ── Audit ─────────────────────────────────────────────────────────────────

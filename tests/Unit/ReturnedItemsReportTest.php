@@ -6,14 +6,17 @@ use PHPUnit\Framework\TestCase;
 
 class ReturnedItemsReportTest extends TestCase
 {
+    private const string START = '2026-07-01';
+    private const string END   = '2026-07-31';
+
     private function order(array $refunds): array
     {
         return ['refunds' => $refunds];
     }
 
-    private function refund(array $lineItems): array
+    private function refund(array $lineItems, string $createdAt = '2026-07-15T10:00:00Z'): array
     {
-        return ['refund_line_items' => $lineItems];
+        return ['created_at' => $createdAt, 'refund_line_items' => $lineItems];
     }
 
     private function lineItem(string $name, int $qty): array
@@ -28,7 +31,7 @@ class ReturnedItemsReportTest extends TestCase
             $this->order([$this->refund([$this->lineItem('Widget - blue', 1)])]),
         ];
 
-        $totals = ReturnedItemsReport::aggregate($orders);
+        $totals = ReturnedItemsReport::aggregate($orders, self::START, self::END);
 
         $this->assertSame(['Widget - blue' => 3], $totals);
     }
@@ -42,7 +45,7 @@ class ReturnedItemsReportTest extends TestCase
             ]),
         ];
 
-        $totals = ReturnedItemsReport::aggregate($orders);
+        $totals = ReturnedItemsReport::aggregate($orders, self::START, self::END);
 
         $this->assertSame(['Gadget' => 5], $totals);
     }
@@ -53,7 +56,7 @@ class ReturnedItemsReportTest extends TestCase
             ['quantity' => 3, 'line_item' => ['title' => 'Spare Part']],
         ])])];
 
-        $totals = ReturnedItemsReport::aggregate($orders);
+        $totals = ReturnedItemsReport::aggregate($orders, self::START, self::END);
 
         $this->assertSame(['Spare Part' => 3], $totals);
     }
@@ -65,9 +68,31 @@ class ReturnedItemsReportTest extends TestCase
             $this->lineItem('Alpha', 2),
         ])])];
 
-        $totals = ReturnedItemsReport::aggregate($orders);
+        $totals = ReturnedItemsReport::aggregate($orders, self::START, self::END);
 
         $this->assertSame(['Alpha' => 2, 'Zeta' => 5], $totals);
+    }
+
+    public function testIncludesOrderCreatedBeforeWindowButRefundedInsideIt(): void
+    {
+        $order = $this->order([$this->refund([$this->lineItem('Widget - blue', 5)])]);
+        $order['created_at'] = '2026-03-02T10:00:00Z';
+
+        $totals = ReturnedItemsReport::aggregate([$order], self::START, self::END);
+
+        $this->assertSame(['Widget - blue' => 5], $totals);
+    }
+
+    public function testExcludesRefundsIssuedOutsideTheWindow(): void
+    {
+        $orders = [
+            $this->order([$this->refund([$this->lineItem('Widget - blue', 5)], '2026-07-15T10:00:00Z')]),
+            $this->order([$this->refund([$this->lineItem('Widget - blue', 999)], '2026-06-20T10:00:00Z')]),
+        ];
+
+        $totals = ReturnedItemsReport::aggregate($orders, self::START, self::END);
+
+        $this->assertSame(['Widget - blue' => 5], $totals);
     }
 
     public function testSaveCsvWritesProductAndQuantityColumns(): void

@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../src/DateRange.php';
 require_once __DIR__ . '/../../src/RunLog.php';
+require_once __DIR__ . '/../../src/AuditSnapshot.php';
+require_once __DIR__ . '/support/TmpDir.php';
 require_once __DIR__ . '/../../src/SlackRules.php';
 require_once __DIR__ . '/../../src/SlackNotifier.php';
 require_once __DIR__ . '/../../src/Logger.php';
@@ -28,6 +30,7 @@ class FulfillmentIssuePageLoaderTest extends TestCase
         $this->tmpDir = sys_get_temp_dir() . '/fulfillment_issue_loader_' . uniqid();
         mkdir($this->tmpDir, 0755, true);
         RunLog::setDataDir($this->tmpDir);
+        AuditSnapshot::setDataDir($this->tmpDir);
         SlackRules::setDataDir($this->tmpDir);
 
         $this->previousGet = $_GET;
@@ -47,10 +50,7 @@ class FulfillmentIssuePageLoaderTest extends TestCase
             putenv('SLACK_WEBHOOK_URL=' . $this->previousSlackWebhook);
         }
 
-        foreach (glob($this->tmpDir . '/*') ?: [] as $file) {
-            unlink($file);
-        }
-        rmdir($this->tmpDir);
+        TmpDir::remove($this->tmpDir);
 
         $_GET = $this->previousGet;
         $_POST = $this->previousPost;
@@ -85,6 +85,100 @@ class FulfillmentIssuePageLoaderTest extends TestCase
         $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $submitted['ntError']);
         $this->assertSame(48, $submitted['ntThreshold']);
         $this->assertSame('validation_error', RunLog::all()[0]['status']);
+    }
+
+    /**
+     * loadNoTracking() itself instantiates a real Shopify HTTP client with no
+     * injectable transport, so - mirroring buildShippingMarginRows() - we exercise
+     * the pure row-builder it delegates to directly via reflection.
+     */
+    public function testBuildNoTrackingRowsIncludesOrderCreatedBeforeWindowButShippedInsideIt(): void
+    {
+        $ref    = new \ReflectionClass(FulfillmentIssuePageLoader::class);
+        $method = $ref->getMethod('buildNoTrackingRows');
+
+        $windowStart = gmdate('Y-m-d', strtotime('-10 days'));
+        $windowEnd   = gmdate('Y-m-d', strtotime('+1 day'));
+        $shippedAt   = gmdate('Y-m-d\TH:i:s\Z', strtotime('-5 days'));
+
+        $orders = [[
+            'id' => 1, 'name' => '#2001', 'created_at' => '2026-01-01T00:00:00Z',
+            'email' => 'late@example.com', 'total_price' => '80.00',
+            'financial_status' => 'paid', 'fulfillment_status' => 'fulfilled',
+            'fulfillments' => [[
+                'id' => 501, 'created_at' => $shippedAt,
+                'tracking_number' => '', 'shipment_status' => 'label_created', 'tracking_company' => '',
+            ]],
+        ]];
+
+        $rows = $method->invoke(null, $orders, $windowStart, $windowEnd, 24);
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('#2001', $rows[0]['order_number']);
+        $this->assertCount(1, $rows[0]['missing']);
+    }
+
+    public function testBuildNoTrackingRowsExcludesFulfillmentsShippedOutsideTheWindow(): void
+    {
+        $ref    = new \ReflectionClass(FulfillmentIssuePageLoader::class);
+        $method = $ref->getMethod('buildNoTrackingRows');
+
+        $windowStart = gmdate('Y-m-d', strtotime('-10 days'));
+        $windowEnd   = gmdate('Y-m-d', strtotime('+1 day'));
+        $shippedAt   = gmdate('Y-m-d\TH:i:s\Z', strtotime('-30 days'));
+
+        $orders = [[
+            'id' => 1, 'name' => '#2002', 'created_at' => '2026-01-01T00:00:00Z',
+            'fulfillments' => [[
+                'id' => 502, 'created_at' => $shippedAt, 'tracking_number' => '',
+            ]],
+        ]];
+
+        $rows = $method->invoke(null, $orders, $windowStart, $windowEnd, 24);
+
+        $this->assertSame([], $rows);
+    }
+
+    public function testBuildNoTrackingRowsExcludesFulfillmentsThatAlreadyHaveTracking(): void
+    {
+        $ref    = new \ReflectionClass(FulfillmentIssuePageLoader::class);
+        $method = $ref->getMethod('buildNoTrackingRows');
+
+        $windowStart = gmdate('Y-m-d', strtotime('-10 days'));
+        $windowEnd   = gmdate('Y-m-d', strtotime('+1 day'));
+        $shippedAt   = gmdate('Y-m-d\TH:i:s\Z', strtotime('-5 days'));
+
+        $orders = [[
+            'id' => 1, 'name' => '#2003', 'created_at' => '2026-01-01T00:00:00Z',
+            'fulfillments' => [[
+                'id' => 503, 'created_at' => $shippedAt, 'tracking_number' => '1Z999',
+            ]],
+        ]];
+
+        $rows = $method->invoke(null, $orders, $windowStart, $windowEnd, 24);
+
+        $this->assertSame([], $rows);
+    }
+
+    public function testBuildNoTrackingRowsExcludesFulfillmentsUnderTheHourThreshold(): void
+    {
+        $ref    = new \ReflectionClass(FulfillmentIssuePageLoader::class);
+        $method = $ref->getMethod('buildNoTrackingRows');
+
+        $windowStart = gmdate('Y-m-d', strtotime('-1 day'));
+        $windowEnd   = gmdate('Y-m-d', strtotime('+1 day'));
+        $shippedAt   = gmdate('Y-m-d\TH:i:s\Z', strtotime('-1 hour'));
+
+        $orders = [[
+            'id' => 1, 'name' => '#2004', 'created_at' => '2026-01-01T00:00:00Z',
+            'fulfillments' => [[
+                'id' => 504, 'created_at' => $shippedAt, 'tracking_number' => '',
+            ]],
+        ]];
+
+        $rows = $method->invoke(null, $orders, $windowStart, $windowEnd, 24);
+
+        $this->assertSame([], $rows);
     }
 
     public function testPostShipAddressChangeMissingShopifyCredentials(): void

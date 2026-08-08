@@ -22,6 +22,7 @@ class Actions
             'push_to_shipstation' => self::pushToShipStation($ctx),
             'queue_audit'         => self::queueAudit($ctx),
             'save_slack_rules'    => self::saveSlackRules($ctx),
+            'save_sidebar_settings' => self::saveSidebarSettings($ctx),
             'preview_push'        => self::previewPush($ctx),
             'order_detail'        => self::orderDetail($ctx),
             'flush_cache'         => self::flushCache($ctx),
@@ -185,6 +186,16 @@ class Actions
         SlackRules::save($rules);
         UserActionLog::append('save_slack_rules', SlackRules::load());
         header('Location: ?page=slackrules&saved=1'); exit;
+    }
+
+    private static function saveSidebarSettings(array $ctx): void
+    {
+        SidebarSettings::save([
+            'show_missing_orders'  => isset($_POST['show_missing_orders']),
+            'show_recent_activity' => isset($_POST['show_recent_activity']),
+        ]);
+        UserActionLog::append('save_sidebar_settings', SidebarSettings::load());
+        header('Location: ?page=settings&saved=1'); exit;
     }
 
     private static function previewPush(array $ctx): void

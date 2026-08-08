@@ -31,14 +31,14 @@ class Queries
         return QueryStrings::partiallyFulfilledOrdersQuery($startDate, $endDate);
     }
 
-    public static function fulfilledOrPartialOrdersQuery(string $startDate, string $endDate): string
-    {
-        return QueryStrings::fulfilledOrPartialOrdersQuery($startDate, $endDate);
-    }
-
     public static function fulfillmentUpdatedSinceQuery(string $startDate): string
     {
         return QueryStrings::fulfillmentUpdatedSinceQuery($startDate);
+    }
+
+    public static function refundUpdatedSinceQuery(string $startDate): string
+    {
+        return QueryStrings::refundUpdatedSinceQuery($startDate);
     }
 
     public static function orderEventDateRangeQuery(string $startDate, string $endDate): string

@@ -293,11 +293,6 @@ class Shopify
      *
      * @return array<int, array<string, mixed>>
      */
-    public function fetchFulfilledOrdersWithTracking(string $startDate, string $endDate): array
-    {
-        return $this->orderAudits->fetchFulfilledOrdersWithTracking($startDate, $endDate);
-    }
-
     /**
      * Fetches fulfilled/partially-fulfilled orders by fulfillment activity (updated_at)
      * rather than order creation date, so orders created before $startDate but shipped
@@ -309,6 +304,31 @@ class Shopify
     public function fetchOrdersFulfilledSince(string $startDate): array
     {
         return $this->orderAudits->fetchOrdersFulfilledSince($startDate);
+    }
+
+    /**
+     * Same order set as fetchOrdersFulfilledSince(), but includes shipping_lines
+     * instead of fulfillments, for matching shipments to orders regardless of the
+     * order's creation date (e.g. shipping-margin scans).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersFulfilledSinceWithShipping(string $startDate): array
+    {
+        return $this->orderAudits->fetchOrdersFulfilledSinceWithShipping($startDate);
+    }
+
+    /**
+     * Fetches refunded/partially-refunded orders by refund activity (updated_at)
+     * rather than order creation date, so orders created before $startDate but
+     * refunded after it are still included. Callers should filter each order's
+     * refunds by their own created_at for an exact date range.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersRefundedSince(string $startDate): array
+    {
+        return $this->orderAudits->fetchOrdersRefundedSince($startDate);
     }
 
     /**

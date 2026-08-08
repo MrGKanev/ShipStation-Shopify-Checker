@@ -13,26 +13,52 @@ final class ReturnedItemsReport
     private const string REPORT_DIR = __DIR__ . '/../reports';
 
     /**
-     * Sums refund line-item quantities across orders, keyed by product label.
+     * Sums refund line-item quantities across refunds issued within [startDate, endDate],
+     * keyed by product label. Refunds are matched by their own created_at, not the
+     * order's creation date, so an order created before the window but refunded
+     * inside it is still counted.
      *
-     * @param array<int, array<string, mixed>> $orders orders shaped like Shopify::fetchRefundedOrders()
+     * @param array<int, array<string, mixed>> $orders orders shaped like Shopify::fetchOrdersRefundedSince()
      * @return array<string, int> product label => total quantity, sorted by label
      */
-    public static function aggregate(array $orders): array
+    public static function aggregate(array $orders, string $startDate, string $endDate): array
     {
         $totals = [];
-        foreach ($orders as $order) {
-            foreach ($order['refunds'] ?? [] as $refund) {
-                foreach ($refund['refund_line_items'] ?? [] as $rli) {
-                    $li    = $rli['line_item'] ?? [];
-                    $label = trim((string)($li['name'] ?? $li['title'] ?? ''));
-                    if ($label === '') continue;
-                    $totals[$label] = ($totals[$label] ?? 0) + (int)($rli['quantity'] ?? 0);
-                }
-            }
+        foreach (self::refundLineItemsInRange($orders, $startDate, $endDate) as $rli) {
+            $li    = $rli['line_item'] ?? [];
+            $label = trim((string)($li['name'] ?? $li['title'] ?? ''));
+            if ($label === '') continue;
+            $totals[$label] = ($totals[$label] ?? 0) + (int)($rli['quantity'] ?? 0);
         }
         ksort($totals);
         return $totals;
+    }
+
+    /**
+     * Flattens each order's refunds down to the ones issued within [startDate, endDate],
+     * paired with their line items.
+     *
+     * @param array<int, array<string, mixed>> $orders
+     * @return array<int, array<string, mixed>>
+     */
+    private static function refundLineItemsInRange(array $orders, string $startDate, string $endDate): array
+    {
+        $rangeStart = "{$startDate}T00:00:00Z";
+        $rangeEnd   = "{$endDate}T23:59:59Z";
+
+        $result = [];
+        foreach ($orders as $order) {
+            foreach ($order['refunds'] ?? [] as $refund) {
+                $createdAt = $refund['created_at'] ?? '';
+                if ($createdAt < $rangeStart || $createdAt > $rangeEnd) {
+                    continue;
+                }
+                foreach ($refund['refund_line_items'] ?? [] as $rli) {
+                    $result[] = $rli;
+                }
+            }
+        }
+        return $result;
     }
 
     public static function printSummary(array $totals, string $startDate, string $endDate): void

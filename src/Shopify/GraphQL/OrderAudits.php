@@ -77,14 +77,6 @@ class OrderAudits
     }
 
     /**
-     * @return array<int, array<string, mixed>>
-     */
-    public function fetchFulfilledOrdersWithTracking(string $startDate, string $endDate): array
-    {
-        return $this->queryAudits->fetchFulfilledOrdersWithTracking($startDate, $endDate);
-    }
-
-    /**
      * @return array<int, array{order: array, changed_at: string, fulfillment_at: string}>
      */
     public function fetchPostShipAddressChanges(string $startDate, string $endDate): array
@@ -98,6 +90,22 @@ class OrderAudits
     public function fetchOrdersFulfilledSince(string $startDate): array
     {
         return $this->queryAudits->fetchOrdersFulfilledSince($startDate);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersFulfilledSinceWithShipping(string $startDate): array
+    {
+        return $this->queryAudits->fetchOrdersFulfilledSinceWithShipping($startDate);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersRefundedSince(string $startDate): array
+    {
+        return $this->queryAudits->fetchOrdersRefundedSince($startDate);
     }
 
     /**

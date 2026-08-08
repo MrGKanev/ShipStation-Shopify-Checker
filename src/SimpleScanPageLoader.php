@@ -350,8 +350,8 @@ class SimpleScanPageLoader
     private static function fetchReturnedItems(array $ctx, string $start, string $end): array
     {
         $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
-        $orders  = self::suppressOutput(fn() => $shopify->fetchRefundedOrders($start, $end));
-        $totals  = ReturnedItemsReport::aggregate($orders);
+        $orders  = self::suppressOutput(fn() => $shopify->fetchOrdersRefundedSince($start));
+        $totals  = ReturnedItemsReport::aggregate($orders, $start, $end);
 
         $rows = [];
         foreach ($totals as $label => $qty) {

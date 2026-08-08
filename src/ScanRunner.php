@@ -28,6 +28,21 @@ final class ScanRunner
         $result = null;
         $error  = '';
 
+        $historyDate = trim($_GET["{$prefix}_history"] ?? '');
+        if ($historyDate !== '') {
+            $snapshot = AuditSnapshot::load($trigger, $historyDate);
+            if ($snapshot === null) {
+                $error = "No saved run for {$trigger} on {$historyDate}.";
+                return compact('result', 'error', 'start', 'end');
+            }
+            return [
+                'result' => $snapshot['result'],
+                'error'  => '',
+                'start'  => $snapshot['start'] ?? $start,
+                'end'    => $snapshot['end']   ?? $end,
+            ];
+        }
+
         if ($action === $trigger) {
             $runStartedAt = date('Y-m-d H:i:s');
             $t0 = microtime(true);
@@ -57,6 +72,9 @@ final class ScanRunner
                         'meta'       => ['api_version' => Shopify::API_VERSION],
                     ]);
                     self::notifyScan($trigger, $result, $rowsFound, $start, $end);
+                    if (is_array($result)) {
+                        AuditSnapshot::save($trigger, substr($runStartedAt, 0, 10), $result, $start, $end, $rowsFound);
+                    }
                     $logged = true;
                 } catch (Throwable $e) {
                     $error = $e->getMessage();

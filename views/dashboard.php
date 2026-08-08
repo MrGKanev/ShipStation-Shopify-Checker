@@ -163,7 +163,7 @@ $trend7Max   = $has7DayData ? max($has7DayData) : 0;
 <!-- ── Action Queue ──────────────────────────────────────────────────── -->
 <div class="db-section">
   <div class="db-section-title">
-    ⚠ Action Queue - Missing Orders
+    ⚠ Action Queue - Missing Orders (from ShipStation)
     <?php if ($latestDate): ?>
       <a href="?date=<?= esc($latestDate) ?>">View full report &rarr;</a>
     <?php endif; ?>

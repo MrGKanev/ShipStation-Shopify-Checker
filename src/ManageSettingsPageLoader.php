@@ -160,12 +160,13 @@ class ManageSettingsPageLoader
 
     private static function loadSettings(array $ctx): array
     {
-        $connResults  = $ctx['flash']['conn_results'] ?? null;
-        $cacheEntries = $ctx['cacheObj']->entries();
-        $cacheFlushed = max(0, (int) ($_GET['cache_flushed'] ?? 0));
-        $cacheTtl     = $ctx['cacheTtl'];
+        $connResults     = $ctx['flash']['conn_results'] ?? null;
+        $cacheEntries    = $ctx['cacheObj']->entries();
+        $cacheFlushed    = max(0, (int) ($_GET['cache_flushed'] ?? 0));
+        $cacheTtl        = $ctx['cacheTtl'];
+        $sidebarSettings = SidebarSettings::load();
 
-        return compact('connResults', 'cacheEntries', 'cacheFlushed', 'cacheTtl');
+        return compact('connResults', 'cacheEntries', 'cacheFlushed', 'cacheTtl', 'sidebarSettings');
     }
 
     private static function loadWebhookHealth(array $ctx): array

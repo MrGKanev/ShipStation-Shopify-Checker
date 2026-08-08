@@ -1,5 +1,9 @@
 <?= topbar('Settings', 'Configuration and connectivity') ?>
 
+<?php if (isset($_GET['saved'])): ?>
+  <div class="flash flash-ok">Settings saved.</div>
+<?php endif; ?>
+
 <div class="run-form">
   <h2>API Connection Test</h2>
   <div class="hint">Sends a lightweight request to both APIs to verify credentials and reachability.</div>
@@ -82,6 +86,25 @@
       </tbody>
     </table>
   <?php endif; ?>
+</div>
+
+<div class="run-form mb-6">
+  <h2>Sidebar History</h2>
+  <div class="hint">Show or hide the shared history sections in the left sidebar.</div>
+  <form method="post">
+    <input type="hidden" name="action" value="save_sidebar_settings">
+    <div class="date-row">
+      <div class="field">
+        <label>📋 Missing Orders (from ShipStation)</label>
+        <label class="text-sm"><input type="checkbox" name="show_missing_orders" <?= $sidebarSettings['show_missing_orders'] ? 'checked' : '' ?>> Show in sidebar</label>
+      </div>
+      <div class="field">
+        <label>🕘 Recent Activity</label>
+        <label class="text-sm"><input type="checkbox" name="show_recent_activity" <?= $sidebarSettings['show_recent_activity'] ? 'checked' : '' ?>> Show in sidebar</label>
+      </div>
+      <button class="btn btn-submit-end" type="submit">Save</button>
+    </div>
+  </form>
 </div>
 
 <div class="table-wrap mb-6">

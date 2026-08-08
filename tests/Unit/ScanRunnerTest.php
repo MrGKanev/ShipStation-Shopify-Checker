@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
 
+require_once __DIR__ . '/support/TmpDir.php';
+
 final class ScanRunnerTest extends TestCase
 {
     private string $tmpDir;
@@ -12,6 +14,7 @@ final class ScanRunnerTest extends TestCase
         $this->tmpDir = sys_get_temp_dir() . '/scanrunner_' . uniqid();
         mkdir($this->tmpDir, 0755, true);
         RunLog::setDataDir($this->tmpDir);
+        AuditSnapshot::setDataDir($this->tmpDir);
         SlackRules::setDataDir($this->tmpDir);
         $_GET = [];
         $_POST = [];
@@ -19,10 +22,7 @@ final class ScanRunnerTest extends TestCase
 
     protected function tearDown(): void
     {
-        foreach (glob($this->tmpDir . '/*') ?: [] as $f) {
-            unlink($f);
-        }
-        rmdir($this->tmpDir);
+        TmpDir::remove($this->tmpDir);
         $_GET = [];
         $_POST = [];
     }
@@ -38,6 +38,54 @@ final class ScanRunnerTest extends TestCase
         $this->assertSame('2026-06-01', $result['start']);
         $this->assertSame('2026-06-10', $result['end']);
         $this->assertSame([], RunLog::all());
+    }
+
+    public function testSuccessfulScanSavesAnAuditSnapshotForToday(): void
+    {
+        $_POST = ['scan_start' => '2026-06-01', 'scan_end' => '2026-06-10'];
+
+        ScanRunner::run('scan_test', 'scan_test', $this->ctx(), 'scan', function () {
+            return ['rows' => [['id' => 1]], 'scanned' => 5];
+        });
+
+        $today    = date('Y-m-d');
+        $snapshot = AuditSnapshot::load('scan_test', $today);
+
+        $this->assertNotNull($snapshot);
+        $this->assertSame('2026-06-01', $snapshot['start']);
+        $this->assertSame('2026-06-10', $snapshot['end']);
+        $this->assertSame(1, $snapshot['rows_found']);
+        $this->assertSame([['id' => 1]], $snapshot['result']['rows']);
+    }
+
+    public function testHistoryParamReturnsSavedSnapshotWithoutRunningTheScan(): void
+    {
+        AuditSnapshot::save('scan_test', '2026-06-05', ['rows' => [['id' => 42]], 'scanned' => 1], '2026-06-01', '2026-06-05', 1);
+
+        $ran = false;
+        $_GET = ['scan_history' => '2026-06-05'];
+
+        $result = ScanRunner::run('other_action', 'scan_test', $this->ctx(), 'scan', function () use (&$ran) {
+            $ran = true;
+            return ['rows' => []];
+        });
+
+        $this->assertFalse($ran);
+        $this->assertSame([['id' => 42]], $result['result']['rows']);
+        $this->assertSame('2026-06-01', $result['start']);
+        $this->assertSame('2026-06-05', $result['end']);
+        $this->assertSame('', $result['error']);
+        $this->assertSame([], RunLog::all());
+    }
+
+    public function testHistoryParamWithNoSavedSnapshotReturnsAnError(): void
+    {
+        $_GET = ['scan_history' => '2026-06-05'];
+
+        $result = ScanRunner::run('other_action', 'scan_test', $this->ctx(), 'scan', fn() => ['rows' => []]);
+
+        $this->assertNull($result['result']);
+        $this->assertStringContainsString('No saved run', $result['error']);
     }
 
     public function testSuccessfulScanLogsRowsFound(): void

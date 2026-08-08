@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../src/DateRange.php';
 require_once __DIR__ . '/../../src/RunLog.php';
+require_once __DIR__ . '/../../src/AuditSnapshot.php';
+require_once __DIR__ . '/support/TmpDir.php';
 require_once __DIR__ . '/../../src/SlackRules.php';
 require_once __DIR__ . '/../../src/SlackNotifier.php';
 require_once __DIR__ . '/../../src/Logger.php';
@@ -26,6 +28,7 @@ class OrderPolicyPageLoaderTest extends TestCase
         $this->tmpDir = sys_get_temp_dir() . '/order_policy_loader_' . uniqid();
         mkdir($this->tmpDir, 0755, true);
         RunLog::setDataDir($this->tmpDir);
+        AuditSnapshot::setDataDir($this->tmpDir);
         SlackRules::setDataDir($this->tmpDir);
 
         $this->previousGet = $_GET;
@@ -45,10 +48,7 @@ class OrderPolicyPageLoaderTest extends TestCase
             putenv('SLACK_WEBHOOK_URL=' . $this->previousSlackWebhook);
         }
 
-        foreach (glob($this->tmpDir . '/*') ?: [] as $file) {
-            unlink($file);
-        }
-        rmdir($this->tmpDir);
+        TmpDir::remove($this->tmpDir);
 
         $_GET = $this->previousGet;
         $_POST = $this->previousPost;

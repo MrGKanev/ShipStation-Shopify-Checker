@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../src/Cache.php';
 require_once __DIR__ . '/../../src/JobQueue.php';
+require_once __DIR__ . '/../../src/AuditSnapshot.php';
 require_once __DIR__ . '/../../src/SlackRules.php';
 require_once __DIR__ . '/../../src/SlackNotifier.php';
 require_once __DIR__ . '/../../src/UserActionLog.php';
@@ -30,6 +31,7 @@ class ManageSettingsPageLoaderTest extends TestCase
         SlackRules::setDataDir($this->tmpDir);
         UserActionLog::setDataDir($this->tmpDir);
         RunLog::setDataDir($this->tmpDir);
+        AuditSnapshot::setDataDir($this->tmpDir);
 
         $this->previousSlackWebhook = getenv('SLACK_WEBHOOK_URL');
         putenv('SLACK_WEBHOOK_URL');

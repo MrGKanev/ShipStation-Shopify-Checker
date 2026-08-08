@@ -33,8 +33,8 @@ $endDate   = argValue($argv, '--end')   ?: date('Y-m-t', strtotime('last day of 
 $cache   = new Cache(__DIR__ . '/cache', (int)(getenv('CACHE_TTL') ?: 82800));
 $shopify = new Shopify(getenv('SHOPIFY_STORE'), getenv('SHOPIFY_ACCESS_TOKEN'), $cache);
 
-$orders = $shopify->fetchRefundedOrders($startDate, $endDate);
-$totals = ReturnedItemsReport::aggregate($orders);
+$orders = $shopify->fetchOrdersRefundedSince($startDate);
+$totals = ReturnedItemsReport::aggregate($orders, $startDate, $endDate);
 
 ReturnedItemsReport::printSummary($totals, $startDate, $endDate);
 $csvPath = ReturnedItemsReport::saveCsv($totals, $startDate, $endDate);

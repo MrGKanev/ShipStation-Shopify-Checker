@@ -67,38 +67,9 @@ class FulfillmentIssuePageLoader
                 $ntThreshold = max(1, (int)($_POST['nt_threshold'] ?? 24));
                 self::setLimits(180);
                 $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
-                $orders  = self::suppressOutput(fn() => $shopify->fetchFulfilledOrdersWithTracking($start, $end));
+                $orders  = self::suppressOutput(fn() => $shopify->fetchOrdersFulfilledSince($start));
 
-                $now  = time();
-                $rows = [];
-                foreach ($orders as $o) {
-                    $missing = [];
-                    foreach ($o['fulfillments'] ?? [] as $f) {
-                        if (trim($f['tracking_number'] ?? '') !== '') continue;
-                        $createdAt = $f['created_at'] ?? '';
-                        $hoursAgo  = $createdAt ? (int)(($now - strtotime($createdAt)) / 3600) : 0;
-                        if ($hoursAgo < $ntThreshold) continue;
-                        $missing[] = [
-                            'id'         => $f['id']       ?? '',
-                            'created_at' => self::dateOnly($createdAt),
-                            'hours_ago'  => $hoursAgo,
-                            'status'     => $f['shipment_status'] ?? $f['status'] ?? '',
-                            'company'    => $f['tracking_company'] ?? '',
-                        ];
-                    }
-                    if (empty($missing)) continue;
-                    $rows[] = [
-                        'shopify_id'   => $o['id']          ?? '',
-                        'order_number' => $o['name']        ?? '',
-                        'created_at'   => self::dateOnly($o['created_at'] ?? ''),
-                        'email'        => $o['email']       ?? '',
-                        'total'        => $o['total_price'] ?? '',
-                        'financial'    => $o['financial_status']   ?? '',
-                        'fulfillment'  => $o['fulfillment_status'] ?? '',
-                        'missing'      => $missing,
-                    ];
-                }
-                usort($rows, fn($a, $b) => ($b['missing'][0]['hours_ago'] ?? 0) <=> ($a['missing'][0]['hours_ago'] ?? 0));
+                $rows = self::buildNoTrackingRows($orders, $start, $end, $ntThreshold);
                 return [
                     'rows'      => $rows,
                     'scanned'   => count($orders),
@@ -109,6 +80,56 @@ class FulfillmentIssuePageLoader
             });
 
         return compact('ntResult', 'ntError', 'ntStart', 'ntEnd', 'ntThreshold');
+    }
+
+    /**
+     * Pure row-builder for the no-tracking scan: keeps fulfillments shipped within
+     * [startDate, endDate] (by the fulfillment's own created_at, not the order's,
+     * so an order created before the window but shipped inside it is still checked)
+     * that still have no tracking number after $threshold hours.
+     *
+     * Factored out from loadNoTracking() so it's testable without HTTP.
+     *
+     * @param  array<int, array<string, mixed>> $orders shaped like Shopify::fetchOrdersFulfilledSince()
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildNoTrackingRows(array $orders, string $startDate, string $endDate, int $threshold): array
+    {
+        $rangeStart = "{$startDate}T00:00:00Z";
+        $rangeEnd   = "{$endDate}T23:59:59Z";
+        $now        = time();
+
+        $rows = [];
+        foreach ($orders as $o) {
+            $missing = [];
+            foreach ($o['fulfillments'] ?? [] as $f) {
+                $createdAt = $f['created_at'] ?? '';
+                if ($createdAt < $rangeStart || $createdAt > $rangeEnd) continue;
+                if (trim($f['tracking_number'] ?? '') !== '') continue;
+                $hoursAgo = $createdAt ? (int)(($now - strtotime($createdAt)) / 3600) : 0;
+                if ($hoursAgo < $threshold) continue;
+                $missing[] = [
+                    'id'         => $f['id']       ?? '',
+                    'created_at' => self::dateOnly($createdAt),
+                    'hours_ago'  => $hoursAgo,
+                    'status'     => $f['shipment_status'] ?? $f['status'] ?? '',
+                    'company'    => $f['tracking_company'] ?? '',
+                ];
+            }
+            if (empty($missing)) continue;
+            $rows[] = [
+                'shopify_id'   => $o['id']          ?? '',
+                'order_number' => $o['name']        ?? '',
+                'created_at'   => self::dateOnly($o['created_at'] ?? ''),
+                'email'        => $o['email']       ?? '',
+                'total'        => $o['total_price'] ?? '',
+                'financial'    => $o['financial_status']   ?? '',
+                'fulfillment'  => $o['fulfillment_status'] ?? '',
+                'missing'      => $missing,
+            ];
+        }
+        usort($rows, fn($a, $b) => ($b['missing'][0]['hours_ago'] ?? 0) <=> ($a['missing'][0]['hours_ago'] ?? 0));
+        return $rows;
     }
 
     private static function loadPostShipAddrChange(string $action, array $ctx): array
@@ -579,7 +600,7 @@ class FulfillmentIssuePageLoader
                     $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
                     return [
                         $ss->fetchShipmentsByDate($start, $end),
-                        $shopify->fetchAllOrders($start, $end),
+                        $shopify->fetchOrdersFulfilledSinceWithShipping($start),
                     ];
                 });
 

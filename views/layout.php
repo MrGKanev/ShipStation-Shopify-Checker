@@ -130,8 +130,10 @@
       </form>
     </div>
 
-    <?php if (!empty($reports)): ?>
-      <div class="sidebar-section">History</div>
+    <?php $sidebarSettings = SidebarSettings::load(); ?>
+
+    <?php if ($sidebarSettings['show_missing_orders'] && !empty($reports)): ?>
+      <div class="sidebar-section">📋 Missing Orders (from ShipStation)</div>
       <ul class="sidebar-nav">
         <?php foreach ($reports as $r): ?>
           <li class="history-item">
@@ -139,6 +141,28 @@
                class="<?= ($page === 'reports' && $r['date'] === $selectedDate) ? 'active' : '' ?>">
               <span class="date-label"><?= esc($r['date']) ?></span>
               <?= badge($r['count']) ?>
+            </a>
+          </li>
+        <?php endforeach; ?>
+      </ul>
+    <?php endif; ?>
+
+    <?php if ($sidebarSettings['show_recent_activity'] && !empty($recentRuns)): ?>
+      <div class="sidebar-section">🕘 Recent Activity</div>
+      <ul class="sidebar-nav">
+        <?php foreach ($recentRuns as $run): ?>
+          <?php
+            $rPage   = ReportRegistry::page($run['tool']);
+            $rPrefix = ReportRegistry::prefix($run['tool']);
+            if (!$rPage || !$rPrefix) continue;
+            $rParam  = "{$rPrefix}_history";
+            $rCount  = (int) ($run['rows_found'] ?? 0);
+          ?>
+          <li class="history-item">
+            <a href="?page=<?= esc($rPage) ?>&<?= esc($rParam) ?>=<?= esc($run['date']) ?>"
+               class="<?= ($page === $rPage && ($_GET[$rParam] ?? '') === $run['date']) ? 'active' : '' ?>">
+              <span class="date-label"><?= esc(ReportRegistry::icon($run['tool'])) ?> <?= esc(ReportRegistry::label($run['tool'])) ?> · <?= esc($run['date']) ?></span>
+              <span class="badge badge-sm <?= $rCount > 0 ? 'badge-warn' : 'badge-ok' ?>"><?= $rCount ?></span>
             </a>
           </li>
         <?php endforeach; ?>
@@ -204,6 +228,28 @@
           require $pageFile;
       } else {
           require __DIR__ . '/hub-audit.php';
+      }
+
+      // Inline "History" list for this audit's own saved runs - centralised here
+      // so every audit page gets it without editing each individual view.
+      $inlineHistoryTool = ReportRegistry::toolForPage($page);
+      $inlineHistoryRuns = $inlineHistoryTool ? AuditSnapshot::forTool($inlineHistoryTool, 30) : [];
+      if ($inlineHistoryRuns) {
+          $ihPrefix = ReportRegistry::prefix($inlineHistoryTool);
+          $ihParam  = "{$ihPrefix}_history";
+          $ihActive = $_GET[$ihParam] ?? '';
+          echo '<div class="table-wrap mt-6"><div class="table-header"><h2>🕘 История</h2><span>'
+              . count($inlineHistoryRuns) . ' запазени пускания</span></div><ul class="audit-history-list">';
+          foreach ($inlineHistoryRuns as $run) {
+              $runCount = (int) ($run['rows_found'] ?? 0);
+              $active   = $run['date'] === $ihActive ? ' active' : '';
+              echo '<li class="audit-history-item' . $active . '">'
+                  . '<a href="?page=' . esc($page) . '&' . esc($ihParam) . '=' . esc($run['date']) . '">'
+                  . '<span class="date-label">' . esc($run['date']) . '</span>'
+                  . '<span class="badge ' . ($runCount > 0 ? 'badge-warn' : 'badge-ok') . '">' . $runCount . '</span>'
+                  . '</a></li>';
+          }
+          echo '</ul></div>';
       }
     ?>
   </main>

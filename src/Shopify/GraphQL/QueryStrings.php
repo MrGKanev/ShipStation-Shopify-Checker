@@ -52,16 +52,6 @@ class QueryStrings
         ]);
     }
 
-    public static function fulfilledOrPartialOrdersQuery(string $startDate, string $endDate): string
-    {
-        return implode(' ', [
-            'status:any',
-            '(fulfillment_status:fulfilled OR fulfillment_status:partial)',
-            'created_at:>=' . $startDate . 'T00:00:00Z',
-            'created_at:<=' . $endDate   . 'T23:59:59Z',
-        ]);
-    }
-
     /**
      * Orders fulfilled or partially fulfilled, found by when they were last touched
      * rather than when they were created — fulfilling an order always bumps
@@ -74,6 +64,22 @@ class QueryStrings
         return implode(' ', [
             'status:any',
             '(fulfillment_status:fulfilled OR fulfillment_status:partial)',
+            'updated_at:>=' . $startDate . 'T00:00:00Z',
+        ]);
+    }
+
+    /**
+     * Refunded or partially-refunded orders, found by when they were last touched
+     * rather than when they were created — issuing a refund always bumps
+     * updated_at, but an order can be created long before it's refunded.
+     * No upper bound: callers filter each refund by its own created_at for an
+     * exact date range.
+     */
+    public static function refundUpdatedSinceQuery(string $startDate): string
+    {
+        return implode(' ', [
+            'status:any',
+            '(financial_status:refunded OR financial_status:partially_refunded)',
             'updated_at:>=' . $startDate . 'T00:00:00Z',
         ]);
     }

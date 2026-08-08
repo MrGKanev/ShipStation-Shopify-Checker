@@ -1087,6 +1087,57 @@ class ShopifyClientTest extends TestCase
         $this->assertStringContainsString('transactions(first: 250)', $body['query']);
     }
 
+    public function testFetchOrdersRefundedSinceUsesUpdatedAtFilterWithNoUpperBound(): void
+    {
+        $history = [];
+        $shopify = $this->shopify([$this->graphQLOrders([[
+            'id' => 'gid://shopify/Order/670',
+            'legacyResourceId' => '670',
+            'name' => '#1670',
+            'createdAt' => '2026-03-02T10:00:00Z',
+            'cancelledAt' => null,
+            'email' => 'refunded-late@example.com',
+            'displayFinancialStatus' => 'PARTIALLY_REFUNDED',
+            'displayFulfillmentStatus' => 'FULFILLED',
+            'totalPriceSet' => ['shopMoney' => ['amount' => '120.00', 'currencyCode' => 'USD']],
+            'refunds' => [[
+                'id' => 'gid://shopify/Refund/940',
+                'legacyResourceId' => '940',
+                'createdAt' => '2026-07-15T10:00:00Z',
+                'note' => '',
+                'totalRefundedSet' => ['shopMoney' => ['amount' => '25.00', 'currencyCode' => 'USD']],
+                'refundLineItems' => ['nodes' => [[
+                    'quantity' => 1,
+                    'subtotalSet' => ['shopMoney' => ['amount' => '25.00', 'currencyCode' => 'USD']],
+                    'lineItem' => [
+                        'id' => 'gid://shopify/LineItem/840',
+                        'title' => 'Widget',
+                        'name' => 'Widget',
+                        'sku' => 'WGT',
+                        'quantity' => 1,
+                    ],
+                ]]],
+                'transactions' => ['nodes' => []],
+            ]],
+        ]])], $history);
+
+        $result = $shopify->fetchOrdersRefundedSince('2026-07-01');
+
+        // Order was created in March but fetched because it was refunded in July —
+        // this is the whole point: the query must not filter on created_at.
+        $this->assertSame(670, $result[0]['id']);
+        $this->assertSame('2026-03-02T10:00:00Z', $result[0]['created_at']);
+        $this->assertSame('2026-07-15T10:00:00Z', $result[0]['refunds'][0]['created_at']);
+
+        $body = json_decode((string) $history[0]['request']->getBody(), true);
+        $this->assertSame(
+            'status:any (financial_status:refunded OR financial_status:partially_refunded) updated_at:>=2026-07-01T00:00:00Z',
+            $body['variables']['query']
+        );
+        $this->assertStringNotContainsString('created_at', $body['variables']['query']);
+        $this->assertStringContainsString('refundLineItems(first: 250)', $body['query']);
+    }
+
     public function testFetchPartiallyFulfilledOrdersUsesGraphQLPartialFilter(): void
     {
         $history = [];
@@ -1125,41 +1176,6 @@ class ShopifyClientTest extends TestCase
         );
         $this->assertStringContainsString('lineItems(first: 250)', $body['query']);
         $this->assertStringContainsString('fulfillments(first: 250)', $body['query']);
-    }
-
-    public function testFetchFulfilledOrdersWithTrackingUsesGraphQLFulfillmentFilter(): void
-    {
-        $history = [];
-        $shopify = $this->shopify([$this->graphQLOrders([[
-            'id' => 'gid://shopify/Order/650',
-            'legacyResourceId' => '650',
-            'name' => '#1650',
-            'createdAt' => '2026-06-15T10:00:00Z',
-            'cancelledAt' => null,
-            'email' => 'tracking@example.com',
-            'displayFinancialStatus' => 'PAID',
-            'displayFulfillmentStatus' => 'FULFILLED',
-            'totalPriceSet' => ['shopMoney' => ['amount' => '70.00', 'currencyCode' => 'USD']],
-            'fulfillments' => [[
-                'id' => 'gid://shopify/Fulfillment/950',
-                'legacyResourceId' => '950',
-                'createdAt' => '2026-06-16T10:00:00Z',
-                'status' => 'SUCCESS',
-                'displayStatus' => 'FULFILLED',
-                'trackingInfo' => [],
-                'fulfillmentLineItems' => ['edges' => []],
-            ]],
-        ]])], $history);
-
-        $result = $shopify->fetchFulfilledOrdersWithTracking('2026-06-01', '2026-06-19');
-
-        $this->assertSame('fulfilled', $result[0]['fulfillment_status']);
-        $this->assertSame(950, $result[0]['fulfillments'][0]['id']);
-        $this->assertSame('', $result[0]['fulfillments'][0]['tracking_number']);
-
-        $body = json_decode((string) $history[0]['request']->getBody(), true);
-        $this->assertStringContainsString('(fulfillment_status:fulfilled OR fulfillment_status:partial)', $body['variables']['query']);
-        $this->assertStringContainsString('trackingInfo(first: 10)', $body['query']);
     }
 
     public function testFetchOrdersFulfilledSinceUsesUpdatedAtFilterWithNoUpperBound(): void
@@ -1215,6 +1231,46 @@ class ShopifyClientTest extends TestCase
         );
         $this->assertStringNotContainsString('created_at', $body['variables']['query']);
         $this->assertStringContainsString('fulfillments(first: 250)', $body['query']);
+    }
+
+    public function testFetchOrdersFulfilledSinceWithShippingUsesUpdatedAtFilterAndShippingLines(): void
+    {
+        $history = [];
+        $shopify = $this->shopify([$this->graphQLOrders([[
+            'id' => 'gid://shopify/Order/680',
+            'legacyResourceId' => '680',
+            'name' => '#1680',
+            'createdAt' => '2026-03-05T10:00:00Z',
+            'cancelledAt' => null,
+            'email' => 'margin-late@example.com',
+            'displayFinancialStatus' => 'PAID',
+            'displayFulfillmentStatus' => 'FULFILLED',
+            'totalPriceSet' => ['shopMoney' => ['amount' => '90.00', 'currencyCode' => 'USD']],
+            'shippingLines' => ['nodes' => [[
+                'id' => 'gid://shopify/ShippingLine/770',
+                'title' => 'Standard',
+                'code' => 'standard',
+                'originalPriceSet' => ['shopMoney' => ['amount' => '10.00', 'currencyCode' => 'USD']],
+            ]]],
+        ]])], $history);
+
+        $result = $shopify->fetchOrdersFulfilledSinceWithShipping('2026-07-01');
+
+        // Order was created in March but fetched because it was fulfilled in July —
+        // matching loadShippingMargin's shipment-date-bounded shipments requires the
+        // order set to not be filtered on created_at either.
+        $this->assertSame(680, $result[0]['id']);
+        $this->assertSame('2026-03-05T10:00:00Z', $result[0]['created_at']);
+        $this->assertSame('10.00', $result[0]['shipping_lines'][0]['price']);
+
+        $body = json_decode((string) $history[0]['request']->getBody(), true);
+        $this->assertSame(
+            'status:any (fulfillment_status:fulfilled OR fulfillment_status:partial) updated_at:>=2026-07-01T00:00:00Z',
+            $body['variables']['query']
+        );
+        $this->assertStringNotContainsString('created_at', $body['variables']['query']);
+        $this->assertStringContainsString('shippingLines(first: 250)', $body['query']);
+        $this->assertStringNotContainsString('fulfillments(first: 250)', $body['query']);
     }
 
     public function testFetchOrdersForHighValueUsesGraphQLAndUnfulfilledFilter(): void

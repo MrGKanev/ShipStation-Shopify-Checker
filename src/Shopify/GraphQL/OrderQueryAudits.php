@@ -88,23 +88,6 @@ class OrderQueryAudits
     }
 
     /**
-     * @return array<int, array<string, mixed>>
-     */
-    public function fetchFulfilledOrdersWithTracking(string $startDate, string $endDate): array
-    {
-        return $this->orders->fetchOrdersByQuery(
-            Queries::fulfilledOrPartialOrdersQuery($startDate, $endDate),
-            Queries::orderCoreFields()
-                . Queries::fulfillmentFields(),
-            fn(array $node) => in_array(
-                Normalizer::normalizeFulfillmentStatus($node['displayFulfillmentStatus'] ?? null),
-                ['fulfilled', 'partial'],
-                true
-            )
-        );
-    }
-
-    /**
      * Fetches fulfilled/partially-fulfilled orders by fulfillment activity rather than
      * order creation date, so orders created before $startDate but shipped after it are
      * still included. Callers should filter fulfillments by their own createdAt for an
@@ -121,6 +104,49 @@ class OrderQueryAudits
             fn(array $node) => in_array(
                 Normalizer::normalizeFulfillmentStatus($node['displayFulfillmentStatus'] ?? null),
                 ['fulfilled', 'partial'],
+                true
+            )
+        );
+    }
+
+    /**
+     * Same order set as fetchOrdersFulfilledSince(), but with shipping-line fields
+     * instead of fulfillment fields, for callers that only need to match a shipment
+     * to its order (e.g. shipping-margin scans) rather than inspect fulfillments.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersFulfilledSinceWithShipping(string $startDate): array
+    {
+        return $this->orders->fetchOrdersByQuery(
+            Queries::fulfillmentUpdatedSinceQuery($startDate),
+            Queries::orderCoreFields()
+                . Queries::shippingLineFields(),
+            fn(array $node) => in_array(
+                Normalizer::normalizeFulfillmentStatus($node['displayFulfillmentStatus'] ?? null),
+                ['fulfilled', 'partial'],
+                true
+            )
+        );
+    }
+
+    /**
+     * Fetches refunded/partially-refunded orders by refund activity (updated_at)
+     * rather than order creation date, so orders created before $startDate but
+     * refunded after it are still included. Callers should filter each order's
+     * refunds by their own createdAt for an exact date range.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersRefundedSince(string $startDate): array
+    {
+        return $this->orders->fetchOrdersByQuery(
+            Queries::refundUpdatedSinceQuery($startDate),
+            Queries::orderCoreFields()
+                . Queries::refundFields(),
+            fn(array $node) => in_array(
+                Normalizer::normalizeFinancialStatus($node['displayFinancialStatus'] ?? null),
+                ['refunded', 'partially_refunded'],
                 true
             )
         );

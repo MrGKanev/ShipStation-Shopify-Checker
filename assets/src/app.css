@@ -425,6 +425,16 @@ a:hover { text-decoration: underline; }
 .table-header h2   { @apply text-sm font-bold; }
 .table-header span { @apply text-xs leading-none; color: var(--muted); }
 
+.audit-history-list { @apply flex flex-wrap list-none; gap: .5rem; padding: 1rem 1.25rem; }
+.audit-history-item a {
+  @apply flex items-center gap-2 rounded-lg text-sm transition-colors border;
+  padding: .4rem .65rem;
+  border-color: var(--border);
+  color: var(--muted);
+}
+.audit-history-item a:hover { background: var(--c-hover); color: var(--text); text-decoration: none; }
+.audit-history-item.active a { background: var(--c-active); color: var(--accent); font-weight: 600; border-color: var(--accent); }
+
 table      { @apply w-full border-collapse; }
 thead th {
   @apply text-left text-xs font-bold uppercase whitespace-nowrap border-b;
