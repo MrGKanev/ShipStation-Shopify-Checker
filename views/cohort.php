@@ -127,7 +127,7 @@
             <?php
               $rate = $row['retention_rate'];
               $rateClass = $rate >= 30 ? 'color:var(--ok);font-weight:600'
-                         : ($rate >= 10 ? 'color:var(--warning);font-weight:600' : 'color:var(--danger)');
+                         : ($rate >= 10 ? 'color:var(--warn);font-weight:600' : 'color:var(--danger)');
             ?>
             <tr>
               <td class="font-bold"><?= esc($row['month']) ?></td>

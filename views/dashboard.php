@@ -175,7 +175,7 @@ $trend7Max   = $has7DayData ? max($has7DayData) : 0;
   <?php if (!empty($dbMissingByType) && $latestCount > 0): ?>
     <div style="padding:.35rem 0 .6rem;font-size:.8rem;color:var(--muted)">
       <?php foreach ($dbMissingByType as $type => $cnt): ?>
-        <span style="margin-right:.75rem"><strong style="color:var(--fg)"><?= $cnt ?>×</strong> <?= esc($type) ?></span>
+        <span style="margin-right:.75rem"><strong style="color:var(--text)"><?= $cnt ?>×</strong> <?= esc($type) ?></span>
       <?php endforeach; ?>
     </div>
   <?php endif; ?>

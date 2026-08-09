@@ -449,4 +449,53 @@ class ViewHelpersTest extends TestCase
         $this->assertStringNotContainsString('<script>', $html);
         $this->assertStringContainsString('&lt;script&gt;', $html);
     }
+
+    // ── severityColor ────────────────────────────────────────────────────────
+    // Backs the previously-duplicated (and, in 3 other views, mistyped
+    // "var(--warning)" instead of the actually-defined "var(--warn)") aging
+    // color logic in partialfulfill.php, onholdstall.php, notracking.php.
+
+    public function testAtOrAboveDangerThresholdIsDanger(): void
+    {
+        $this->assertSame('var(--danger)', severityColor(30, 30, 14));
+        $this->assertSame('var(--danger)', severityColor(45, 30, 14));
+    }
+
+    public function testAtOrAboveWarnThresholdBelowDangerIsWarn(): void
+    {
+        $this->assertSame('var(--warn)', severityColor(14, 30, 14));
+        $this->assertSame('var(--warn)', severityColor(29, 30, 14));
+    }
+
+    public function testJustUnderWarnThresholdIsNeutral(): void
+    {
+        $this->assertSame('inherit', severityColor(13, 30, 14));
+    }
+
+    public function testNullValueIsAlwaysNeutralRegardlessOfDirection(): void
+    {
+        $this->assertSame('inherit', severityColor(null, 30, 14));
+        $this->assertSame('', severityColor(null, 30, 14, false, ''));
+        $this->assertSame('inherit', severityColor(null, 7, 14, true));
+    }
+
+    public function testLowerIsWorseInvertsComparison(): void
+    {
+        // "days of stock remaining" style metric: 6 days left is critical.
+        $this->assertSame('var(--danger)', severityColor(6, 7, 14, true));
+        $this->assertSame('var(--warn)', severityColor(10, 7, 14, true));
+        $this->assertSame('inherit', severityColor(20, 7, 14, true));
+    }
+
+    public function testLowerIsWorseBoundariesAreExclusiveAtTheThreshold(): void
+    {
+        // Exactly at the threshold is not yet in the worse band.
+        $this->assertSame('var(--warn)', severityColor(7, 7, 14, true));
+        $this->assertSame('inherit', severityColor(14, 7, 14, true));
+    }
+
+    public function testCustomNeutralColorIsRespected(): void
+    {
+        $this->assertSame('', severityColor(1, 30, 14, false, ''));
+    }
 }

@@ -26,6 +26,40 @@ class MetricsEndpointTest extends TestCase
         $this->assertStringContainsString('shopify_ops_missing_orders_total', $output);
     }
 
+    public function testMetricsEndpointIncludesCacheEntriesGauge(): void
+    {
+        $output = $this->runMetrics([
+            'METRICS_TOKEN' => '',
+            'METRICS_ALLOW_PUBLIC' => '1',
+        ]);
+
+        $this->assertStringContainsString('# TYPE shopify_ops_cache_entries gauge', $output);
+        $this->assertMatchesRegularExpression('/shopify_ops_cache_entries\{store="[^"]*"\} \d+/', $output);
+    }
+
+    public function testMetricsEndpointIncludesAuditDurationOnlyWhenAnAuditHasRun(): void
+    {
+        $output = $this->runMetrics([
+            'METRICS_TOKEN' => '',
+            'METRICS_ALLOW_PUBLIC' => '1',
+        ]);
+
+        $runLog = json_decode((string) @file_get_contents(dirname(__DIR__, 2) . '/data/run_log.json'), true) ?: [];
+        $hasAuditRun = false;
+        foreach ($runLog as $entry) {
+            if (in_array($entry['tool'] ?? '', ['cli_audit', 'run_audit'], true)) {
+                $hasAuditRun = true;
+                break;
+            }
+        }
+
+        if ($hasAuditRun) {
+            $this->assertStringContainsString('shopify_ops_audit_duration_seconds', $output);
+        } else {
+            $this->assertStringNotContainsString('shopify_ops_audit_duration_seconds', $output);
+        }
+    }
+
     /**
      * @param array<string, string> $env
      */

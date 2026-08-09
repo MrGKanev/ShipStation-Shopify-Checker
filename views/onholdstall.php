@@ -68,7 +68,7 @@
           <?php foreach ($ohResult['rows'] as $row):
             $adminUrl  = $row['shopify_id'] ? $shopifyAdminBase . '/' . esc($row['shopify_id']) : null;
             $days      = (int)$row['days_waiting'];
-            $daysColor = $days >= 30 ? 'var(--danger)' : ($days >= 14 ? 'var(--warn)' : 'inherit');
+            $daysColor = severityColor((float)$days, 30, 14);
             $reasonLabel = match(strtoupper($row['hold_reason'])) {
                 'MANUAL'                  => 'Manual',
                 'HIGH_RISK_OF_FRAUD'      => 'High fraud risk',

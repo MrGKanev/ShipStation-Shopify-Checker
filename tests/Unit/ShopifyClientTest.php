@@ -1648,4 +1648,58 @@ class ShopifyClientTest extends TestCase
         $body = json_decode((string) $request->getBody(), true);
         $this->assertStringContainsString('products(first: 250, query: "status:active"', $body['query']);
     }
+
+    // ── fetchWebhooks ────────────────────────────────────────────────────────
+    // Uses an injectable $request callable (mirroring ApiHealth::checkShopify())
+    // rather than Guzzle, since it's the one REST (non-GraphQL) endpoint in
+    // this class - previously untested raw cURL with no DI seam at all.
+
+    public function testFetchWebhooksReturnsWebhooksOnSuccess(): void
+    {
+        $shopify = $this->shopify([]);
+        $calls = [];
+
+        $result = $shopify->fetchWebhooks(function (string $url, array $headers) use (&$calls): array {
+            $calls[] = [$url, $headers];
+            return ['ok' => true, 'code' => 200, 'error' => '', 'json' => [
+                'webhooks' => [['id' => 1, 'topic' => 'orders/create', 'address' => 'https://x.test/hook']],
+            ]];
+        });
+
+        $this->assertSame('', $result['error']);
+        $this->assertCount(1, $result['webhooks']);
+        $this->assertSame('orders/create', $result['webhooks'][0]['topic']);
+        $this->assertStringEndsWith('/webhooks.json?limit=250', $calls[0][0]);
+        $this->assertStringContainsString('X-Shopify-Access-Token: tok_test', implode('', $calls[0][1]));
+    }
+
+    public function testFetchWebhooksReturnsCurlErrorMessage(): void
+    {
+        $shopify = $this->shopify([]);
+
+        $result = $shopify->fetchWebhooks(fn() => ['ok' => false, 'code' => 0, 'error' => 'Could not resolve host', 'json' => []]);
+
+        $this->assertSame([], $result['webhooks']);
+        $this->assertStringContainsString('Could not resolve host', $result['error']);
+    }
+
+    public function testFetchWebhooksReturnsHttpErrorMessage(): void
+    {
+        $shopify = $this->shopify([]);
+
+        $result = $shopify->fetchWebhooks(fn() => ['ok' => false, 'code' => 401, 'error' => '', 'json' => []]);
+
+        $this->assertSame([], $result['webhooks']);
+        $this->assertStringContainsString('401', $result['error']);
+    }
+
+    public function testFetchWebhooksReturnsEmptyArrayWhenNoWebhooksKey(): void
+    {
+        $shopify = $this->shopify([]);
+
+        $result = $shopify->fetchWebhooks(fn() => ['ok' => true, 'code' => 200, 'error' => '', 'json' => []]);
+
+        $this->assertSame([], $result['webhooks']);
+        $this->assertSame('', $result['error']);
+    }
 }

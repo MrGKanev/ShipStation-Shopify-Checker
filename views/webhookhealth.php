@@ -48,7 +48,7 @@
         <tr>
           <td class="font-mono text-sm"><?= esc((string)($wh['id'] ?? '')) ?></td>
           <td>
-            <span class="source-badge" style="background:var(--primary-bg);color:var(--primary)">
+            <span class="source-badge" style="background:var(--c-info-bg);color:var(--c-info-fg)">
               <?= esc($wh['topic'] ?? '') ?>
             </span>
           </td>

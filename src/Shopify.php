@@ -407,36 +407,55 @@ class Shopify
      * Fetches all registered Shopify webhooks via the Admin REST API.
      * Returns the raw webhook objects from the API.
      *
+     * @param  ?callable(string, array<int, string>): array{ok: bool, code: int, error: string, json: array} $request
+     *         Injectable for tests; defaults to a real cURL GET.
      * @return array{webhooks: array<int, array<string, mixed>>, error: string}
      */
-    public function fetchWebhooks(): array
+    public function fetchWebhooks(?callable $request = null): array
     {
-        $url   = $this->baseUrl . '/webhooks.json?limit=250';
-        $token = $this->accessToken;
+        $url     = $this->baseUrl . '/webhooks.json?limit=250';
+        $request ??= [$this, 'curlGetJson'];
 
+        $result = $request($url, [
+            "X-Shopify-Access-Token: {$this->accessToken}",
+            'Accept: application/json',
+        ]);
+
+        if ($result['error'] !== '') {
+            return ['webhooks' => [], 'error' => "cURL error: {$result['error']}"];
+        }
+        if (!$result['ok']) {
+            return ['webhooks' => [], 'error' => "Shopify returned HTTP {$result['code']}"];
+        }
+
+        return ['webhooks' => $result['json']['webhooks'] ?? [], 'error' => ''];
+    }
+
+    /**
+     * @param  array<int, string> $headers
+     * @return array{ok: bool, code: int, error: string, json: array}
+     */
+    private function curlGetJson(string $url, array $headers): array
+    {
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 15,
-            CURLOPT_HTTPHEADER     => [
-                "X-Shopify-Access-Token: {$token}",
-                'Accept: application/json',
-            ],
+            CURLOPT_HTTPHEADER     => $headers,
             CURLOPT_USERAGENT      => 'ShopifyOps/1.0',
         ]);
         $raw  = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err  = curl_error($ch);
+        curl_close($ch);
 
-        if ($err) {
-            return ['webhooks' => [], 'error' => "cURL error: {$err}"];
-        }
-        if ($code < 200 || $code >= 300) {
-            return ['webhooks' => [], 'error' => "Shopify returned HTTP {$code}"];
-        }
-
-        $decoded = json_decode((string)$raw, true);
-        return ['webhooks' => $decoded['webhooks'] ?? [], 'error' => ''];
+        $json = is_string($raw) ? json_decode($raw, true) : null;
+        return [
+            'ok'    => $code >= 200 && $code < 300,
+            'code'  => $code,
+            'error' => $err ?: '',
+            'json'  => is_array($json) ? $json : [],
+        ];
     }
 
     /**

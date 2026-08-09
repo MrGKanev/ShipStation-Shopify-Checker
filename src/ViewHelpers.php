@@ -108,6 +108,34 @@ function timeGapDisplay(int $diffMins): array
     return ['label' => trim($label), 'color' => $color];
 }
 
+/**
+ * Threshold-based severity color for an aging/risk metric (days waiting,
+ * hours since last event, etc.). By default a higher value is worse
+ * (>= $dangerAt -> red, >= $warnAt -> yellow); pass $lowerIsWorse = true to
+ * invert the comparison (e.g. "days of stock remaining", where running low
+ * is the bad direction). A null value always returns $neutral - callers
+ * pass an unstyled/inherited color for "no data" rather than flagging it.
+ */
+function severityColor(
+    ?float $value,
+    float $dangerAt,
+    float $warnAt,
+    bool $lowerIsWorse = false,
+    string $neutral = 'inherit'
+): string {
+    if ($value === null) return $neutral;
+
+    if ($lowerIsWorse) {
+        if ($value < $dangerAt) return 'var(--danger)';
+        if ($value < $warnAt)   return 'var(--warn)';
+        return $neutral;
+    }
+
+    if ($value >= $dangerAt) return 'var(--danger)';
+    if ($value >= $warnAt)   return 'var(--warn)';
+    return $neutral;
+}
+
 function formatPrice(float|string|null $amount): string
 {
     if ($amount === null || $amount === '') return '-';

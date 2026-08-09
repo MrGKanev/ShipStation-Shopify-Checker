@@ -69,7 +69,7 @@
             $adminUrl = $row['shopify_id'] ? $shopifyAdminBase . '/' . esc($row['shopify_id']) : null;
           ?>
           <?php foreach ($row['missing'] as $idx => $f):
-            $hoursColor = $f['hours_ago'] >= 48 ? 'var(--danger)' : ($f['hours_ago'] >= 24 ? 'var(--warn)' : 'inherit');
+            $hoursColor = severityColor((float)$f['hours_ago'], 48, 24);
           ?>
           <tr>
             <?php if ($idx === 0): ?>

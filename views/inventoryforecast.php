@@ -7,7 +7,7 @@
     <li><strong>Daily Rate</strong> = units sold in the last 30 days &divide; 30.</li>
     <li><strong>Days to Zero</strong> = current stock &divide; daily rate. Blank means either no sales or stock is already zero.</li>
     <li><span style="color:var(--danger);font-weight:600">Red</span> = fewer than 7 days of stock remaining.
-        <span style="color:var(--warning);font-weight:600">Yellow</span> = 7–13 days.</li>
+        <span style="color:var(--warn);font-weight:600">Yellow</span> = 7–13 days.</li>
   </ul>
 <?= featureInfoEnd() ?>
 
@@ -85,7 +85,7 @@
                 $dtzStyle = 'color:var(--danger);font-weight:600';
             } elseif ($dtz !== null && $dtz < 14) {
                 $rowStyle = 'background:rgba(202,138,4,.07)';
-                $dtzStyle = 'color:var(--warning);font-weight:600';
+                $dtzStyle = 'color:var(--warn);font-weight:600';
             } else {
                 $rowStyle = '';
                 $dtzStyle = '';

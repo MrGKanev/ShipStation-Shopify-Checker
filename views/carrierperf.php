@@ -72,9 +72,9 @@
           <?php foreach ($cpResult['rows'] as $row): ?>
           <?php
             $latePct   = $row['late_pct'];
-            $lateColor = $latePct === null ? '' : ($latePct >= 20 ? 'color:var(--danger)' : ($latePct >= 10 ? 'color:var(--warning)' : ''));
+            $lateColor = $latePct === null ? '' : ($latePct >= 20 ? 'color:var(--danger)' : ($latePct >= 10 ? 'color:var(--warn)' : ''));
             $avgDays   = $row['avg_days'];
-            $avgColor  = $avgDays === null ? '' : ($avgDays > 7 ? 'color:var(--danger)' : ($avgDays > 5 ? 'color:var(--warning)' : ''));
+            $avgColor  = $avgDays === null ? '' : ($avgDays > 7 ? 'color:var(--danger)' : ($avgDays > 5 ? 'color:var(--warn)' : ''));
           ?>
           <tr>
             <td class="font-semibold"><?= esc($row['carrier']) ?></td>

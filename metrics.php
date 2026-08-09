@@ -40,20 +40,28 @@ $storeId      = trim((string) (getenv('SHOPIFY_STORE') ?: 'default'));
 $storeEscaped = str_replace(['\\', '"', "\n"], ['\\\\', '\\"', '\\n'], $storeId);
 $l            = '{store="' . $storeEscaped . '"}';
 
-// ── Missing orders (most recent audit run) ─────────────────────────────────
-$missingTotal = 0;
-$runLogFile   = __DIR__ . '/data/run_log.json';
+// ── Missing orders + duration (most recent audit run) ──────────────────────
+$missingTotal    = 0;
+$auditDuration   = 0.0;
+$hasAuditRun     = false;
+$runLogFile      = __DIR__ . '/data/run_log.json';
 if (file_exists($runLogFile)) {
     $runEntries = json_decode(file_get_contents($runLogFile), true) ?: [];
     // Entries are stored oldest-first; iterate in reverse for most recent
     foreach (array_reverse($runEntries) as $entry) {
         $tool = (string) ($entry['tool'] ?? '');
         if (in_array($tool, ['cli_audit', 'run_audit'], true) && isset($entry['rows_found'])) {
-            $missingTotal = (int) $entry['rows_found'];
+            $missingTotal  = (int) $entry['rows_found'];
+            $auditDuration = (float) ($entry['duration'] ?? 0);
+            $hasAuditRun   = true;
             break;
         }
     }
 }
+
+// ── Cache entries (files on disk in cache/) ────────────────────────────────
+$cacheDir     = __DIR__ . '/cache';
+$cacheEntries = is_dir($cacheDir) ? count(glob($cacheDir . '/*.json', GLOB_NOSORT) ?: []) : 0;
 
 // ── Audit reports (CSV files in reports/) ─────────────────────────────────
 $reportsDir        = __DIR__ . '/reports';
@@ -110,3 +118,13 @@ echo "\n";
 echo "# HELP shopify_ops_job_queue_pending Pending background jobs\n";
 echo "# TYPE shopify_ops_job_queue_pending gauge\n";
 echo "shopify_ops_job_queue_pending{$l} {$pendingJobs}\n";
+echo "\n";
+echo "# HELP shopify_ops_cache_entries Cache entries currently on disk\n";
+echo "# TYPE shopify_ops_cache_entries gauge\n";
+echo "shopify_ops_cache_entries{$l} {$cacheEntries}\n";
+if ($hasAuditRun) {
+    echo "\n";
+    echo "# HELP shopify_ops_audit_duration_seconds Duration of the most recent audit run\n";
+    echo "# TYPE shopify_ops_audit_duration_seconds gauge\n";
+    echo "shopify_ops_audit_duration_seconds{$l} {$auditDuration}\n";
+}
