@@ -247,6 +247,77 @@ class ComparatorTest extends TestCase
         $this->assertCount(1, $result['missing']);
     }
 
+    public function testCompareEmailFallbackExactly1PercentDoesNotMatch(): void
+    {
+        // Shopify: $100.00, SS: $101.00 → exactly 1.0% difference; the
+        // documented tolerance is a strict "< 0.01", so this boundary
+        // should NOT match (see priority docs/audit-test-coverage-gaps.md
+        // "Core audit engine" bullet on the 1.0% boundary).
+        $order        = $this->makeShopifyOrder(['total_price' => '100.00']);
+        $ssEmailIndex = ['test@example.com' => [['orderTotal' => 101.00, 'orderNumber' => '99999']]];
+
+        $result = Comparator::compare([$order], [], [], $ssEmailIndex);
+        $this->assertCount(1, $result['missing']);
+        $this->assertCount(0, $result['found']);
+    }
+
+    public function testCompareEmailFallbackJustUnder1PercentMatches(): void
+    {
+        // Shopify: $100.00, SS: $100.99 → 0.99% difference → should match
+        $order        = $this->makeShopifyOrder(['total_price' => '100.00']);
+        $ssEmailIndex = ['test@example.com' => [['orderTotal' => 100.99, 'orderNumber' => '99999']]];
+
+        $result = Comparator::compare([$order], [], [], $ssEmailIndex);
+        $this->assertCount(1, $result['found']);
+    }
+
+    // ── Orders missing fields entirely (not just empty) ────────────────────────
+
+    public function testCompareHandlesOrderMissingAllOptionalFields(): void
+    {
+        // No order_number/name/email/total_price/financial_status/etc at all -
+        // everything relies on `??` fallbacks inside compare().
+        $result = Comparator::compare([[]], []);
+
+        $this->assertCount(1, $result['missing']);
+        $this->assertSame([], $result['missing'][0]);
+    }
+
+    public function testCompareHandlesOrderMissingFieldsWithEmailFallback(): void
+    {
+        $ssEmailIndex = ['test@example.com' => [['orderTotal' => 50, 'orderNumber' => '1']]];
+
+        // Missing order_number/name/email/total_price entirely: normalise('')
+        // → '', email fallback also empty, so this must land in missing
+        // rather than throwing or false-matching.
+        $result = Comparator::compare([[]], [], [], $ssEmailIndex);
+
+        $this->assertCount(1, $result['missing']);
+    }
+
+    public function testBuildSSIndexHandlesOrderMissingOrderNumberField(): void
+    {
+        $index = Comparator::buildSSIndex([[]]);
+
+        $this->assertSame([], $index);
+    }
+
+    public function testBuildSSEmailIndexHandlesOrderMissingEmailField(): void
+    {
+        $index = Comparator::buildSSEmailIndex([[]]);
+
+        $this->assertSame([], $index);
+    }
+
+    public function testFindDuplicatesHandlesOrderMissingAllFields(): void
+    {
+        // No email/total_price/created_at at all: should be filtered out
+        // (no email, amount <= 0) rather than throwing.
+        $result = Comparator::findDuplicates([[], []]);
+
+        $this->assertSame([], $result);
+    }
+
     // ── findDuplicates ────────────────────────────────────────────────────────
 
     private function makeOrder(string $email, string $total, string $createdAt): array
@@ -270,6 +341,31 @@ class ComparatorTest extends TestCase
         $this->assertCount(1, $result);
         $this->assertSame('a@b.com', $result[0]['email']);
         $this->assertCount(2, $result[0]['orders']);
+    }
+
+    public function testFindDuplicatesExactly86400SecondsApartIsWithinWindow(): void
+    {
+        // The documented 24h window is inclusive ("<= 86400"), so orders
+        // exactly 86400 seconds apart must still cluster as duplicates.
+        $orders = [
+            $this->makeOrder('a@b.com', '50.00', '2024-01-01T10:00:00Z'),
+            $this->makeOrder('a@b.com', '50.00', '2024-01-02T10:00:00Z'), // exactly 24h later
+        ];
+        $result = Comparator::findDuplicates($orders);
+
+        $this->assertCount(1, $result);
+        $this->assertCount(2, $result[0]['orders']);
+    }
+
+    public function testFindDuplicatesOneSecondPast86400IsOutsideWindow(): void
+    {
+        $orders = [
+            $this->makeOrder('a@b.com', '50.00', '2024-01-01T10:00:00Z'),
+            $this->makeOrder('a@b.com', '50.00', '2024-01-02T10:00:01Z'), // 86401s later
+        ];
+        $result = Comparator::findDuplicates($orders);
+
+        $this->assertCount(0, $result);
     }
 
     public function testFindDuplicatesOutsideWindow(): void
@@ -634,5 +730,96 @@ class ComparatorTest extends TestCase
 
         $this->assertSame(0.0, $result['shippingCharged']);
         $this->assertSame(15.0, $result['loss']);
+    }
+
+    // ── applyOnHoldSkip ───────────────────────────────────────────────────────
+
+    private function baseResult(array $missing): array
+    {
+        return ['missing' => $missing, 'found' => [], 'skipped' => [], 'ignored' => []];
+    }
+
+    public function testOnHoldOrderMovedFromMissingToSkipped(): void
+    {
+        $result = $this->baseResult([['id' => 1, 'order_number' => '1001']]);
+
+        $out = Comparator::applyOnHoldSkip($result, fn(array $o) => true);
+
+        $this->assertSame([], $out['missing']);
+        $this->assertCount(1, $out['skipped']);
+        $this->assertSame('on_hold', $out['skipped'][0]['_skip_reason']);
+        $this->assertSame('1001', $out['skipped'][0]['order_number']);
+    }
+
+    public function testNotOnHoldOrderStaysMissing(): void
+    {
+        $result = $this->baseResult([['id' => 1, 'order_number' => '1001']]);
+
+        $out = Comparator::applyOnHoldSkip($result, fn(array $o) => false);
+
+        $this->assertCount(1, $out['missing']);
+        $this->assertSame([], $out['skipped']);
+    }
+
+    public function testOnHoldCheckOnlyRunsForEachMissingOrderOnce(): void
+    {
+        $result = $this->baseResult([
+            ['id' => 1, 'order_number' => '1001'],
+            ['id' => 2, 'order_number' => '1002'],
+        ]);
+        $checkedIds = [];
+
+        $out = Comparator::applyOnHoldSkip($result, function (array $o) use (&$checkedIds) {
+            $checkedIds[] = $o['id'];
+            return $o['id'] === 2;
+        });
+
+        $this->assertSame([1, 2], $checkedIds);
+        $this->assertSame(['1001'], array_column($out['missing'], 'order_number'));
+        $this->assertSame(['1002'], array_column($out['skipped'], 'order_number'));
+    }
+
+    public function testEmptyMissingSkipsOnHoldCheckEntirely(): void
+    {
+        $result = $this->baseResult([]);
+        $called = false;
+
+        $out = Comparator::applyOnHoldSkip($result, function () use (&$called) {
+            $called = true;
+            return true;
+        });
+
+        $this->assertFalse($called);
+        $this->assertSame($result, $out);
+    }
+
+    public function testExistingSkippedAndFoundOrdersArePreserved(): void
+    {
+        $result = [
+            'missing' => [['id' => 1, 'order_number' => '1001']],
+            'found'   => [['id' => 2]],
+            'skipped' => [['id' => 3, '_skip_reason' => 'cancelled']],
+            'ignored' => [['id' => 4]],
+        ];
+
+        $out = Comparator::applyOnHoldSkip($result, fn(array $o) => true);
+
+        $this->assertSame([['id' => 2]], $out['found']);
+        $this->assertSame([['id' => 4]], $out['ignored']);
+        $this->assertCount(2, $out['skipped']);
+        $this->assertSame('cancelled', $out['skipped'][0]['_skip_reason']);
+        $this->assertSame('on_hold', $out['skipped'][1]['_skip_reason']);
+    }
+
+    public function testThrownExceptionFromIsOnHoldPropagatesWithoutSwallowing(): void
+    {
+        $result = $this->baseResult([['id' => 1, 'order_number' => '1001']]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Shopify API down');
+
+        Comparator::applyOnHoldSkip($result, function () {
+            throw new RuntimeException('Shopify API down');
+        });
     }
 }

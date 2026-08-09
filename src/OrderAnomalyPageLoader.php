@@ -33,33 +33,7 @@ class OrderAnomalyPageLoader
                 $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
                 $orders = self::suppressOutput(fn() => $shopify->fetchOrdersForAddressScan($start, $end, $unfulfilledOnly));
 
-                $rows = [];
-                foreach ($orders as $o) {
-                    $addr = $o['shipping_address'] ?? null;
-                    $issues = self::checkAddress($addr, $o);
-                    if (!empty($issues)) {
-                        $rows[] = [
-                            'shopify_id'   => $o['id'] ?? '',
-                            'order_number' => $o['name'] ?? '',
-                            'created_at'   => self::dateOnly($o['created_at'] ?? ''),
-                            'email'        => $o['email'] ?? '',
-                            'address'      => $addr,
-                            'issues'       => $issues,
-                            'severity'     => in_array('critical', array_column($issues, 'level')) ? 'critical' : 'warning',
-                        ];
-                    }
-                }
-                usort($rows, fn($a, $b) =>
-                    ($a['severity'] === 'critical' ? 0 : 1) <=> ($b['severity'] === 'critical' ? 0 : 1)
-                );
-                if ($poBoxOnly) {
-                    $rows = array_values(array_filter($rows, function ($r) {
-                        foreach ($r['issues'] as $issue) {
-                            if (in_array($issue['code'], ['po_box', 'po_box_carrier'], true)) return true;
-                        }
-                        return false;
-                    }));
-                }
+                $rows = self::buildAddrCheckRows($orders, $poBoxOnly);
                 return [
                     'rows'        => $rows,
                     'scanned'     => count($orders),
@@ -74,6 +48,45 @@ class OrderAnomalyPageLoader
         return compact('addrResult', 'addrError', 'addrStart', 'addrEnd', 'poBoxOnly', 'unfulfilledOnly');
     }
 
+    /**
+     * Address Scanner rows: orders with at least one address issue, sorted
+     * critical-first, optionally filtered to only PO-box-related issues.
+     *
+     * @param  array<int, array<string, mixed>> $orders
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildAddrCheckRows(array $orders, bool $poBoxOnly): array
+    {
+        $rows = [];
+        foreach ($orders as $o) {
+            $addr = $o['shipping_address'] ?? null;
+            $issues = self::checkAddress($addr, $o);
+            if (!empty($issues)) {
+                $rows[] = [
+                    'shopify_id'   => $o['id'] ?? '',
+                    'order_number' => $o['name'] ?? '',
+                    'created_at'   => self::dateOnly($o['created_at'] ?? ''),
+                    'email'        => $o['email'] ?? '',
+                    'address'      => $addr,
+                    'issues'       => $issues,
+                    'severity'     => in_array('critical', array_column($issues, 'level')) ? 'critical' : 'warning',
+                ];
+            }
+        }
+        usort($rows, fn($a, $b) =>
+            ($a['severity'] === 'critical' ? 0 : 1) <=> ($b['severity'] === 'critical' ? 0 : 1)
+        );
+        if ($poBoxOnly) {
+            $rows = array_values(array_filter($rows, function ($r) {
+                foreach ($r['issues'] as $issue) {
+                    if (in_array($issue['code'], ['po_box', 'po_box_carrier'], true)) return true;
+                }
+                return false;
+            }));
+        }
+        return $rows;
+    }
+
     private static function checkAddress(?array $addr, array $order): array
     {
         $issues = [];
@@ -83,13 +96,16 @@ class OrderAnomalyPageLoader
             return $issues;
         }
 
-        $name = trim(($addr['first_name'] ?? '') . ' ' . ($addr['last_name'] ?? ''));
-        $address1 = trim($addr['address1'] ?? '');
-        $city = trim($addr['city'] ?? '');
-        $zip = trim($addr['zip'] ?? '');
-        $country = strtoupper(trim($addr['country_code'] ?? $addr['country'] ?? ''));
-        $province = trim($addr['province_code'] ?? '');
-        $phone = trim($addr['phone'] ?? '');
+        // Cast every field to string first - a malformed payload can hand us
+        // an int (e.g. a numeric ZIP), which would TypeError on trim()
+        // under strict_types otherwise.
+        $name = trim((string)($addr['first_name'] ?? '') . ' ' . (string)($addr['last_name'] ?? ''));
+        $address1 = trim((string)($addr['address1'] ?? ''));
+        $city = trim((string)($addr['city'] ?? ''));
+        $zip = trim((string)($addr['zip'] ?? ''));
+        $country = strtoupper(trim((string)($addr['country_code'] ?? $addr['country'] ?? '')));
+        $province = trim((string)($addr['province_code'] ?? ''));
+        $phone = trim((string)($addr['phone'] ?? ''));
 
         if (!$name || $name === ' ') {
             $issues[] = ['level' => 'critical', 'code' => 'no_name', 'message' => 'Missing recipient name'];
@@ -253,30 +269,8 @@ class OrderAnomalyPageLoader
                     return [$ss->fetchAllOrders($start, $end), $shopify->fetchAllOrders($start, $end)];
                 });
 
-                $shIndex = [];
-                foreach ($shOrders as $o) {
-                    $num = Comparator::normalise((string)($o['order_number'] ?? ltrim($o['name'] ?? '', '#')));
-                    if ($num) $shIndex[$num] = true;
-                }
-
-                $rows = [];
-                foreach ($ssOrders as $o) {
-                    $num = Comparator::normalise((string)($o['orderNumber'] ?? ''));
-                    if (!$num || isset($shIndex[$num])) continue;
-                    $rows[] = [
-                        'ss_order_id'  => $o['orderId']     ?? '',
-                        'order_number' => $o['orderNumber'] ?? '',
-                        'order_status' => $o['orderStatus'] ?? '',
-                        'order_date'   => self::dateOnly($o['orderDate'] ?? ''),
-                        'customer'     => trim(($o['shipTo']['name'] ?? '')),
-                        'email'        => $o['customerEmail'] ?? '',
-                        'total'        => $o['orderTotal']   ?? 0,
-                        'ss_url'       => $o['orderId'] ? 'https://app.shipstation.com/#!/orders/order-details/' . urlencode($o['orderId']) : null,
-                    ];
-                }
-                usort($rows, fn($a, $b) => strcmp($b['order_date'], $a['order_date']));
                 return [
-                    'rows'     => $rows,
+                    'rows'     => self::buildOrphanRows($ssOrders, $shOrders),
                     'ss_total' => count($ssOrders),
                     'sh_total' => count($shOrders),
                     'start'    => $start,
@@ -285,6 +279,51 @@ class OrderAnomalyPageLoader
             }, 30, true);
 
         return compact('orphanResult', 'orphanError', 'orphanStart', 'orphanEnd');
+    }
+
+    /**
+     * SS orders with no matching Shopify order, sorted by order_date desc.
+     *
+     * Matches via Comparator::orderNumberKeys() - the same digit-run
+     * extraction used by the main audit engine's buildSSIndex() - so that
+     * compound SS order numbers (e.g. "100042-B2") resolve to the same
+     * Shopify counterpart instead of false-positiving as orphans.
+     *
+     * @param  array<int, array<string, mixed>> $ssOrders
+     * @param  array<int, array<string, mixed>> $shOrders
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildOrphanRows(array $ssOrders, array $shOrders): array
+    {
+        $shIndex = [];
+        foreach ($shOrders as $o) {
+            $num = Comparator::normalise((string)($o['order_number'] ?? ltrim($o['name'] ?? '', '#')));
+            if ($num) $shIndex[$num] = true;
+        }
+
+        $rows = [];
+        foreach ($ssOrders as $o) {
+            $raw = (string)($o['orderNumber'] ?? '');
+            $keys = Comparator::orderNumberKeys($raw);
+            if (empty($keys)) continue;
+            $matched = false;
+            foreach ($keys as $key) {
+                if (isset($shIndex[$key])) { $matched = true; break; }
+            }
+            if ($matched) continue;
+            $rows[] = [
+                'ss_order_id'  => $o['orderId']     ?? '',
+                'order_number' => $o['orderNumber'] ?? '',
+                'order_status' => $o['orderStatus'] ?? '',
+                'order_date'   => self::dateOnly($o['orderDate'] ?? ''),
+                'customer'     => trim(($o['shipTo']['name'] ?? '')),
+                'email'        => $o['customerEmail'] ?? '',
+                'total'        => $o['orderTotal']   ?? 0,
+                'ss_url'       => $o['orderId'] ? 'https://app.shipstation.com/#!/orders/order-details/' . urlencode($o['orderId']) : null,
+            ];
+        }
+        usort($rows, fn($a, $b) => strcmp($b['order_date'], $a['order_date']));
+        return $rows;
     }
 
     private static function loadRepeatRefunds(string $action, array $ctx): array
@@ -298,43 +337,57 @@ class OrderAnomalyPageLoader
                 $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
                 $refundedOrders = self::suppressOutput(fn() => $shopify->fetchRefundedOrders($start, $end));
 
-                $byEmail = [];
-                foreach ($refundedOrders as $o) {
-                    $email = strtolower(trim($o['email'] ?? ''));
-                    if (!$email) continue;
-                    $refundedAmt = 0.0;
-                    foreach ($o['refunds'] ?? [] as $ref) {
-                        foreach ($ref['transactions'] ?? [] as $tx) {
-                            if (($tx['kind'] ?? '') === 'refund' && ($tx['status'] ?? '') === 'success') {
-                                $refundedAmt += (float)($tx['amount'] ?? 0);
-                            }
-                        }
-                    }
-                    $byEmail[$email][] = [
-                        'order_number' => $o['name'] ?? '',
-                        'shopify_id'   => $o['id'] ?? '',
-                        'created_at'   => self::dateOnly($o['created_at'] ?? ''),
-                        'refunded_amt' => $refundedAmt,
-                    ];
-                }
-
-                $rows = [];
-                foreach ($byEmail as $email => $orders) {
-                    if (count($orders) < $rrMinCount) continue;
-                    $totalRefunded = array_sum(array_column($orders, 'refunded_amt'));
-                    usort($orders, fn($a, $b) => strcmp($b['created_at'], $a['created_at']));
-                    $rows[] = [
-                        'email'          => $email,
-                        'refund_count'   => count($orders),
-                        'total_refunded' => $totalRefunded,
-                        'orders'         => $orders,
-                    ];
-                }
-                usort($rows, fn($a, $b) => $b['refund_count'] <=> $a['refund_count']);
+                $rows = self::buildRepeatRefundRows($refundedOrders, $rrMinCount);
                 return ['rows' => $rows, 'scanned' => count($refundedOrders), 'start' => $start, 'end' => $end, 'min_count' => $rrMinCount];
             }, 90);
 
         return compact('rrResult', 'rrError', 'rrStart', 'rrEnd', 'rrMinCount');
+    }
+
+    /**
+     * Repeat Refunds rows: customers (by email) with at least $rrMinCount
+     * refunded orders in range, sorted by refund_count descending.
+     * Only successful refund transactions count toward refunded_amt.
+     *
+     * @param  array<int, array<string, mixed>> $refundedOrders
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildRepeatRefundRows(array $refundedOrders, int $rrMinCount): array
+    {
+        $byEmail = [];
+        foreach ($refundedOrders as $o) {
+            $email = strtolower(trim($o['email'] ?? ''));
+            if (!$email) continue;
+            $refundedAmt = 0.0;
+            foreach ($o['refunds'] ?? [] as $ref) {
+                foreach ($ref['transactions'] ?? [] as $tx) {
+                    if (($tx['kind'] ?? '') === 'refund' && ($tx['status'] ?? '') === 'success') {
+                        $refundedAmt += (float)($tx['amount'] ?? 0);
+                    }
+                }
+            }
+            $byEmail[$email][] = [
+                'order_number' => $o['name'] ?? '',
+                'shopify_id'   => $o['id'] ?? '',
+                'created_at'   => self::dateOnly($o['created_at'] ?? ''),
+                'refunded_amt' => $refundedAmt,
+            ];
+        }
+
+        $rows = [];
+        foreach ($byEmail as $email => $orders) {
+            if (count($orders) < $rrMinCount) continue;
+            $totalRefunded = array_sum(array_column($orders, 'refunded_amt'));
+            usort($orders, fn($a, $b) => strcmp($b['created_at'], $a['created_at']));
+            $rows[] = [
+                'email'          => $email,
+                'refund_count'   => count($orders),
+                'total_refunded' => $totalRefunded,
+                'orders'         => $orders,
+            ];
+        }
+        usort($rows, fn($a, $b) => $b['refund_count'] <=> $a['refund_count']);
+        return $rows;
     }
 
     private static function loadFailedShipments(string $action, array $ctx): array
@@ -357,26 +410,7 @@ class OrderAnomalyPageLoader
                     $ss = new ShipStation($ctx['ssKey'], $ctx['ssSecret']);
                     $shipments = self::suppressOutput(fn() => $ss->fetchVoidedShipments($fsStart, $fsEnd));
 
-                    $rows = [];
-                    foreach ($shipments as $s) {
-                        $addr = $s['shipTo'] ?? null;
-                        $rows[] = [
-                            'order_number'    => $s['orderNumber'] ?? '',
-                            'shipment_id'     => $s['shipmentId']  ?? '',
-                            'tracking'        => $s['trackingNumber'] ?? '',
-                            'carrier'         => $s['carrierCode']    ?? '',
-                            'service'         => $s['serviceCode']    ?? '',
-                            'ship_date'       => self::dateOnly($s['shipDate']  ?? ''),
-                            'void_date'       => self::dateOnly($s['voidDate']  ?? ''),
-                            'ship_to_name'    => trim(($addr['name'] ?? '')),
-                            'ship_to_city'    => $addr['city']       ?? '',
-                            'ship_to_state'   => $addr['state']      ?? '',
-                            'ship_to_zip'     => $addr['postalCode'] ?? '',
-                            'ship_to_country' => $addr['country']    ?? '',
-                        ];
-                    }
-                    usort($rows, fn($a, $b) => strcmp($b['void_date'], $a['void_date']));
-                    $fsResult = ['rows' => $rows, 'start' => $fsStart, 'end' => $fsEnd];
+                    $fsResult = ['rows' => self::buildFailedShipmentRows($shipments), 'start' => $fsStart, 'end' => $fsEnd];
                 } catch (Throwable $e) {
                     $fsError = $e->getMessage();
                 }
@@ -384,6 +418,37 @@ class OrderAnomalyPageLoader
         }
 
         return compact('fsResult', 'fsError', 'fsStart', 'fsEnd');
+    }
+
+    /**
+     * Builds Voided Shipments rows from raw SS shipment records, sorted by
+     * void_date descending. Handles a missing/null shipTo address.
+     *
+     * @param  array<int, array<string, mixed>> $shipments
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildFailedShipmentRows(array $shipments): array
+    {
+        $rows = [];
+        foreach ($shipments as $s) {
+            $addr = $s['shipTo'] ?? null;
+            $rows[] = [
+                'order_number'    => $s['orderNumber'] ?? '',
+                'shipment_id'     => $s['shipmentId']  ?? '',
+                'tracking'        => $s['trackingNumber'] ?? '',
+                'carrier'         => $s['carrierCode']    ?? '',
+                'service'         => $s['serviceCode']    ?? '',
+                'ship_date'       => self::dateOnly($s['shipDate']  ?? ''),
+                'void_date'       => self::dateOnly($s['voidDate']  ?? ''),
+                'ship_to_name'    => trim(($addr['name'] ?? '')),
+                'ship_to_city'    => $addr['city']       ?? '',
+                'ship_to_state'   => $addr['state']      ?? '',
+                'ship_to_zip'     => $addr['postalCode'] ?? '',
+                'ship_to_country' => $addr['country']    ?? '',
+            ];
+        }
+        usort($rows, fn($a, $b) => strcmp($b['void_date'], $a['void_date']));
+        return $rows;
     }
 
     private static function loadAddrChanges(string $action, array $ctx): array
@@ -398,34 +463,53 @@ class OrderAnomalyPageLoader
                 $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
                 $entries = self::suppressOutput(fn() => $shopify->fetchOrdersWithAddressChanges($start, $end));
 
-                $rows = [];
-                foreach ($entries as $e) {
-                    $o = $e['order'];
-                    $addr = $o['shipping_address'] ?? null;
-                    $addrLine = $addr ? implode(', ', array_filter([
-                        $addr['address1']      ?? '',
-                        $addr['city']          ?? '',
-                        $addr['province_code'] ?? '',
-                        $addr['zip']           ?? '',
-                        $addr['country_code']  ?? '',
-                    ])) : '';
-                    $rows[] = [
-                        'shopify_id'   => $o['id']           ?? '',
-                        'order_number' => $o['name']         ?? '',
-                        'created_at'   => self::dateOnly($o['created_at']  ?? ''),
-                        'changed_at'   => substr($e['changed_at']  ?? '', 0, 16),
-                        'email'        => $o['email']        ?? '',
-                        'total'        => $o['total_price']  ?? '',
-                        'financial'    => $o['financial_status']    ?? '',
-                        'fulfillment'  => $o['fulfillment_status']  ?? '',
-                        'addr_name'    => trim(($addr['first_name'] ?? '') . ' ' . ($addr['last_name'] ?? '')),
-                        'addr_line'    => $addrLine,
-                    ];
-                }
+                $rows = self::buildAddrChangeRows($entries);
                 return ['rows' => $rows, 'start' => $start, 'end' => $end];
             });
 
         return compact('acResult', 'acError', 'acStart', 'acEnd');
+    }
+
+    /**
+     * Address Changes rows, one per order with an address-change event.
+     * `gap_mins` is the documented "time gap between placement and change"
+     * (order created_at → event changed_at, in minutes; 0 if either
+     * timestamp is missing/unparseable).
+     *
+     * @param  array<int, array{order: array<string, mixed>, changed_at: string}> $entries
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildAddrChangeRows(array $entries): array
+    {
+        $rows = [];
+        foreach ($entries as $e) {
+            $o = $e['order'];
+            $addr = $o['shipping_address'] ?? null;
+            $addrLine = $addr ? implode(', ', array_filter([
+                $addr['address1']      ?? '',
+                $addr['city']          ?? '',
+                $addr['province_code'] ?? '',
+                $addr['zip']           ?? '',
+                $addr['country_code']  ?? '',
+            ])) : '';
+            $createdTs = strtotime($o['created_at'] ?? '');
+            $changedTs = strtotime($e['changed_at'] ?? '');
+            $gapMins   = ($createdTs && $changedTs) ? max(0, (int)(($changedTs - $createdTs) / 60)) : 0;
+            $rows[] = [
+                'shopify_id'   => $o['id']           ?? '',
+                'order_number' => $o['name']         ?? '',
+                'created_at'   => self::dateOnly($o['created_at']  ?? ''),
+                'changed_at'   => substr($e['changed_at']  ?? '', 0, 16),
+                'gap_mins'     => $gapMins,
+                'email'        => $o['email']        ?? '',
+                'total'        => $o['total_price']  ?? '',
+                'financial'    => $o['financial_status']    ?? '',
+                'fulfillment'  => $o['fulfillment_status']  ?? '',
+                'addr_name'    => trim(($addr['first_name'] ?? '') . ' ' . ($addr['last_name'] ?? '')),
+                'addr_line'    => $addrLine,
+            ];
+        }
+        return $rows;
     }
 
     private static function dateOnly(string $dt): string

@@ -176,6 +176,45 @@ class ShipStationClientTest extends TestCase
         $this->assertStringContainsString('orderStatus=on_hold', $uris[2]);
     }
 
+    // ── fetchVoidedShipments ─────────────────────────────────────────────────
+
+    public function testFetchVoidedShipmentsPassesVoidDateRangeParams(): void
+    {
+        $history = [];
+        $ss = $this->ss([$this->json(['shipments' => [], 'total' => 0])], $history);
+
+        $ss->fetchVoidedShipments('2026-06-01', '2026-06-20');
+
+        $uri = urldecode((string) $history[0]['request']->getUri());
+        $this->assertStringContainsString('voidDate_start=2026-06-01 00:00:00', $uri);
+        $this->assertStringContainsString('voidDate_end=2026-06-20 23:59:59', $uri);
+    }
+
+    public function testFetchVoidedShipmentsReturnsEmptyArrayWhenNoneVoided(): void
+    {
+        $ss = $this->ss([$this->json(['shipments' => [], 'total' => 0])]);
+
+        $result = $ss->fetchVoidedShipments('2026-06-01', '2026-06-20');
+
+        $this->assertSame([], $result);
+    }
+
+    public function testFetchVoidedShipmentsPaginatesUntilTotalReached(): void
+    {
+        $history = [];
+        $ss = $this->ss([
+            $this->json(['shipments' => [['shipmentId' => 1]], 'total' => 2]),
+            $this->json(['shipments' => [['shipmentId' => 2]], 'total' => 2]),
+        ], $history);
+
+        $result = $ss->fetchVoidedShipments('2026-06-01', '2026-06-20');
+
+        $this->assertSame([['shipmentId' => 1], ['shipmentId' => 2]], $result);
+        $this->assertCount(2, $history);
+        $this->assertStringContainsString('page=1', urldecode((string) $history[0]['request']->getUri()));
+        $this->assertStringContainsString('page=2', urldecode((string) $history[1]['request']->getUri()));
+    }
+
     public function testFetchAllOrdersWritesCheckpointUnderProvidedCacheDir(): void
     {
         $tmpDir = sys_get_temp_dir() . '/ss_checkpoint_' . uniqid();

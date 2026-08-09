@@ -68,15 +68,9 @@
         <tbody>
           <?php foreach ($oeResult['rows'] as $row):
             $adminUrl  = $row['shopify_id'] ? $shopifyAdminBase . '/' . esc($row['shopify_id']) : null;
-            $diffMins  = (int) $row['diff_mins'];
-            $diffDays  = intdiv($diffMins, 1440);
-            $diffHours = intdiv($diffMins % 1440, 60);
-            $diffRem   = $diffMins % 60;
-            if ($diffDays > 0)       $gapLabel = "{$diffDays}d " . ($diffHours ? "{$diffHours}h" : '');
-            elseif ($diffHours > 0)  $gapLabel = "{$diffHours}h " . ($diffRem ? "{$diffRem}m" : '');
-            else                     $gapLabel = "{$diffMins}m";
-            $gapLabel  = trim($gapLabel);
-            $gapColor  = $diffDays >= 1 ? 'var(--danger)' : ($diffHours >= 1 ? 'var(--warn)' : 'var(--muted)');
+            $gap       = timeGapDisplay((int) $row['diff_mins']);
+            $gapLabel  = $gap['label'];
+            $gapColor  = $gap['color'];
           ?>
           <tr>
             <td class="order-num">

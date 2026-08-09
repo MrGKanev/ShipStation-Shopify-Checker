@@ -47,6 +47,7 @@ class QueryStrings
         return implode(' ', [
             'status:open',
             'fulfillment_status:partial',
+            '-financial_status:refunded',
             'created_at:>=' . $startDate . 'T00:00:00Z',
             'created_at:<=' . $endDate   . 'T23:59:59Z',
         ]);

@@ -52,8 +52,33 @@ class OrderEventAudits
      */
     public function fetchEditedOrders(string $startDate, string $endDate): array
     {
+        $byOrder = self::groupEditEventsByOrder(
+            $this->orders->fetchEventsByQuery(Queries::orderEventDateRangeQuery($startDate, $endDate))
+        );
+
+        if (empty($byOrder)) return [];
+
+        $ordersById = $this->orders->fetchOrdersByIds(
+            array_keys($byOrder),
+            Queries::orderCoreFields()
+        );
+
+        return self::buildEditedOrderRows($ordersById, $byOrder);
+    }
+
+    /**
+     * Groups order-edit events by subject order id: latest event timestamp
+     * wins for `latest_at`, and `summary` collects up to 4 unique messages
+     * per order (first-seen order, later duplicates of an already-seen
+     * message are skipped).
+     *
+     * @param  iterable<array<string, mixed>> $events
+     * @return array<string, array{latest_at: string, summary: list<string>}>
+     */
+    public static function groupEditEventsByOrder(iterable $events): array
+    {
         $byOrder = [];
-        foreach ($this->orders->fetchEventsByQuery(Queries::orderEventDateRangeQuery($startDate, $endDate)) as $ev) {
+        foreach ($events as $ev) {
             if (!Normalizer::isOrderEditEvent($ev)) {
                 continue;
             }
@@ -75,15 +100,20 @@ class OrderEventAudits
                 $byOrder[$id]['summary'][] = $short;
             }
         }
+        return $byOrder;
+    }
 
-        if (empty($byOrder)) return [];
-
+    /**
+     * Order Edit History rows joining fetched orders with their grouped
+     * edit events, sorted by edited_at descending.
+     *
+     * @param  array<string, array<string, mixed>>                          $ordersById
+     * @param  array<string, array{latest_at: string, summary: list<string>}> $byOrder
+     * @return array<int, array<string, mixed>>
+     */
+    public static function buildEditedOrderRows(array $ordersById, array $byOrder): array
+    {
         $rows = [];
-        $ordersById = $this->orders->fetchOrdersByIds(
-            array_keys($byOrder),
-            Queries::orderCoreFields()
-        );
-
         foreach ($ordersById as $oid => $o) {
             $ev        = $byOrder[$oid] ?? [];
             $createdTs = strtotime($o['created_at'] ?? '');

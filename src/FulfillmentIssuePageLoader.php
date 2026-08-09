@@ -359,44 +359,58 @@ class FulfillmentIssuePageLoader
                 $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
                 $orders  = self::suppressOutput(fn() => $shopify->fetchOrdersForSla($start, $end));
 
-                $now  = time();
-                $rows = [];
-                foreach ($orders as $o) {
-                    if (!empty($o['cancelled_at'])) continue;
-                    if (in_array($o['financial_status'] ?? '', ['refunded', 'voided'], true)) continue;
-
-                    $createdTs = strtotime($o['created_at'] ?? '');
-                    if (!$createdTs) continue;
-
-                    $firstFulfillment = self::firstFulfillmentAt($o);
-                    $fulfilledTs      = $firstFulfillment ? strtotime($firstFulfillment) : null;
-                    $days             = $fulfilledTs
-                        ? (int) floor(($fulfilledTs - $createdTs) / 86400)
-                        : (int) floor(($now - $createdTs) / 86400);
-
-                    if ($days < $slaThreshold) continue;
-
-                    $addr = $o['shipping_address'] ?? [];
-                    $rows[] = [
-                        'shopify_id'   => $o['id'] ?? '',
-                        'order_number' => $o['name'] ?? '',
-                        'created_at'   => self::dateOnly($o['created_at'] ?? ''),
-                        'fulfilled_at' => $firstFulfillment ? self::dateOnly($firstFulfillment) : '',
-                        'days'         => $days,
-                        'email'        => $o['email'] ?? '',
-                        'total'        => $o['total_price'] ?? '',
-                        'financial'    => $o['financial_status'] ?? '',
-                        'fulfillment'  => $o['fulfillment_status'] ?: 'unfulfilled',
-                        'method'       => self::shippingMethod($o),
-                        'region'       => self::addressRegion($addr),
-                        'order_type'   => Comparator::classifyOrder($o),
-                    ];
-                }
-                usort($rows, fn($a, $b) => $b['days'] <=> $a['days']);
+                $rows = self::buildSlaBreachRows($orders, $slaThreshold, time());
                 return ['rows' => $rows, 'scanned' => count($orders), 'start' => $start, 'end' => $end, 'threshold' => $slaThreshold];
             }, 30);
 
         return compact('slaResult', 'slaError', 'slaStart', 'slaEnd', 'slaThreshold');
+    }
+
+    /**
+     * Fulfillment SLA Breaches rows: paid, non-cancelled orders whose
+     * time-to-first-fulfillment (fulfilled orders) or time-since-placement
+     * (still-open orders, measured against $now) meets or exceeds
+     * $slaThreshold days, sorted by days descending.
+     *
+     * @param  array<int, array<string, mixed>> $orders
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildSlaBreachRows(array $orders, int $slaThreshold, int $now): array
+    {
+        $rows = [];
+        foreach ($orders as $o) {
+            if (!empty($o['cancelled_at'])) continue;
+            if (in_array($o['financial_status'] ?? '', ['refunded', 'voided'], true)) continue;
+
+            $createdTs = strtotime($o['created_at'] ?? '');
+            if (!$createdTs) continue;
+
+            $firstFulfillment = self::firstFulfillmentAt($o);
+            $fulfilledTs      = $firstFulfillment ? strtotime($firstFulfillment) : null;
+            $days             = $fulfilledTs
+                ? (int) floor(($fulfilledTs - $createdTs) / 86400)
+                : (int) floor(($now - $createdTs) / 86400);
+
+            if ($days < $slaThreshold) continue;
+
+            $addr = $o['shipping_address'] ?? [];
+            $rows[] = [
+                'shopify_id'   => $o['id'] ?? '',
+                'order_number' => $o['name'] ?? '',
+                'created_at'   => self::dateOnly($o['created_at'] ?? ''),
+                'fulfilled_at' => $firstFulfillment ? self::dateOnly($firstFulfillment) : '',
+                'days'         => $days,
+                'email'        => $o['email'] ?? '',
+                'total'        => $o['total_price'] ?? '',
+                'financial'    => $o['financial_status'] ?? '',
+                'fulfillment'  => $o['fulfillment_status'] ?: 'unfulfilled',
+                'method'       => self::shippingMethod($o),
+                'region'       => self::addressRegion($addr),
+                'order_type'   => Comparator::classifyOrder($o),
+            ];
+        }
+        usort($rows, fn($a, $b) => $b['days'] <=> $a['days']);
+        return $rows;
     }
 
     private static function loadShipmentAging(string $action, array $ctx): array
@@ -424,64 +438,14 @@ class FulfillmentIssuePageLoader
                     self::setLimits(180);
                     $ss     = new ShipStation($ctx['ssKey'], $ctx['ssSecret']);
                     $orders = self::suppressOutput(fn() => $ss->fetchAwaitingOrders());
-                    $now    = time();
-                    $rows   = [];
-                    $bySku  = [];
-                    $byType = [];
 
-                    foreach ($orders as $o) {
-                        $dateRaw = $o['orderDate'] ?? $o['createDate'] ?? '';
-                        $orderTs = strtotime($dateRaw);
-                        if (!$orderTs) continue;
-                        $days = (int)floor(($now - $orderTs) / 86400);
-                        if ($days < $saThreshold) continue;
-
-                        $items = $o['items'] ?? [];
-                        $fakeOrder = ['line_items' => array_map(fn($item) => [
-                            'sku'   => $item['sku'] ?? '',
-                            'title' => $item['name'] ?? '',
-                        ], $items)];
-                        $orderType = Comparator::classifyOrder($fakeOrder);
-
-                        $skus = [];
-                        foreach ($items as $item) {
-                            $sku = trim((string)($item['sku'] ?? ''));
-                            if ($sku === '') continue;
-                            $qty = (int)($item['quantity'] ?? 1);
-                            $skus[$sku] = ($skus[$sku] ?? 0) + $qty;
-                            if (!isset($bySku[$sku])) $bySku[$sku] = ['sku' => $sku, 'orders' => 0, 'qty' => 0, 'oldest_days' => 0];
-                            $bySku[$sku]['qty'] += $qty;
-                            $bySku[$sku]['oldest_days'] = max($bySku[$sku]['oldest_days'], $days);
-                        }
-                        foreach (array_keys($skus) as $sku) {
-                            $bySku[$sku]['orders']++;
-                        }
-                        if (!isset($byType[$orderType])) $byType[$orderType] = ['type' => $orderType, 'orders' => 0, 'oldest_days' => 0];
-                        $byType[$orderType]['orders']++;
-                        $byType[$orderType]['oldest_days'] = max($byType[$orderType]['oldest_days'], $days);
-
-                        $rows[] = [
-                            'ss_order_id'  => $o['orderId'] ?? '',
-                            'order_number' => $o['orderNumber'] ?? '',
-                            'order_date'   => self::dateOnly($dateRaw),
-                            'days'         => $days,
-                            'customer'     => trim($o['shipTo']['name'] ?? ''),
-                            'email'        => $o['customerEmail'] ?? '',
-                            'total'        => $o['orderTotal'] ?? '',
-                            'status'       => $o['orderStatus'] ?? '',
-                            'order_type'   => $orderType,
-                            'skus'         => $skus,
-                        ];
-                    }
-                    usort($rows, fn($a, $b) => $b['days'] <=> $a['days']);
-                    usort($bySku, fn($a, $b) => $b['oldest_days'] <=> $a['oldest_days'] ?: $b['orders'] <=> $a['orders']);
-                    usort($byType, fn($a, $b) => $b['oldest_days'] <=> $a['oldest_days'] ?: $b['orders'] <=> $a['orders']);
+                    [$rows, $bySku, $byType] = self::buildShipmentAgingData($orders, $saThreshold, time());
                     $saResult = [
                         'rows'      => $rows,
                         'scanned'   => count($orders),
                         'threshold' => $saThreshold,
-                        'by_sku'    => array_values($bySku),
-                        'by_type'   => array_values($byType),
+                        'by_sku'    => $bySku,
+                        'by_type'   => $byType,
                     ];
                     RunLog::append([
                         'tool'       => 'scan_shipmentaging',
@@ -507,6 +471,72 @@ class FulfillmentIssuePageLoader
         }
 
         return compact('saResult', 'saError', 'saThreshold');
+    }
+
+    /**
+     * Shipment Aging rows + by_sku/by_type aggregates from the live SS
+     * awaiting-shipment queue. A synthetic order (SS line items mapped to
+     * Shopify-shaped line_items) is built per SS order so
+     * Comparator::classifyOrder() can be reused for order-type grouping.
+     *
+     * @param  array<int, array<string, mixed>> $orders
+     * @return array{0: array<int, array<string, mixed>>, 1: array<int, array<string, mixed>>, 2: array<int, array<string, mixed>>} [rows, bySku, byType]
+     */
+    private static function buildShipmentAgingData(array $orders, int $saThreshold, int $now): array
+    {
+        $rows   = [];
+        $bySku  = [];
+        $byType = [];
+
+        foreach ($orders as $o) {
+            $dateRaw = $o['orderDate'] ?? $o['createDate'] ?? '';
+            $orderTs = strtotime($dateRaw);
+            if (!$orderTs) continue;
+            $days = (int)floor(($now - $orderTs) / 86400);
+            if ($days < $saThreshold) continue;
+
+            $items = $o['items'] ?? [];
+            $fakeOrder = ['line_items' => array_map(fn($item) => [
+                'sku'   => $item['sku'] ?? '',
+                'title' => $item['name'] ?? '',
+            ], $items)];
+            $orderType = Comparator::classifyOrder($fakeOrder);
+
+            $skus = [];
+            foreach ($items as $item) {
+                $sku = trim((string)($item['sku'] ?? ''));
+                if ($sku === '') continue;
+                $qty = (int)($item['quantity'] ?? 1);
+                $skus[$sku] = ($skus[$sku] ?? 0) + $qty;
+                if (!isset($bySku[$sku])) $bySku[$sku] = ['sku' => $sku, 'orders' => 0, 'qty' => 0, 'oldest_days' => 0];
+                $bySku[$sku]['qty'] += $qty;
+                $bySku[$sku]['oldest_days'] = max($bySku[$sku]['oldest_days'], $days);
+            }
+            foreach (array_keys($skus) as $sku) {
+                $bySku[$sku]['orders']++;
+            }
+            if (!isset($byType[$orderType])) $byType[$orderType] = ['type' => $orderType, 'orders' => 0, 'oldest_days' => 0];
+            $byType[$orderType]['orders']++;
+            $byType[$orderType]['oldest_days'] = max($byType[$orderType]['oldest_days'], $days);
+
+            $rows[] = [
+                'ss_order_id'  => $o['orderId'] ?? '',
+                'order_number' => $o['orderNumber'] ?? '',
+                'order_date'   => self::dateOnly($dateRaw),
+                'days'         => $days,
+                'customer'     => trim($o['shipTo']['name'] ?? ''),
+                'email'        => $o['customerEmail'] ?? '',
+                'total'        => $o['orderTotal'] ?? '',
+                'status'       => $o['orderStatus'] ?? '',
+                'order_type'   => $orderType,
+                'skus'         => $skus,
+            ];
+        }
+        usort($rows, fn($a, $b) => $b['days'] <=> $a['days']);
+        usort($bySku, fn($a, $b) => $b['oldest_days'] <=> $a['oldest_days'] ?: $b['orders'] <=> $a['orders']);
+        usort($byType, fn($a, $b) => $b['oldest_days'] <=> $a['oldest_days'] ?: $b['orders'] <=> $a['orders']);
+
+        return [$rows, array_values($bySku), array_values($byType)];
     }
 
     private static function loadCarrierPerf(string $action, array $ctx): array

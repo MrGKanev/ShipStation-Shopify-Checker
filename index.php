@@ -244,13 +244,4 @@ if (!$authed) {
 }
 $html = ob_get_clean();
 
-echo preg_replace_callback('/<form\b([^>]*)>/i', function (array $m) use ($csrfToken): string {
-    $attrs = $m[1] ?? '';
-    if (!preg_match('/\bmethod\s*=\s*([\'"]?)post\1/i', $attrs)) {
-        return $m[0];
-    }
-    if (str_contains($attrs, '_csrf')) {
-        return $m[0];
-    }
-    return '<form' . $attrs . '><input type="hidden" name="_csrf" value="' . esc($csrfToken) . '">';
-}, $html) ?? $html;
+echo injectCsrfTokens($html, $csrfToken);

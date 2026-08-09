@@ -231,4 +231,29 @@ class EventNormalizerTest extends TestCase
         $event = ['verb' => '', 'message' => 'THE ORDER WAS EDITED BY ADMIN.'];
         $this->assertTrue(\Shopify\GraphQL\EventNormalizer::isOrderEditEvent($event));
     }
+
+    // ── Address Changes / Order Edit History must not double-count ─────────────
+    //
+    // docs/audit-checks.md documents Order Edit History as "distinct from
+    // Address Changes (which is tracked separately)". An event whose verb
+    // is 'edit_complete' (an order-edit signal) but whose message text also
+    // mentions an address update would, without an explicit carve-out,
+    // satisfy both classifiers and surface in both reports for the same
+    // underlying event.
+
+    public function testAddressUpdateViaEditCompleteIsNotAlsoAnOrderEditEvent(): void
+    {
+        $event = ['verb' => 'edit_complete', 'action' => 'edit_complete', 'message' => 'Shipping address was updated to 1 Main St.'];
+
+        $this->assertTrue(\Shopify\GraphQL\EventNormalizer::isAddressChangeEvent($event));
+        $this->assertFalse(\Shopify\GraphQL\EventNormalizer::isOrderEditEvent($event), 'an address-change event must not also classify as an order edit');
+    }
+
+    public function testNonAddressEditCompleteEventIsStillAnOrderEditEvent(): void
+    {
+        $event = ['verb' => 'edit_complete', 'action' => 'edit_complete', 'message' => 'An item was added to the order.'];
+
+        $this->assertFalse(\Shopify\GraphQL\EventNormalizer::isAddressChangeEvent($event));
+        $this->assertTrue(\Shopify\GraphQL\EventNormalizer::isOrderEditEvent($event));
+    }
 }

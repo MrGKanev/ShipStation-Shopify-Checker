@@ -9,6 +9,29 @@ function esc(mixed $v): string
     return htmlspecialchars((string) $v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+/**
+ * Injects a hidden `_csrf` field into every rendered `method="post"` form
+ * that doesn't already have one, so views never need to remember to add it
+ * themselves. Skips non-POST forms and forms whose body already carries a
+ * `_csrf` field (checked against the form's inner content, not its opening
+ * tag's own attributes - a form never has a `_csrf` attribute on itself,
+ * that name only ever appears on a child `<input>`).
+ */
+function injectCsrfTokens(string $html, string $csrfToken): string
+{
+    return preg_replace_callback('/<form\b([^>]*)>(.*?)<\/form>/is', function (array $m) use ($csrfToken): string {
+        $attrs = $m[1] ?? '';
+        $body  = $m[2] ?? '';
+        if (!preg_match('/\bmethod\s*=\s*([\'"]?)post\1/i', $attrs)) {
+            return $m[0];
+        }
+        if (str_contains($body, '_csrf')) {
+            return $m[0];
+        }
+        return '<form' . $attrs . '><input type="hidden" name="_csrf" value="' . esc($csrfToken) . '">' . $body . '</form>';
+    }, $html) ?? $html;
+}
+
 function badge(int $count): string
 {
     return $count === 0
@@ -59,6 +82,30 @@ function gqlOrderRow(array $o, string $shopifyAdminBase): array
         'amount'   => $o['totalPriceSet']['shopMoney']['amount']       ?? null,
         'currency' => $o['totalPriceSet']['shopMoney']['currencyCode'] ?? '',
     ];
+}
+
+/**
+ * Formats a minute count as a human label + CSS color variable, for any
+ * "time since X" column (Order Edit History's edit gap, Address Changes'
+ * placement-to-change gap). Documented thresholds: red >= 1 day,
+ * yellow >= 1 hour, otherwise muted.
+ *
+ * @return array{label: string, color: string}
+ */
+function timeGapDisplay(int $diffMins): array
+{
+    $diffMins  = max(0, $diffMins);
+    $diffDays  = intdiv($diffMins, 1440);
+    $diffHours = intdiv($diffMins % 1440, 60);
+    $diffRem   = $diffMins % 60;
+
+    if ($diffDays > 0)      $label = "{$diffDays}d " . ($diffHours ? "{$diffHours}h" : '');
+    elseif ($diffHours > 0) $label = "{$diffHours}h " . ($diffRem ? "{$diffRem}m" : '');
+    else                    $label = "{$diffMins}m";
+
+    $color = $diffDays >= 1 ? 'var(--danger)' : ($diffHours >= 1 ? 'var(--warn)' : 'var(--muted)');
+
+    return ['label' => trim($label), 'color' => $color];
 }
 
 function formatPrice(float|string|null $amount): string

@@ -28,6 +28,12 @@ final class DateRange
         return [trim((string) $start), trim((string) $end)];
     }
 
+    /** Adds (or subtracts, for negative $days) whole days to a Y-m-d date string. */
+    public static function addDays(string $date, int $days): string
+    {
+        return date('Y-m-d', strtotime($date . ' ' . $days . ' days'));
+    }
+
     public static function validate(string $start, string $end): ?string
     {
         if (!self::isDateString($start) || !self::isDateString($end)) {

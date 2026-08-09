@@ -32,40 +32,57 @@ class ProductInventoryPageLoader
                 $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
                 $orders  = self::suppressOutput(fn() => $shopify->fetchAllOrders($start, $end));
 
-                $rows = [];
-                foreach ($orders as $o) {
-                    if (!empty($o['cancelled_at'])) continue;
-                    $fin = $o['financial_status'] ?? '';
-                    if (in_array($fin, ['pending', 'voided', 'refunded', 'partially_refunded'], true)) continue;
-                    if ((float)($o['total_price'] ?? 0) == 0) continue;
-                    if (($o['shipping_lines'] ?? []) === []) continue;
-
-                    $missingReq = Comparator::findMissingRequired($o);
-                    if (empty($missingReq)) continue;
-
-                    $missingParts = [];
-                    foreach ($missingReq as $typeName => $items) {
-                        $missingParts[] = (count($missingReq) > 1 ? "{$typeName}: " : '') . implode(', ', $items);
-                    }
-                    $rows[] = [
-                        'shopify_id'         => $o['id']                 ?? '',
-                        'order_number'       => $o['name']               ?? '',
-                        'created_at'         => self::dateOnly($o['created_at']         ?? ''),
-                        'email'              => $o['email']              ?? '',
-                        'financial_status'   => $o['financial_status']   ?? '',
-                        'fulfillment_status' => $o['fulfillment_status'] ?? '',
-                        'total'              => $o['total_price']        ?? 0,
-                        'order_type'         => Comparator::classifyOrder($o),
-                        'missing_required'   => $missingReq,
-                        'missing_text'       => implode('; ', $missingParts),
-                    ];
-                }
-                usort($rows, fn($a, $b) => strcmp($b['created_at'], $a['created_at']));
+                $rows = self::buildBundleCheckRows($orders);
                 return ['rows' => $rows, 'scanned' => count($orders), 'start' => $start, 'end' => $end];
             }, 30);
 
         $bcConfig = Comparator::getOrderTypesConfig();
         return compact('bcResult', 'bcError', 'bcStart', 'bcEnd', 'bcConfig');
+    }
+
+    /**
+     * Bundle Check rows: orders with a missing required component, per
+     * Comparator::findMissingRequired(). Skip logic is reimplemented here
+     * rather than reusing Comparator::compare()'s - notably it does NOT
+     * exclude fulfilled/restocked orders, so a fulfilled order missing a
+     * bundle component is still flagged (the documented "covers fulfilled
+     * orders too" behavior).
+     *
+     * @param  array<int, array<string, mixed>> $orders
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildBundleCheckRows(array $orders): array
+    {
+        $rows = [];
+        foreach ($orders as $o) {
+            if (!empty($o['cancelled_at'])) continue;
+            $fin = $o['financial_status'] ?? '';
+            if (in_array($fin, ['pending', 'voided', 'refunded', 'partially_refunded'], true)) continue;
+            if ((float)($o['total_price'] ?? 0) == 0) continue;
+            if (($o['shipping_lines'] ?? []) === []) continue;
+
+            $missingReq = Comparator::findMissingRequired($o);
+            if (empty($missingReq)) continue;
+
+            $missingParts = [];
+            foreach ($missingReq as $typeName => $items) {
+                $missingParts[] = (count($missingReq) > 1 ? "{$typeName}: " : '') . implode(', ', $items);
+            }
+            $rows[] = [
+                'shopify_id'         => $o['id']                 ?? '',
+                'order_number'       => $o['name']               ?? '',
+                'created_at'         => self::dateOnly($o['created_at']         ?? ''),
+                'email'              => $o['email']              ?? '',
+                'financial_status'   => $o['financial_status']   ?? '',
+                'fulfillment_status' => $o['fulfillment_status'] ?? '',
+                'total'              => $o['total_price']        ?? 0,
+                'order_type'         => Comparator::classifyOrder($o),
+                'missing_required'   => $missingReq,
+                'missing_text'       => implode('; ', $missingParts),
+            ];
+        }
+        usort($rows, fn($a, $b) => strcmp($b['created_at'], $a['created_at']));
+        return $rows;
     }
 
     private static function loadProductCheck(string $action, array $ctx): array
@@ -86,46 +103,7 @@ class ProductInventoryPageLoader
                     $shopify  = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
                     $products = self::suppressOutput(fn() => $shopify->fetchAllProducts());
                     $scanned  = count($products);
-                    $rows     = [];
-
-                    foreach ($products as $p) {
-                        $issues = [];
-
-                        if (empty($p['images'])) {
-                            $issues[] = ['level' => 'warning', 'message' => 'No product images'];
-                        }
-
-                        $desc = trim(strip_tags($p['body_html'] ?? ''));
-                        if ($desc === '') {
-                            $issues[] = ['level' => 'warning', 'message' => 'No description'];
-                        }
-
-                        $variantCount = count($p['variants'] ?? []);
-                        $missingSkuCount = 0;
-                        foreach ($p['variants'] ?? [] as $v) {
-                            if (trim($v['sku'] ?? '') === '') {
-                                $missingSkuCount++;
-                            }
-                        }
-                        if ($missingSkuCount > 0) {
-                            $label = $missingSkuCount . ' of ' . $variantCount . ' variant' . ($variantCount !== 1 ? 's' : '') . ' missing SKU';
-                            $issues[] = ['level' => 'critical', 'message' => $label];
-                        }
-
-                        if (!empty($issues)) {
-                            $rows[] = [
-                                'id'       => (string)($p['id'] ?? ''),
-                                'title'    => $p['title']        ?? '',
-                                'vendor'   => $p['vendor']       ?? '',
-                                'type'     => $p['product_type'] ?? '',
-                                'status'   => $p['status']       ?? '',
-                                'images'   => count($p['images']   ?? []),
-                                'variants' => $variantCount,
-                                'issues'   => $issues,
-                                'severity' => in_array('critical', array_column($issues, 'level')) ? 'critical' : 'warning',
-                            ];
-                        }
-                    }
+                    $rows     = self::buildProductCheckRows($products);
 
                     $pcResult = [
                         'rows'     => $rows,
@@ -151,6 +129,58 @@ class ProductInventoryPageLoader
         return compact('pcResult', 'pcError');
     }
 
+    /**
+     * Product Completeness rows: products with a missing-SKU variant
+     * (critical), no images, or no description (warning). A product with
+     * both issue types is classified 'critical' overall.
+     *
+     * @param  array<int, array<string, mixed>> $products
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildProductCheckRows(array $products): array
+    {
+        $rows = [];
+        foreach ($products as $p) {
+            $issues = [];
+
+            if (empty($p['images'])) {
+                $issues[] = ['level' => 'warning', 'message' => 'No product images'];
+            }
+
+            $desc = trim(strip_tags($p['body_html'] ?? ''));
+            if ($desc === '') {
+                $issues[] = ['level' => 'warning', 'message' => 'No description'];
+            }
+
+            $variantCount = count($p['variants'] ?? []);
+            $missingSkuCount = 0;
+            foreach ($p['variants'] ?? [] as $v) {
+                if (trim($v['sku'] ?? '') === '') {
+                    $missingSkuCount++;
+                }
+            }
+            if ($missingSkuCount > 0) {
+                $label = $missingSkuCount . ' of ' . $variantCount . ' variant' . ($variantCount !== 1 ? 's' : '') . ' missing SKU';
+                $issues[] = ['level' => 'critical', 'message' => $label];
+            }
+
+            if (!empty($issues)) {
+                $rows[] = [
+                    'id'       => (string)($p['id'] ?? ''),
+                    'title'    => $p['title']        ?? '',
+                    'vendor'   => $p['vendor']       ?? '',
+                    'type'     => $p['product_type'] ?? '',
+                    'status'   => $p['status']       ?? '',
+                    'images'   => count($p['images']   ?? []),
+                    'variants' => $variantCount,
+                    'issues'   => $issues,
+                    'severity' => in_array('critical', array_column($issues, 'level')) ? 'critical' : 'warning',
+                ];
+            }
+        }
+        return $rows;
+    }
+
     private static function loadSkuDupes(string $action, array $ctx): array
     {
         $sdResult = null;
@@ -169,34 +199,7 @@ class ProductInventoryPageLoader
                     $shopify  = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
                     $products = self::suppressOutput(fn() => $shopify->fetchAllProducts('any'));
 
-                    $skuMap = [];
-                    $totalVariants = 0;
-                    foreach ($products as $p) {
-                        foreach ($p['variants'] ?? [] as $v) {
-                            $totalVariants++;
-                            $sku = trim($v['sku'] ?? '');
-                            if ($sku === '') continue;
-                            $skuMap[$sku][] = [
-                                'product_id'     => (string)($p['id'] ?? ''),
-                                'product_title'  => $p['title'] ?? '',
-                                'product_status' => $p['status'] ?? '',
-                                'variant_title'  => $v['title'] ?? '',
-                            ];
-                        }
-                    }
-
-                    $rows = [];
-                    foreach ($skuMap as $sku => $variants) {
-                        if (count($variants) > 1) {
-                            $rows[] = [
-                                'sku'      => $sku,
-                                'count'    => count($variants),
-                                'variants' => $variants,
-                            ];
-                        }
-                    }
-
-                    usort($rows, fn($a, $b) => $b['count'] - $a['count']);
+                    [$rows, $totalVariants] = self::buildSkuDupeRows($products);
 
                     $sdResult = [
                         'rows'     => $rows,
@@ -220,6 +223,49 @@ class ProductInventoryPageLoader
         }
 
         return compact('sdResult', 'sdError');
+    }
+
+    /**
+     * SKU Duplicates rows: SKUs shared by more than one variant, sorted by
+     * count descending. Scans whatever product set is passed in (the caller
+     * fetches active + draft + archived via fetchAllProducts('any')).
+     * Variants with a blank SKU are ignored, per the documented rule.
+     *
+     * @param  array<int, array<string, mixed>> $products
+     * @return array{0: array<int, array<string, mixed>>, 1: int} [rows, totalVariants]
+     */
+    private static function buildSkuDupeRows(array $products): array
+    {
+        $skuMap = [];
+        $totalVariants = 0;
+        foreach ($products as $p) {
+            foreach ($p['variants'] ?? [] as $v) {
+                $totalVariants++;
+                $sku = trim($v['sku'] ?? '');
+                if ($sku === '') continue;
+                $skuMap[$sku][] = [
+                    'product_id'     => (string)($p['id'] ?? ''),
+                    'product_title'  => $p['title'] ?? '',
+                    'product_status' => $p['status'] ?? '',
+                    'variant_title'  => $v['title'] ?? '',
+                ];
+            }
+        }
+
+        $rows = [];
+        foreach ($skuMap as $sku => $variants) {
+            if (count($variants) > 1) {
+                $rows[] = [
+                    'sku'      => $sku,
+                    'count'    => count($variants),
+                    'variants' => $variants,
+                ];
+            }
+        }
+
+        usort($rows, fn($a, $b) => $b['count'] - $a['count']);
+
+        return [$rows, $totalVariants];
     }
 
     private static function loadInventoryOversell(string $action, array $ctx): array
@@ -432,51 +478,67 @@ class ProductInventoryPageLoader
                     ];
                 });
 
-                $sales = [];
-                foreach ($orders as $o) {
-                    foreach ($o['line_items'] ?? [] as $li) {
-                        $sku = trim((string)($li['sku'] ?? ''));
-                        if ($sku === '') continue;
-                        if (!isset($sales[$sku])) {
-                            $sales[$sku] = ['qty' => 0, 'last_order' => '', 'last_date' => ''];
-                        }
-                        $sales[$sku]['qty'] += (int)($li['quantity'] ?? 1);
-                        $date = self::dateOnly($o['created_at'] ?? '');
-                        if ($date > $sales[$sku]['last_date']) {
-                            $sales[$sku]['last_date'] = $date;
-                            $sales[$sku]['last_order'] = $o['name'] ?? '';
-                        }
-                    }
-                }
-
-                $rows = [];
-                $variantCount = 0;
-                foreach ($products as $p) {
-                    foreach ($p['variants'] ?? [] as $v) {
-                        $variantCount++;
-                        $sku = trim((string)($v['sku'] ?? ''));
-                        if ($sku === '' || !isset($sales[$sku])) continue;
-                        if (($v['inventory_management'] ?? '') === '') continue;
-                        if (($v['inventory_policy'] ?? 'deny') === 'continue') continue;
-                        $stock = (int)($v['inventory_quantity'] ?? 0);
-                        if ($stock > 0) continue;
-                        $rows[] = [
-                            'product_id'    => (string)($p['id'] ?? ''),
-                            'product_title' => $p['title'] ?? '',
-                            'variant_title' => $v['title'] ?? '',
-                            'sku'           => $sku,
-                            'stock'         => $stock,
-                            'recent_qty'    => $sales[$sku]['qty'],
-                            'last_order'    => $sales[$sku]['last_order'],
-                            'last_date'     => $sales[$sku]['last_date'],
-                        ];
-                    }
-                }
-                usort($rows, fn($a, $b) => $b['recent_qty'] <=> $a['recent_qty']);
+                [$rows, $variantCount] = self::buildInventoryAgingRows($products, $orders);
                 return ['rows' => $rows, 'products' => count($products), 'variants' => $variantCount, 'orders' => count($orders), 'start' => $start, 'end' => $end];
             }, 30);
 
         return compact('iaResult', 'iaError', 'iaStart', 'iaEnd');
+    }
+
+    /**
+     * Inventory Aging rows: tracked, non-'continue'-policy variants with
+     * zero/negative stock that still had recent sales, sorted by recent_qty
+     * descending. Untracked variants (blank inventory_management) and
+     * variants with no recent sales are excluded.
+     *
+     * @param  array<int, array<string, mixed>> $products
+     * @param  array<int, array<string, mixed>> $orders
+     * @return array{0: array<int, array<string, mixed>>, 1: int} [rows, variantCount]
+     */
+    private static function buildInventoryAgingRows(array $products, array $orders): array
+    {
+        $sales = [];
+        foreach ($orders as $o) {
+            foreach ($o['line_items'] ?? [] as $li) {
+                $sku = trim((string)($li['sku'] ?? ''));
+                if ($sku === '') continue;
+                if (!isset($sales[$sku])) {
+                    $sales[$sku] = ['qty' => 0, 'last_order' => '', 'last_date' => ''];
+                }
+                $sales[$sku]['qty'] += (int)($li['quantity'] ?? 1);
+                $date = self::dateOnly($o['created_at'] ?? '');
+                if ($date > $sales[$sku]['last_date']) {
+                    $sales[$sku]['last_date'] = $date;
+                    $sales[$sku]['last_order'] = $o['name'] ?? '';
+                }
+            }
+        }
+
+        $rows = [];
+        $variantCount = 0;
+        foreach ($products as $p) {
+            foreach ($p['variants'] ?? [] as $v) {
+                $variantCount++;
+                $sku = trim((string)($v['sku'] ?? ''));
+                if ($sku === '' || !isset($sales[$sku])) continue;
+                if (($v['inventory_management'] ?? '') === '') continue;
+                if (($v['inventory_policy'] ?? 'deny') === 'continue') continue;
+                $stock = (int)($v['inventory_quantity'] ?? 0);
+                if ($stock > 0) continue;
+                $rows[] = [
+                    'product_id'    => (string)($p['id'] ?? ''),
+                    'product_title' => $p['title'] ?? '',
+                    'variant_title' => $v['title'] ?? '',
+                    'sku'           => $sku,
+                    'stock'         => $stock,
+                    'recent_qty'    => $sales[$sku]['qty'],
+                    'last_order'    => $sales[$sku]['last_order'],
+                    'last_date'     => $sales[$sku]['last_date'],
+                ];
+            }
+        }
+        usort($rows, fn($a, $b) => $b['recent_qty'] <=> $a['recent_qty']);
+        return [$rows, $variantCount];
     }
 
     private static function loadInventoryForecast(string $action, array $ctx): array

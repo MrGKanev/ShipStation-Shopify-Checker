@@ -57,4 +57,30 @@ final class DateRangeTest extends TestCase
             DateRange::validate('2026-06-10', '2026-06-01')
         );
     }
+
+    // ── addDays ──────────────────────────────────────────────────────────────
+    // Covers the "7-day ShipStation fetch buffer" bullet in
+    // docs/audit-test-coverage-gaps.md - audit.php extends its SS end date
+    // by 7 days via this helper so sub-orders created a few days after the
+    // Shopify order are still caught.
+
+    public function testAddDaysExtendsForward(): void
+    {
+        $this->assertSame('2026-06-27', DateRange::addDays('2026-06-20', 7));
+    }
+
+    public function testAddDaysCrossesMonthBoundary(): void
+    {
+        $this->assertSame('2026-07-02', DateRange::addDays('2026-06-25', 7));
+    }
+
+    public function testAddDaysWithZeroReturnsSameDate(): void
+    {
+        $this->assertSame('2026-06-20', DateRange::addDays('2026-06-20', 0));
+    }
+
+    public function testAddDaysWithNegativeSubtractsDays(): void
+    {
+        $this->assertSame('2026-06-13', DateRange::addDays('2026-06-20', -7));
+    }
 }

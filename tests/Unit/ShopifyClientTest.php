@@ -630,6 +630,47 @@ class ShopifyClientTest extends TestCase
         $this->assertSame(['gid://shopify/Order/77'], $ordersBody['variables']['ids']);
     }
 
+    public function testFetchOrdersWithAddressChangesPaginatesAcrossMultipleEventPages(): void
+    {
+        $history = [];
+        $shopify = $this->shopify([
+            $this->json([
+                'data' => [
+                    'events' => [
+                        'pageInfo' => ['hasNextPage' => true, 'endCursor' => 'cursor-1'],
+                        'edges' => [['node' => $this->basicOrderEvent('Shipping address was updated to 1 Main St', '2026-06-19T12:00:00Z', '77')]],
+                    ],
+                ],
+            ]),
+            $this->json([
+                'data' => [
+                    'events' => [
+                        'pageInfo' => ['hasNextPage' => false, 'endCursor' => null],
+                        'edges' => [['node' => $this->basicOrderEvent('Shipping address was updated to 2 Oak Ave', '2026-06-19T13:00:00Z', '78')]],
+                    ],
+                ],
+            ]),
+            $this->graphQLNodes([
+                $this->orderNode(['id' => 'gid://shopify/Order/77', 'legacyResourceId' => '77']),
+                $this->orderNode(['id' => 'gid://shopify/Order/78', 'legacyResourceId' => '78']),
+            ]),
+        ], $history);
+
+        $result = $shopify->fetchOrdersWithAddressChanges('2026-06-01', '2026-06-19');
+
+        $this->assertCount(2, $result, 'both event pages must be walked, not just the first');
+        $this->assertCount(3, $history, 'two event pages + one batched order fetch');
+
+        $secondPageBody = json_decode((string) $history[1]['request']->getBody(), true);
+        $this->assertSame('cursor-1', $secondPageBody['variables']['after']);
+
+        $ordersBody = json_decode((string) $history[2]['request']->getBody(), true);
+        $this->assertEqualsCanonicalizing(
+            ['gid://shopify/Order/77', 'gid://shopify/Order/78'],
+            $ordersBody['variables']['ids']
+        );
+    }
+
     public function testFetchEditedOrdersUsesGraphQLEventsAndNormalizesRows(): void
     {
         $history = [];
@@ -1171,7 +1212,7 @@ class ShopifyClientTest extends TestCase
 
         $body = json_decode((string) $history[0]['request']->getBody(), true);
         $this->assertSame(
-            'status:open fulfillment_status:partial created_at:>=2026-06-01T00:00:00Z created_at:<=2026-06-19T23:59:59Z',
+            'status:open fulfillment_status:partial -financial_status:refunded created_at:>=2026-06-01T00:00:00Z created_at:<=2026-06-19T23:59:59Z',
             $body['variables']['query']
         );
         $this->assertStringContainsString('lineItems(first: 250)', $body['query']);
@@ -1467,6 +1508,84 @@ class ShopifyClientTest extends TestCase
         $body = json_decode((string) $history[0]['request']->getBody(), true);
         $this->assertStringContainsString('tags', $body['query']);
         $this->assertStringContainsString('(financial_status:paid OR financial_status:partially_paid)', $body['variables']['query']);
+    }
+
+    // ── Client-side node-filter exclusion ────────────────────────────────────
+    //
+    // Each of these fetchers passes a node filter to OrderFetcher::fetchOrdersByQuery()
+    // as a defense-in-depth check against Shopify's search index returning stale/
+    // borderline results. The happy-path tests above only ever feed a single
+    // matching node, so the exclusion branch itself was never exercised.
+
+    private function baseGraphQLOrder(array $overrides = []): array
+    {
+        return array_merge([
+            'id' => 'gid://shopify/Order/900', 'legacyResourceId' => '900', 'name' => '#1900',
+            'createdAt' => '2026-06-01T10:00:00Z', 'cancelledAt' => null,
+            'email' => 'x@example.com', 'displayFinancialStatus' => 'PAID',
+            'displayFulfillmentStatus' => 'UNFULFILLED',
+            'totalPriceSet' => ['shopMoney' => ['amount' => '10.00', 'currencyCode' => 'USD']],
+        ], $overrides);
+    }
+
+    public function testFetchRefundedOrdersExcludesNonRefundedNode(): void
+    {
+        $matching    = $this->baseGraphQLOrder(['legacyResourceId' => '1', 'displayFinancialStatus' => 'REFUNDED', 'refunds' => []]);
+        $nonMatching = $this->baseGraphQLOrder(['legacyResourceId' => '2', 'displayFinancialStatus' => 'PAID', 'refunds' => []]);
+        $shopify = $this->shopify([$this->graphQLOrders([$matching, $nonMatching])]);
+
+        $result = $shopify->fetchRefundedOrders('2026-06-01', '2026-06-19');
+
+        $this->assertCount(1, $result);
+        $this->assertSame(1, $result[0]['id']);
+    }
+
+    public function testFetchPartiallyFulfilledOrdersExcludesFullyFulfilledNode(): void
+    {
+        $matching    = $this->baseGraphQLOrder(['legacyResourceId' => '1', 'displayFulfillmentStatus' => 'PARTIALLY_FULFILLED', 'lineItems' => ['nodes' => []], 'fulfillments' => []]);
+        $nonMatching = $this->baseGraphQLOrder(['legacyResourceId' => '2', 'displayFulfillmentStatus' => 'FULFILLED', 'lineItems' => ['nodes' => []], 'fulfillments' => []]);
+        $shopify = $this->shopify([$this->graphQLOrders([$matching, $nonMatching])]);
+
+        $result = $shopify->fetchPartiallyFulfilledOrders('2026-06-01', '2026-06-19');
+
+        $this->assertCount(1, $result);
+        $this->assertSame(1, $result[0]['id']);
+    }
+
+    public function testFetchOrdersFulfilledSinceExcludesUnfulfilledNode(): void
+    {
+        $matching    = $this->baseGraphQLOrder(['legacyResourceId' => '1', 'displayFulfillmentStatus' => 'FULFILLED', 'fulfillments' => []]);
+        $nonMatching = $this->baseGraphQLOrder(['legacyResourceId' => '2', 'displayFulfillmentStatus' => 'UNFULFILLED', 'fulfillments' => []]);
+        $shopify = $this->shopify([$this->graphQLOrders([$matching, $nonMatching])]);
+
+        $result = $shopify->fetchOrdersFulfilledSince('2026-06-01');
+
+        $this->assertCount(1, $result);
+        $this->assertSame(1, $result[0]['id']);
+    }
+
+    public function testFetchOrdersFulfilledSinceWithShippingExcludesUnfulfilledNode(): void
+    {
+        $matching    = $this->baseGraphQLOrder(['legacyResourceId' => '1', 'displayFulfillmentStatus' => 'PARTIALLY_FULFILLED', 'shippingLines' => ['nodes' => []]]);
+        $nonMatching = $this->baseGraphQLOrder(['legacyResourceId' => '2', 'displayFulfillmentStatus' => 'UNFULFILLED', 'shippingLines' => ['nodes' => []]]);
+        $shopify = $this->shopify([$this->graphQLOrders([$matching, $nonMatching])]);
+
+        $result = $shopify->fetchOrdersFulfilledSinceWithShipping('2026-06-01');
+
+        $this->assertCount(1, $result);
+        $this->assertSame(1, $result[0]['id']);
+    }
+
+    public function testFetchOrdersRefundedSinceExcludesNonRefundedNode(): void
+    {
+        $matching    = $this->baseGraphQLOrder(['legacyResourceId' => '1', 'displayFinancialStatus' => 'PARTIALLY_REFUNDED', 'refunds' => []]);
+        $nonMatching = $this->baseGraphQLOrder(['legacyResourceId' => '2', 'displayFinancialStatus' => 'PAID', 'refunds' => []]);
+        $shopify = $this->shopify([$this->graphQLOrders([$matching, $nonMatching])]);
+
+        $result = $shopify->fetchOrdersRefundedSince('2026-06-01');
+
+        $this->assertCount(1, $result);
+        $this->assertSame(1, $result[0]['id']);
     }
 
     public function testFetchAllProductsUsesGraphQLAndNormalizesRestShape(): void

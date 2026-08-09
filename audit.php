@@ -8,6 +8,7 @@ require_once __DIR__ . '/src/Cache.php';
 require_once __DIR__ . '/src/ShipStation.php';
 require_once __DIR__ . '/src/Shopify.php';
 require_once __DIR__ . '/src/Comparator.php';
+require_once __DIR__ . '/src/DateRange.php';
 require_once __DIR__ . '/src/Reporter.php';
 require_once __DIR__ . '/src/SlackNotifier.php';
 require_once __DIR__ . '/src/SlackRules.php';
@@ -15,6 +16,7 @@ require_once __DIR__ . '/src/EmailNotifier.php';
 require_once __DIR__ . '/src/EmailRules.php';
 require_once __DIR__ . '/src/DiscordNotifier.php';
 require_once __DIR__ . '/src/RunLog.php';
+require_once __DIR__ . '/src/Audit.php';
 
 // ── Load .env ─────────────────────────────────────────────────────
 if (!file_exists(__DIR__ . '/.env')) {
@@ -63,6 +65,10 @@ $auditStartedAt = date('Y-m-d H:i:s');
 $auditT0 = microtime(true);
 
 try {
+    Audit::withErrorLogging(function () use (
+        $ssKey, $ssSecret, $shopifyStore, $shopifyToken, $startDate, $endDate,
+        $spotCheckNumbers, $sendDigest, $auditStartedAt, $auditT0
+    ) {
     $cacheTtl = (int) (getenv('CACHE_TTL') ?: 82800); // default 23 h
     $cache    = new Cache(__DIR__ . '/cache', $cacheTtl);
 
@@ -72,7 +78,7 @@ try {
     // ── Step 1: Fetch orders from both platforms ──────────────────
     // SS end date is extended by 7 days to catch sub-orders
     // that are created in ShipStation a few days after the Shopify order.
-    $ssEndDate     = date('Y-m-d', strtotime($endDate . ' +7 days'));
+    $ssEndDate     = DateRange::addDays($endDate, 7);
     $shopifyOrders = $shopify->fetchAllOrders($startDate, $endDate);
     $ssOrders      = $ss->fetchAllOrders($startDate, $ssEndDate);
 
@@ -110,18 +116,11 @@ try {
     // Results are cached per order ID so historical re-runs are cheap.
     if (!empty($result['missing'])) {
         echo "\n  Checking on-hold status for " . count($result['missing']) . " missing order(s)...";
-        $stillMissing = [];
-        foreach ($result['missing'] as $order) {
-            if ($shopify->isOnHold((string) $order['id'])) {
-                $order['_skip_reason'] = 'on_hold';
-                $result['skipped'][]   = $order;
-                echo 'H'; // visual indicator
-            } else {
-                $stillMissing[] = $order;
-                echo '.';
-            }
-        }
-        $result['missing'] = $stillMissing;
+        $result = Comparator::applyOnHoldSkip($result, function (array $order) use ($shopify) {
+            $onHold = $shopify->isOnHold((string) $order['id']);
+            echo $onHold ? 'H' : '.'; // visual indicator
+            return $onHold;
+        });
         echo " done\n";
     }
 
@@ -198,17 +197,8 @@ try {
     // Exit code 1 = missing orders found (useful for cron alerting)
     exit(empty($result['missing']) ? 0 : 1);
 
+    }, 'cli_audit', $startDate, $endDate);
 } catch (Throwable $e) {
-    RunLog::append([
-        'tool'       => 'cli_audit',
-        'status'     => 'error',
-        'created_at' => $auditStartedAt,
-        'duration'   => round(microtime(true) - $auditT0, 2),
-        'start_date' => $startDate,
-        'end_date'   => $endDate,
-        'error'      => $e->getMessage(),
-        'meta'       => ['api_version' => Shopify::API_VERSION],
-    ]);
     echo "\n✗ Error: " . $e->getMessage() . "\n";
     if (getenv('DEBUG')) echo $e->getTraceAsString() . "\n";
     exit(2);

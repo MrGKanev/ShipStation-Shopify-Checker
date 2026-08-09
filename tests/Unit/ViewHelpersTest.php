@@ -338,4 +338,115 @@ class ViewHelpersTest extends TestCase
         $html = tableWrapHeader([['x' => 1]], 'tbl-x', '<script>', 'slug', '2025-01-01');
         $this->assertStringNotContainsString('<script>', $html);
     }
+
+    // ── timeGapDisplay ───────────────────────────────────────────────────────
+    // Documented thresholds (Order Edit History / Address Changes): red >= 1
+    // day, yellow >= 1 hour, otherwise muted.
+
+    public function testUnderOneHourIsMuted(): void
+    {
+        $gap = timeGapDisplay(45);
+        $this->assertSame('45m', $gap['label']);
+        $this->assertSame('var(--muted)', $gap['color']);
+    }
+
+    public function testExactlyOneHourIsWarn(): void
+    {
+        $gap = timeGapDisplay(60);
+        $this->assertSame('1h', $gap['label']);
+        $this->assertSame('var(--warn)', $gap['color']);
+    }
+
+    public function testHoursAndMinutesLabel(): void
+    {
+        $gap = timeGapDisplay(125); // 2h 5m
+        $this->assertSame('2h 5m', $gap['label']);
+        $this->assertSame('var(--warn)', $gap['color']);
+    }
+
+    public function testExactlyOneDayIsDanger(): void
+    {
+        $gap = timeGapDisplay(1440);
+        $this->assertSame('1d', $gap['label']);
+        $this->assertSame('var(--danger)', $gap['color']);
+    }
+
+    public function testJustUnderOneDayIsWarnNotDanger(): void
+    {
+        $gap = timeGapDisplay(1439);
+        $this->assertSame('var(--warn)', $gap['color']);
+    }
+
+    public function testDaysAndHoursLabel(): void
+    {
+        $gap = timeGapDisplay(1440 * 2 + 60 * 3); // 2d 3h
+        $this->assertSame('2d 3h', $gap['label']);
+        $this->assertSame('var(--danger)', $gap['color']);
+    }
+
+    public function testNegativeMinutesClampedToZero(): void
+    {
+        $gap = timeGapDisplay(-5);
+        $this->assertSame('0m', $gap['label']);
+        $this->assertSame('var(--muted)', $gap['color']);
+    }
+
+    // ── injectCsrfTokens ─────────────────────────────────────────────────────
+    // Extracted from index.php's post-render pass, previously untested
+    // (docs: index.php is a top-level script, not directly unit-testable).
+
+    public function testInjectsHiddenFieldIntoPostForm(): void
+    {
+        $html = injectCsrfTokens('<form method="post"><input name="x"></form>', 'tok-123');
+
+        $this->assertStringContainsString('<input type="hidden" name="_csrf" value="tok-123">', $html);
+    }
+
+    public function testDoesNotInjectIntoGetForm(): void
+    {
+        $html = injectCsrfTokens('<form method="get"><input name="x"></form>', 'tok-123');
+
+        $this->assertStringNotContainsString('_csrf', $html);
+    }
+
+    public function testDoesNotInjectIntoFormWithoutMethodAttribute(): void
+    {
+        $html = injectCsrfTokens('<form action="?"><input name="x"></form>', 'tok-123');
+
+        $this->assertStringNotContainsString('_csrf', $html);
+    }
+
+    public function testSkipsFormThatAlreadyHasCsrfField(): void
+    {
+        $original = '<form method="post"><input type="hidden" name="_csrf" value="existing"></form>';
+
+        $html = injectCsrfTokens($original, 'tok-123');
+
+        $this->assertSame($original, $html);
+    }
+
+    public function testMethodAttributeMatchIsCaseInsensitive(): void
+    {
+        $html = injectCsrfTokens('<form METHOD="POST"><input name="x"></form>', 'tok-123');
+
+        $this->assertStringContainsString('name="_csrf"', $html);
+    }
+
+    public function testHandlesMultipleFormsIndependently(): void
+    {
+        $html = injectCsrfTokens(
+            '<form method="post"></form><form method="get"></form><form method="post"></form>',
+            'tok-123'
+        );
+
+        $this->assertSame(2, substr_count($html, '_csrf'));
+    }
+
+    public function testTokenValueIsHtmlEscaped(): void
+    {
+        $html = injectCsrfTokens('<form method="post"></form>', '"><script>alert(1)</script>');
+
+        $this->assertStringNotContainsString('<script>', $html);
+        $this->assertStringContainsString('&lt;script&gt;', $html);
+    }
 }

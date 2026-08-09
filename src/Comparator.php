@@ -21,21 +21,36 @@ class Comparator
         $index = [];
         foreach ($ssOrders as $order) {
             $raw = (string) ($order['orderNumber'] ?? '');
-            // Primary key: full-normalised (digits only, all segments joined)
-            $full = self::normalise($raw);
-            if ($full !== '') {
-                $index[$full][] = $order;
-            }
-            // Secondary keys: each individual contiguous digit-run
-            // e.g. "100042-B2" → ["100042", "2"]; "Addon-100031" → ["100031"]
-            preg_match_all('/\d+/', $raw, $m);
-            foreach ($m[0] as $segment) {
-                if ($segment !== $full && $segment !== '') {
-                    $index[$segment][] = $order;
-                }
+            foreach (self::orderNumberKeys($raw) as $key) {
+                $index[$key][] = $order;
             }
         }
         return $index;
+    }
+
+    /**
+     * All lookup keys a raw order-number string resolves to: the
+     * full-normalised digits-only form, plus each individual contiguous
+     * digit-run within it.
+     *
+     * e.g. "100042-B2" → ["1000422", "100042", "2"]; "Addon-100031" → ["100031"]
+     *
+     * @return array<int, string>
+     */
+    public static function orderNumberKeys(string $raw): array
+    {
+        $keys = [];
+        $full = self::normalise($raw);
+        if ($full !== '') {
+            $keys[] = $full;
+        }
+        preg_match_all('/\d+/', $raw, $m);
+        foreach ($m[0] as $segment) {
+            if ($segment !== $full && $segment !== '') {
+                $keys[] = $segment;
+            }
+        }
+        return $keys;
     }
 
     /**
@@ -70,8 +85,9 @@ class Comparator
      *   financial     - pending / voided / refunded
      *   fulfilled     - fulfillment_status === 'fulfilled' (fully shipped; already processed)
      *   restocked     - fulfillment_status === 'restocked' (returned & restocked after shipment)
-     *   on_hold       - fulfillment order has status 'on_hold' (checked post-compare in audit.php
-     *                   via Shopify::isOnHold(); requires a separate API call per order)
+     *   on_hold       - fulfillment order has status 'on_hold' (checked post-compare via
+     *                   applyOnHoldSkip(), which calls Shopify::isOnHold(); requires a
+     *                   separate API call per order)
      *   zero_value    - total_price == 0 (digital downloads, gift cards)
      *   no_shipping   - no shipping lines (fulfilled digitally or local pickup)
      *   ignored       - manually ignored via the web dashboard
@@ -187,6 +203,43 @@ class Comparator
         }
 
         return compact('missing', 'found', 'skipped', 'ignored');
+    }
+
+    /**
+     * Moves orders in $result['missing'] that are on-hold in Shopify into
+     * $result['skipped'] with `_skip_reason` = 'on_hold'.
+     *
+     * 'on_hold' isn't exposed on the order object itself - it lives on the
+     * Fulfillment Order level and requires a separate lookup per order, so
+     * it's applied as a post-compare() pass rather than inside compare().
+     *
+     * If $isOnHold throws (e.g. API failure), the exception propagates and
+     * no further orders are checked - callers should treat a thrown
+     * exception as "the whole check failed", not "these orders aren't on
+     * hold", to avoid silently misreporting on-hold orders as missing.
+     *
+     * @param  array{missing: list<array>, found: list<array>, skipped: list<array>, ignored: list<array>} $result
+     * @param  callable(array): bool $isOnHold  receives the Shopify order, returns true if on hold
+     * @return array{missing: list<array>, found: list<array>, skipped: list<array>, ignored: list<array>}
+     */
+    public static function applyOnHoldSkip(array $result, callable $isOnHold): array
+    {
+        if (empty($result['missing'])) {
+            return $result;
+        }
+
+        $stillMissing = [];
+        foreach ($result['missing'] as $order) {
+            if ($isOnHold($order)) {
+                $order['_skip_reason'] = 'on_hold';
+                $result['skipped'][]   = $order;
+            } else {
+                $stillMissing[] = $order;
+            }
+        }
+        $result['missing'] = $stillMissing;
+
+        return $result;
     }
 
     // ── Public helpers ────────────────────────────────────────────────

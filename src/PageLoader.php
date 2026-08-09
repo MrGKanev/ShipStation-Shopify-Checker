@@ -217,21 +217,11 @@ class PageLoader
                         ];
                     });
 
-                    $ssIndex      = Comparator::buildSSIndex($ssOrders);
-                    $ssEmailIndex = Comparator::buildSSEmailIndex($ssOrders);
-                    $comparison   = Comparator::compare($shopifyOrders, $ssIndex, $ctx['ignoredOrders'], $ssEmailIndex);
-
-                    Reporter::saveReports($comparison['missing'], $auditStart, $auditEnd);
+                    [$comparison, $auditResult] = self::buildAuditRunResult(
+                        $shopifyOrders, $ssOrders, $ctx['ignoredOrders'], $ctx['reportDir'], $auditStart, $auditEnd
+                    );
 
                     $auditDuration = round(microtime(true) - $t0, 1);
-                    $auditResult   = [
-                        'missing'    => $comparison['missing'],
-                        'ignored'    => $comparison['ignored'],
-                        'found'      => count($comparison['found']),
-                        'skipped'    => count($comparison['skipped']),
-                        'total_ss'   => count($ssOrders),
-                        'duplicates' => Comparator::findDuplicates($shopifyOrders),
-                    ];
 
                     if (SlackRules::shouldNotifyAudit(count($comparison['missing'])) && ($notifier = SlackNotifier::fromEnvironment())) {
                         try {
@@ -296,6 +286,45 @@ class PageLoader
         $cacheTtl = $ctx['cacheTtl'];
         return compact('auditResult', 'auditError', 'auditDuration', 'auditFromCache', 'auditSlack',
                        'auditStart', 'auditEnd', 'cacheEntries', 'cacheFlushed', 'cacheTtl');
+    }
+
+    /**
+     * Indexes SS orders, compares against Shopify orders, persists the
+     * missing-orders report to $reportDir (must be the caller's
+     * store-specific report directory - passing the wrong one means the
+     * report silently won't show up in that store's dashboard history,
+     * since loadGlobal() reads reports from $ctx['reportDir']), and builds
+     * the dashboard result summary.
+     *
+     * @param  array<int, array<string, mixed>> $shopifyOrders
+     * @param  array<int, array<string, mixed>> $ssOrders
+     * @param  array<string, array<string, mixed>> $ignoredOrders
+     * @return array{0: array{missing: list<array>, found: list<array>, skipped: list<array>, ignored: list<array>}, 1: array<string, mixed>}
+     */
+    private static function buildAuditRunResult(
+        array $shopifyOrders,
+        array $ssOrders,
+        array $ignoredOrders,
+        string $reportDir,
+        string $auditStart,
+        string $auditEnd
+    ): array {
+        $ssIndex      = Comparator::buildSSIndex($ssOrders);
+        $ssEmailIndex = Comparator::buildSSEmailIndex($ssOrders);
+        $comparison   = Comparator::compare($shopifyOrders, $ssIndex, $ignoredOrders, $ssEmailIndex);
+
+        Reporter::saveReports($comparison['missing'], $auditStart, $auditEnd, $reportDir);
+
+        $auditResult = [
+            'missing'    => $comparison['missing'],
+            'ignored'    => $comparison['ignored'],
+            'found'      => count($comparison['found']),
+            'skipped'    => count($comparison['skipped']),
+            'total_ss'   => count($ssOrders),
+            'duplicates' => Comparator::findDuplicates($shopifyOrders),
+        ];
+
+        return [$comparison, $auditResult];
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

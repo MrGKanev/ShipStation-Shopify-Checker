@@ -196,6 +196,39 @@ class ProductInventoryPageLoaderTest extends TestCase
         $this->assertSame('2 products share this SKU', $rows[0]['product_title']);
     }
 
+    public function testBuildOversellRowsExactBoundaryAwaitingEqualsStockNotFlagged(): void
+    {
+        $products = [$this->ioProduct('1', 'Widget', [$this->ioVariant('SKU-A', 'Blue', 8)])];
+        $ssOrders = [$this->ioAwaitingOrder([['sku' => 'SKU-A', 'quantity' => 8]])];
+
+        $rows = self::$buildOversellRows->invoke(null, $products, $ssOrders);
+
+        $this->assertSame([], $rows, 'shortfall <= 0 must not flag; awaiting === stock is shortfall 0');
+    }
+
+    public function testBuildOversellRowsBlankInventoryManagementTreatedAsNotTrackedNotFlagged(): void
+    {
+        $variant = array_merge($this->ioVariant('SKU-A', 'Blue', 0), ['inventory_management' => '']);
+        $products = [$this->ioProduct('1', 'Widget', [$variant])];
+        $ssOrders = [$this->ioAwaitingOrder([['sku' => 'SKU-A', 'quantity' => 8]])];
+
+        $rows = self::$buildOversellRows->invoke(null, $products, $ssOrders);
+
+        $this->assertSame([], $rows, 'an untracked variant (blank inventory_management) must be excluded just like a SKU absent from Shopify entirely');
+    }
+
+    public function testBuildOversellRowsNegativeExistingStockAddsToShortfall(): void
+    {
+        $products = [$this->ioProduct('1', 'Widget', [$this->ioVariant('SKU-A', 'Blue', -3)])];
+        $ssOrders = [$this->ioAwaitingOrder([['sku' => 'SKU-A', 'quantity' => 5]])];
+
+        $rows = self::$buildOversellRows->invoke(null, $products, $ssOrders);
+
+        $this->assertCount(1, $rows);
+        $this->assertSame(-3, $rows[0]['stock']);
+        $this->assertSame(8, $rows[0]['shortfall']);
+    }
+
     private function ioProduct(string $id, string $title, array $variants): array
     {
         return ['id' => $id, 'title' => $title, 'variants' => $variants];

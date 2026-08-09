@@ -48,8 +48,19 @@ class EventNormalizer
             || str_contains($haystack, 'shipping_address');
     }
 
+    /**
+     * Address changes are tracked separately (see isAddressChangeEvent()),
+     * so an event that looks like both (e.g. an 'edit_complete' event whose
+     * message mentions the shipping address) must not also count here -
+     * otherwise it would double-count into both Address Changes and Order
+     * Edit History for the same underlying event.
+     */
     public static function isOrderEditEvent(array $event): bool
     {
+        if (self::isAddressChangeEvent($event)) {
+            return false;
+        }
+
         $verb = strtolower((string)($event['verb'] ?? $event['action'] ?? ''));
         $msg  = strtolower((string)($event['message'] ?? ''));
 

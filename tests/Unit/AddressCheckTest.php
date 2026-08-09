@@ -279,4 +279,28 @@ class AddressCheckTest extends TestCase
         ]);
         $this->assertNotContains('no_phone_express', $this->codes($issues));
     }
+
+    // ── Non-string fields from malformed payloads ───────────────────────────
+
+    public function testIntegerZipDoesNotThrow(): void
+    {
+        $issues = $this->check([
+            'first_name' => 'Jane', 'last_name' => 'Doe',
+            'address1'   => '123 Main St', 'city' => 'Boston',
+            'province_code' => 'CA', 'country_code' => 'US',
+            'zip' => 90210,
+        ]);
+        $this->assertSame([], $issues);
+    }
+
+    public function testIntegerZipStillValidatedAsBadFormatWhenInvalid(): void
+    {
+        $issues = $this->check([
+            'first_name' => 'Jane', 'last_name' => 'Doe',
+            'address1'   => '123 Main St', 'city' => 'Boston',
+            'province_code' => 'MA', 'country_code' => 'US',
+            'zip' => 123, // too short to be a valid 5-digit US zip
+        ]);
+        $this->assertContains('bad_zip_us', $this->codes($issues));
+    }
 }

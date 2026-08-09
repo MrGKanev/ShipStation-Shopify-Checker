@@ -84,23 +84,51 @@ class Actions
     {
         $numbers = array_filter((array) ($_POST['order_numbers'] ?? []));
         $reason  = trim($_POST['reason'] ?? '');
-        $entries = [];
-        foreach ($numbers as $raw) {
-            $norm = Comparator::normalise($raw);
-            if ($norm) $entries[] = ['number' => $norm, 'reason' => $reason];
-        }
+        $entries = self::buildBulkIgnoreEntries($numbers, $reason);
         IgnoreList::bulkAdd($entries);
         UserActionLog::append('bulk_ignore_orders', ['count' => count($entries), 'reason' => $reason]);
         header('Location: ' . self::redirectBack()); exit;
     }
 
+    /**
+     * Normalises raw order numbers into IgnoreList::bulkAdd() entries,
+     * dropping any that normalise to an empty string.
+     *
+     * @param  array<int, mixed> $rawNumbers
+     * @return array<int, array{number: string, reason: string}>
+     */
+    public static function buildBulkIgnoreEntries(array $rawNumbers, string $reason): array
+    {
+        $entries = [];
+        foreach ($rawNumbers as $raw) {
+            $norm = Comparator::normalise((string) $raw);
+            if ($norm) $entries[] = ['number' => $norm, 'reason' => $reason];
+        }
+        return $entries;
+    }
+
     private static function bulkUnignore(array $ctx): void
     {
         $numbers = array_filter((array) ($_POST['order_numbers'] ?? []));
-        $norms   = array_values(array_filter(array_map(Comparator::normalise(...), $numbers)));
+        $norms   = self::normaliseOrderNumbers($numbers);
         IgnoreList::bulkRemove($norms);
         UserActionLog::append('bulk_unignore_orders', ['count' => count($norms)]);
         header('Location: ?page=ignored'); exit;
+    }
+
+    /**
+     * Normalises raw order numbers, dropping any that normalise to an
+     * empty string (dedup is IgnoreList::bulkRemove()'s job, not ours).
+     *
+     * @param  array<int, mixed> $rawNumbers
+     * @return array<int, string>
+     */
+    public static function normaliseOrderNumbers(array $rawNumbers): array
+    {
+        return array_values(array_filter(array_map(
+            fn($raw) => Comparator::normalise((string) $raw),
+            $rawNumbers
+        )));
     }
 
     private static function importIgnoreCsv(array $ctx): void
@@ -123,36 +151,44 @@ class Actions
             $loc .= '&push_error=' . urlencode('Missing credentials or order ID.');
         } else {
             try {
-                $shopify      = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
-                $shopifyOrder = $shopify->getOrder($shopifyId);
-
-                if (empty($shopifyOrder)) {
-                    throw new RuntimeException("Order {$shopifyId} not found in Shopify.");
-                }
-
+                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
                 $ss      = new ShipStation($ctx['ssKey'], $ctx['ssSecret']);
-                $created = $ss->createOrder($shopifyOrder);
-                $orderNum = $created['orderNumber'] ?? $shopifyId;
+                $pushed  = self::performPush($shopify, $ss, $shopifyId);
 
-                PushLog::append([
-                    'order_number' => $orderNum,
-                    'shopify_id'   => $shopifyId,
-                    'ss_order_id'  => $created['orderId'] ?? null,
-                    'pushed_at'    => date('Y-m-d H:i:s'),
-                ]);
-                UserActionLog::append('push_to_shipstation', [
-                    'order_number' => $orderNum,
-                    'shopify_id'   => $shopifyId,
-                    'ss_order_id'  => $created['orderId'] ?? null,
-                ]);
+                PushLog::append($pushed + ['pushed_at' => date('Y-m-d H:i:s')]);
+                UserActionLog::append('push_to_shipstation', $pushed);
 
-                $loc .= '&push_ok=' . urlencode($orderNum);
+                $loc .= '&push_ok=' . urlencode($pushed['order_number']);
             } catch (Throwable $e) {
                 $loc .= '&push_error=' . urlencode($e->getMessage());
             }
         }
 
         header('Location: ' . $loc); exit;
+    }
+
+    /**
+     * Fetches $shopifyId from Shopify and creates the corresponding
+     * ShipStation order. Throws if the Shopify order can't be found -
+     * callers decide how to surface that (redirect vs. JSON error).
+     *
+     * @return array{order_number: string, shopify_id: string, ss_order_id: mixed}
+     */
+    public static function performPush(Shopify $shopify, ShipStation $ss, string $shopifyId): array
+    {
+        $shopifyOrder = $shopify->getOrder($shopifyId);
+        if (empty($shopifyOrder)) {
+            throw new RuntimeException("Order {$shopifyId} not found in Shopify.");
+        }
+
+        $created  = $ss->createOrder($shopifyOrder);
+        $orderNum = $created['orderNumber'] ?? $shopifyId;
+
+        return [
+            'order_number' => $orderNum,
+            'shopify_id'   => $shopifyId,
+            'ss_order_id'  => $created['orderId'] ?? null,
+        ];
     }
 
     private static function queueAudit(array $ctx): void
@@ -208,20 +244,29 @@ class Actions
         }
 
         try {
-            $shopify      = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
-            $shopifyOrder = $shopify->getOrder($shopifyId);
-
-            if (empty($shopifyOrder)) {
-                echo json_encode(['error' => "Order {$shopifyId} not found in Shopify."]); exit;
-            }
-
+            $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
             $ss      = new ShipStation($ctx['ssKey'] ?: 'preview', $ctx['ssSecret'] ?: 'preview');
-            $payload = $ss->buildPayload($shopifyOrder);
+            $payload = self::buildPushPreview($shopify, $ss, $shopifyId);
             echo json_encode(['payload' => $payload], JSON_PRETTY_PRINT);
         } catch (Throwable $e) {
             echo json_encode(['error' => $e->getMessage()]);
         }
         exit;
+    }
+
+    /**
+     * Builds the ShipStation payload preview for $shopifyId without
+     * actually creating the order. Throws if the Shopify order can't be
+     * found.
+     */
+    public static function buildPushPreview(Shopify $shopify, ShipStation $ss, string $shopifyId): array
+    {
+        $shopifyOrder = $shopify->getOrder($shopifyId);
+        if (empty($shopifyOrder)) {
+            throw new RuntimeException("Order {$shopifyId} not found in Shopify.");
+        }
+
+        return $ss->buildPayload($shopifyOrder);
     }
 
     private static function orderDetail(array $ctx): void
@@ -330,18 +375,9 @@ class Actions
         $password = $_POST['new_password'] ?? '';
         $role     = $_POST['new_role'] ?? 'viewer';
 
-        if (!in_array($role, ['viewer', 'operator', 'admin'], true)) {
-            header('Location: ?page=settings&user_error=' . urlencode('Invalid role.')); exit;
-        }
-        if ($username === '' || $password === '') {
-            header('Location: ?page=settings&user_error=' . urlencode('Username and password are required.')); exit;
-        }
-
         $users = Auth::loadUsers();
-        foreach ($users as $u) {
-            if (($u['name'] ?? '') === $username) {
-                header('Location: ?page=settings&user_error=' . urlencode('A user with that username already exists.')); exit;
-            }
+        if ($err = self::validateNewUser($users, $username, $password, $role)) {
+            header('Location: ?page=settings&user_error=' . urlencode($err)); exit;
         }
 
         $users[] = [
@@ -352,6 +388,28 @@ class Actions
         Auth::saveUsers($users);
         UserActionLog::append('add_user', ['username' => $username, 'role' => $role]);
         header('Location: ?page=settings&user_added=1'); exit;
+    }
+
+    /**
+     * Validates a new-user submission against the existing user list.
+     * Returns an error message, or null when valid.
+     *
+     * @param  array<int, array{name: string, password_hash: string, role: string}> $existingUsers
+     */
+    public static function validateNewUser(array $existingUsers, string $username, string $password, string $role): ?string
+    {
+        if (!in_array($role, ['viewer', 'operator', 'admin'], true)) {
+            return 'Invalid role.';
+        }
+        if ($username === '' || $password === '') {
+            return 'Username and password are required.';
+        }
+        foreach ($existingUsers as $u) {
+            if (($u['name'] ?? '') === $username) {
+                return 'A user with that username already exists.';
+            }
+        }
+        return null;
     }
 
     private static function deleteUser(array $ctx): void
@@ -374,13 +432,8 @@ class Actions
         $note      = trim($_POST['note'] ?? '');
         $loc       = self::redirectBack('spotcheck');
 
-        if (!$shopifyId) {
-            header('Location: ' . $loc . '&note_error=' . urlencode('Missing order ID.') . '&note_order=' . urlencode($shopifyId));
-            exit;
-        }
-
-        if (!$ctx['shopifyToken'] || $ctx['shopifyStore'] === 'N/A') {
-            header('Location: ' . $loc . '&note_error=' . urlencode('Shopify credentials not configured.') . '&note_order=' . urlencode($shopifyId));
+        if ($err = self::validateSaveOrderNoteRequest($shopifyId, $ctx)) {
+            header('Location: ' . $loc . '&note_error=' . urlencode($err) . '&note_order=' . urlencode($shopifyId));
             exit;
         }
 
@@ -395,10 +448,22 @@ class Actions
         exit;
     }
 
+    /** Returns an error message, or null when the note request is valid. */
+    public static function validateSaveOrderNoteRequest(string $shopifyId, array $ctx): ?string
+    {
+        if (!$shopifyId) {
+            return 'Missing order ID.';
+        }
+        if (!$ctx['shopifyToken'] || $ctx['shopifyStore'] === 'N/A') {
+            return 'Shopify credentials not configured.';
+        }
+        return null;
+    }
+
     private static function csvDownload(array $ctx): void
     {
         $date = $_GET['date'] ?? '';
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+        if (!self::isValidReportDate($date)) {
             http_response_code(400); exit('Invalid date.');
         }
         $path = $ctx['reportDir'] . '/missing_' . $date . '.csv';
@@ -410,6 +475,16 @@ class Actions
         header('Content-Length: ' . filesize($path));
         readfile($path);
         exit;
+    }
+
+    /**
+     * Strictly anchored YYYY-MM-DD check - the value is interpolated
+     * directly into a filesystem path (csvDownload's report file lookup),
+     * so this also guards against path traversal (`../`, extra segments).
+     */
+    public static function isValidReportDate(string $date): bool
+    {
+        return (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $date);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

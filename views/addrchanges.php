@@ -42,6 +42,7 @@
             <th>Order</th>
             <th>Placed</th>
             <th>Changed</th>
+            <th>Time gap</th>
             <th>Email</th>
             <th>Current shipping address</th>
             <th>Total</th>
@@ -52,11 +53,13 @@
         <tbody>
           <?php foreach ($acResult['rows'] as $row):
             $adminUrl = $row['shopify_id'] ? $shopifyAdminBase . '/' . esc($row['shopify_id']) : null;
+            $gap      = timeGapDisplay((int) $row['gap_mins']);
           ?>
           <tr>
             <?= orderNumCell($row['order_number'], $adminUrl) ?>
             <td><?= esc($row['created_at']) ?></td>
             <td class="font-medium" style="color:var(--warn)"><?= esc($row['changed_at']) ?></td>
+            <td class="text-sm font-medium" style="color:<?= $gap['color'] ?>"><?= esc($gap['label']) ?></td>
             <td class="td-email"><?= esc($row['email']) ?></td>
             <td class="td-email">
               <?php if ($row['addr_name']): ?>
