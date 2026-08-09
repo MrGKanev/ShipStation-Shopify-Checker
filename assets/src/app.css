@@ -451,6 +451,7 @@ tbody td         { @apply text-sm align-middle; padding: .75rem 1.25rem; }
 
 .chip         { @apply inline-block text-xs font-semibold; padding: .15rem .55rem; border-radius: 5px; }
 .chip-paid    { background: var(--c-ok-bg);     color: var(--c-ok-fg); }
+.chip-ok      { background: var(--c-ok-bg);     color: var(--c-ok-fg); }
 .chip-partial { background: var(--c-amber-bg);  color: var(--c-amber-fg); }
 .chip-unpaid  { background: var(--c-danger-bg); color: var(--c-danger-fg); }
 .chip-unknown { background: var(--c-chip);      color: var(--muted); }
