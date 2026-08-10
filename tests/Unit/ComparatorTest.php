@@ -93,9 +93,41 @@ class ComparatorTest extends TestCase
 
         // Full normalised key
         $this->assertArrayHasKey('1000422', $index);
-        // Individual segment keys
+        // Main order-number segment
         $this->assertArrayHasKey('100042', $index);
-        $this->assertArrayHasKey('2', $index);
+        // The "2" in "-B2" is a box-suffix artifact, not a real standalone
+        // order number - indexing it would false-match any Shopify order
+        // that happens to be numbered "2".
+        $this->assertArrayNotHasKey('2', $index);
+    }
+
+    public function testOrderNumberKeysDropsShortSuffixFragments(): void
+    {
+        $this->assertSame(['1000422', '100042'], Comparator::orderNumberKeys('100042-B2'));
+    }
+
+    public function testOrderNumberKeysKeepsFullLengthAddonPrefix(): void
+    {
+        // "Addon-100031" has no separate short fragment - the whole run IS
+        // the real order number, so it must still be indexed.
+        $this->assertSame(['100031'], Comparator::orderNumberKeys('Addon-100031'));
+    }
+
+    public function testCompareDoesNotFalseMatchUnrelatedOrderAgainstBoxSuffixFragment(): void
+    {
+        // An SS compound order "100042-B2" must not falsely match an
+        // unrelated Shopify order whose number happens to be "2".
+        $ssIndex = Comparator::buildSSIndex([
+            ['orderNumber' => '100042-B2', 'orderId' => 1],
+        ]);
+
+        $result = Comparator::compare(
+            [$this->makeShopifyOrder(['order_number' => '2', 'name' => '#2'])],
+            $ssIndex
+        );
+
+        $this->assertCount(1, $result['missing']);
+        $this->assertCount(0, $result['found']);
     }
 
     public function testBuildSSEmailIndex(): void

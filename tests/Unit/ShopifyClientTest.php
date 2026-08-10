@@ -1588,6 +1588,46 @@ class ShopifyClientTest extends TestCase
         $this->assertSame(1, $result[0]['id']);
     }
 
+    // ── Truncated-pagination visibility ──────────────────────────────────────
+    //
+    // OrderFetcher::fetchOrdersByQuery() discards the `truncated` flag that
+    // Client::paginateGraphQLVariables() reports when the result set wasn't
+    // fully paginated (page cap hit, or - as simulated below - a next page
+    // signalled with no cursor to follow). Sibling fetchers (OrderTagInsights,
+    // CustomerOrderInsights, DuplicateOrderInsights) all surface this instead
+    // of silently dropping orders past the cut-off.
+
+    public function testFetchRefundedOrdersLogsWarningWhenPaginationTruncated(): void
+    {
+        Logger::resetInstance();
+        $logDir = sys_get_temp_dir() . '/of_log_' . uniqid();
+
+        try {
+            Logger::getInstance($logDir);
+
+            $shopify = $this->shopify([$this->json([
+                'data' => [
+                    'orders' => [
+                        // hasNextPage true with no cursor to follow: the loop
+                        // stops (same as hitting the maxPages cap) but still
+                        // reports truncated => true.
+                        'pageInfo' => ['hasNextPage' => true, 'endCursor' => null],
+                        'edges'    => [],
+                    ],
+                ],
+            ])]);
+
+            $shopify->fetchRefundedOrders('2026-06-01', '2026-06-19');
+
+            $log = file_exists($logDir . '/app.log') ? file_get_contents($logDir . '/app.log') : '';
+            $this->assertStringContainsString('truncated', strtolower($log));
+        } finally {
+            @unlink($logDir . '/app.log');
+            @rmdir($logDir);
+            Logger::resetInstance();
+        }
+    }
+
     public function testFetchAllProductsUsesGraphQLAndNormalizesRestShape(): void
     {
         $history = [];

@@ -263,7 +263,7 @@ class ShipStationClientTest extends TestCase
         }
     }
 
-    public function testExpiredFetchAllOrdersCheckpointFallsBackToStaleOnRefreshFailure(): void
+    public function testExpiredFetchAllOrdersCheckpointRethrowsOnRefreshFailureInsteadOfSilentlyServingStaleData(): void
     {
         $tmpDir = sys_get_temp_dir() . '/ss_checkpoint_' . uniqid();
         $cache = new Cache($tmpDir, ttl: 60);
@@ -277,11 +277,16 @@ class ShipStationClientTest extends TestCase
         ]));
 
         try {
-            $orders = $ss->fetchAllOrders('2026-03-01', '2026-03-02');
+            $threw = false;
+            try {
+                $ss->fetchAllOrders('2026-03-01', '2026-03-02');
+            } catch (RuntimeException) {
+                $threw = true;
+            }
 
-            $this->assertSame([['orderId' => 'stale']], $orders);
-            $this->assertTrue(file_exists($dir . '/page_1.json'));
-            $this->assertSame([], glob(dirname($dir) . '/.' . basename($dir) . '.tmp_*') ?: []);
+            $this->assertTrue($threw, 'refresh failure must propagate instead of silently returning stale data');
+            $this->assertTrue(file_exists($dir . '/page_1.json'), 'stale checkpoint must remain on disk so the next run can retry');
+            $this->assertSame([], glob(dirname($dir) . '/.' . basename($dir) . '.tmp_*') ?: [], 'tmp refresh dir must still be cleaned up');
         } finally {
             $this->removeDir($tmpDir);
         }

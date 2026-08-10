@@ -154,6 +154,7 @@ class Auth
         $lockedOut = ($entry['until'] ?? 0) > $now;
 
         if ($lockedOut) {
+            self::writeAttempts($attemptsFile, $attempts);
             self::unlockAttempts($lock);
             $secs  = $entry['until'] - $now;
             $days  = (int) floor($secs / 86400);
@@ -320,6 +321,7 @@ class Auth
         $lockedOut = ($entry['until'] ?? 0) > $now;
 
         if ($lockedOut) {
+            self::writeAttempts($attemptsFile, $attempts);
             self::unlockAttempts($lock);
             return '';
         }

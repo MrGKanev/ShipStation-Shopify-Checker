@@ -126,14 +126,14 @@
           <?php foreach ($ltvResult['cohort'] as $row): ?>
             <?php
               $rate = $row['retention_rate'];
-              $rateClass = $rate >= 30 ? 'color:var(--ok);font-weight:600'
-                         : ($rate >= 10 ? 'color:var(--warn);font-weight:600' : 'color:var(--danger)');
+              $rateColor  = severityColor((float)$rate, 10, 30, lowerIsWorse: true, neutral: 'var(--ok)');
+              $rateWeight = $rate >= 10 ? ';font-weight:600' : '';
             ?>
             <tr>
               <td class="font-bold"><?= esc($row['month']) ?></td>
               <td><?= $row['new'] ?></td>
               <td><?= $row['repeat'] ?></td>
-              <td style="<?= $rateClass ?>"><?= $rate ?>%</td>
+              <td style="color:<?= $rateColor . $rateWeight ?>"><?= $rate ?>%</td>
               <td class="text-muted"><?= $row['avg_orders'] ?></td>
               <td>$<?= number_format($row['total_revenue'], 2) ?></td>
               <td class="text-muted">$<?= number_format($row['avg_revenue'], 2) ?></td>

@@ -120,7 +120,7 @@ class OrderFetcher
         GQL;
         $query = str_replace('{{NODE_FIELDS}}', $nodeFields, $query);
 
-        $this->client->paginateGraphQLVariables(
+        $result = $this->client->paginateGraphQLVariables(
             $query,
             'orders',
             ['query' => $queryStr],
@@ -136,6 +136,20 @@ class OrderFetcher
             1000
         );
 
+        if ($result['truncated'] ?? false) {
+            $this->logWarning('Shopify order query truncated after {pages} pages; results may be incomplete: {query}', [
+                'pages' => $result['pages'] ?? '?',
+                'query' => $queryStr,
+            ]);
+        }
+
         return $all;
+    }
+
+    private function logWarning(string $message, array $context = []): void
+    {
+        if (class_exists(\Logger::class)) {
+            \Logger::getInstance()->warning($message, $context);
+        }
     }
 }

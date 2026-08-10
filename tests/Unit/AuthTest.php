@@ -109,6 +109,28 @@ class AuthTest extends TestCase
         $this->assertArrayNotHasKey($ip, Auth::bannedIps());
     }
 
+    public function testLockedOutAttemptStillPersistsPrunedExpiredEntries(): void
+    {
+        $ip = '10.0.0.9';
+        Auth::attempt('admin', 'wrong', 'admin', 'secret', $ip);
+        Auth::attempt('admin', 'wrong', 'admin', 'secret', $ip);
+        Auth::attempt('admin', 'wrong', 'admin', 'secret', $ip); // locks $ip out
+
+        // Seed a long-expired entry for an unrelated IP directly on disk -
+        // this should be pruned the next time the attempts file is written.
+        $file = $this->tmpDir . '/login_attempts.json';
+        $raw  = json_decode((string) file_get_contents($file), true);
+        $raw['203.0.113.1'] = ['count' => 1, 'first' => time() - 999999, 'until' => 0];
+        file_put_contents($file, json_encode($raw));
+
+        // $ip is locked out, so this attempt takes the early-return path -
+        // it must still persist the pruned attempts list, not just read it.
+        Auth::attempt('admin', 'wrong', 'admin', 'secret', $ip);
+
+        $after = json_decode((string) file_get_contents($file), true);
+        $this->assertArrayNotHasKey('203.0.113.1', $after);
+    }
+
     // ── bannedIps ─────────────────────────────────────────────────────────────
 
     public function testBannedIpsReturnsEmptyArrayWhenNoFileExists(): void

@@ -279,6 +279,56 @@ class RiskScorerTest extends TestCase
         $this->assertSame(60, $result['score']);
     }
 
+    // ── Level threshold boundaries ────────────────────────────────────────────
+    // Default weights are all multiples of 5, so 21 and 51 themselves are
+    // unreachable; these pin the nearest achievable score on each side of the
+    // >=21 and >=51 cutoffs so a future weight change can't silently shift them.
+
+    public function testScoreTwentyIsLowNotMedium(): void
+    {
+        // No shipping address alone = 20 → must stay 'low' (threshold is >=21)
+        $result = RiskScorer::score(['shipping_address' => null]);
+        $this->assertSame(20, $result['score']);
+        $this->assertSame('low', $result['level']);
+    }
+
+    public function testScoreTwentyFiveIsMedium(): void
+    {
+        // Billing != shipping country alone = 25 → next achievable value above 20
+        $result = RiskScorer::score([
+            'billing_address'  => ['country_code' => 'US'],
+            'shipping_address' => ['country_code' => 'CA'],
+        ]);
+        $this->assertSame(25, $result['score']);
+        $this->assertSame('medium', $result['level']);
+    }
+
+    public function testScoreFiftyIsMediumNotHigh(): void
+    {
+        // Disposable email (30) + no shipping address (20) = 50 → must stay
+        // 'medium' (threshold is >=51), matching the documented example in
+        // testScoreLevelHigh().
+        $result = RiskScorer::score([
+            'email'            => 'not-an-email',
+            'shipping_address' => null,
+        ]);
+        $this->assertSame(50, $result['score']);
+        $this->assertSame('medium', $result['level']);
+    }
+
+    public function testScoreFiftyFiveIsHigh(): void
+    {
+        // Disposable email (30) + billing != shipping country (25) = 55 →
+        // next achievable value above 50
+        $result = RiskScorer::score([
+            'email'            => 'not-an-email',
+            'billing_address'  => ['country_code' => 'US'],
+            'shipping_address' => ['country_code' => 'CA'],
+        ]);
+        $this->assertSame(55, $result['score']);
+        $this->assertSame('high', $result['level']);
+    }
+
     // ── Multiple signals accumulate ───────────────────────────────────────────
 
     public function testMultipleSignalsAccumulate(): void

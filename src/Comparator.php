@@ -6,6 +6,9 @@ declare(strict_types=1);
  */
 class Comparator
 {
+    /** Shopify's default order-number sequence starts at 1001 (4 digits); shorter digit-runs are suffix artifacts, not real order numbers. */
+    private const int MIN_FRAGMENT_LENGTH = 4;
+
     /**
      * Build a fast lookup: normalised orderNumber → [ss orders].
      *
@@ -31,9 +34,13 @@ class Comparator
     /**
      * All lookup keys a raw order-number string resolves to: the
      * full-normalised digits-only form, plus each individual contiguous
-     * digit-run within it.
+     * digit-run within it that's long enough to plausibly be a real order
+     * number on its own (short runs like the "2" in "-B2" are box/addon
+     * suffix artifacts, not standalone order numbers - indexing them would
+     * false-match any unrelated Shopify order that happens to share that
+     * short number).
      *
-     * e.g. "100042-B2" → ["1000422", "100042", "2"]; "Addon-100031" → ["100031"]
+     * e.g. "100042-B2" → ["1000422", "100042"]; "Addon-100031" → ["100031"]
      *
      * @return array<int, string>
      */
@@ -46,7 +53,7 @@ class Comparator
         }
         preg_match_all('/\d+/', $raw, $m);
         foreach ($m[0] as $segment) {
-            if ($segment !== $full && $segment !== '') {
+            if ($segment !== $full && $segment !== '' && strlen($segment) >= self::MIN_FRAGMENT_LENGTH) {
                 $keys[] = $segment;
             }
         }

@@ -98,12 +98,12 @@ class ShipStation
                 return $all;
             } catch (Throwable $e) {
                 $this->removeCheckpoint($tmpDir);
-                $this->logWarning('ShipStation refresh failed; using stale checkpoint ({start} -> {end}): {message}', [
+                $this->logWarning('ShipStation refresh failed ({start} -> {end}); stale checkpoint left in place: {message}', [
                     'start'   => $startDate,
                     'end'     => $endDate,
                     'message' => $e->getMessage(),
                 ]);
-                return $this->mergePageFiles($cpDir);
+                throw $e;
             }
         }
 
