@@ -46,4 +46,20 @@ class RunLogTest extends TestCase
         $this->assertSame('ok', $row['status']);
         $this->assertArrayHasKey('id', $row);
     }
+
+    public function testAppendPrunesOldestEntriesBeyondMaxEntries(): void
+    {
+        $ref = new \ReflectionClass(RunLog::class);
+        $max = $ref->getConstant('MAX_ENTRIES');
+
+        for ($i = 0; $i < $max + 10; $i++) {
+            RunLog::append(['tool' => "run-{$i}"]);
+        }
+
+        $rows = RunLog::all();
+
+        $this->assertCount($max, $rows);
+        $this->assertSame('run-' . ($max + 9), $rows[0]['tool']);
+        $this->assertSame('run-10', $rows[$max - 1]['tool']);
+    }
 }

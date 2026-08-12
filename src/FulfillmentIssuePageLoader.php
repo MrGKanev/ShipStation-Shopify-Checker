@@ -31,31 +31,45 @@ class FulfillmentIssuePageLoader
                 $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
                 $nodes   = self::suppressOutput(fn() => $shopify->fetchOnHoldFulfillmentOrders($start, $end));
 
-                $now  = time();
-                $rows = [];
-                foreach ($nodes as $node) {
-                    $order   = $node['order'];
-                    $created = $order['createdAt'] ?? '';
-                    $days    = $created ? (int)floor(($now - strtotime($created)) / 86400) : 0;
-                    $holds   = $node['fulfillmentHolds'] ?? [];
-                    $rows[] = [
-                        'shopify_id'   => $order['legacyResourceId']            ?? '',
-                        'order_number' => $order['name']                        ?? '',
-                        'created_at'   => self::dateOnly($created),
-                        'days_waiting' => $days,
-                        'email'        => $order['email']                       ?? '',
-                        'total'        => $order['totalPriceSet']['shopMoney']['amount'] ?? '',
-                        'financial'    => $order['displayFinancialStatus']      ?? '',
-                        'fulfillment'  => $order['displayFulfillmentStatus']    ?? '',
-                        'hold_reason'  => $holds[0]['reason']                  ?? '',
-                        'hold_notes'   => $holds[0]['reasonNotes']             ?? '',
-                    ];
-                }
-                usort($rows, fn($a, $b) => $b['days_waiting'] <=> $a['days_waiting']);
+                $rows = self::buildOnHoldStallRows($nodes, time());
                 return ['rows' => $rows, 'start' => $start, 'end' => $end];
             }, 90);
 
         return compact('ohResult', 'ohError', 'ohStart', 'ohEnd');
+    }
+
+    /**
+     * On-Hold Stall rows: one per fulfillment order currently on hold,
+     * sorted by days_waiting descending. Only the first fulfillment hold's
+     * reason/notes are surfaced per the documented "sorted by how long
+     * waiting" behavior.
+     *
+     * @param  array<int, array<string, mixed>> $nodes shaped like Shopify::fetchOnHoldFulfillmentOrders()
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildOnHoldStallRows(array $nodes, int $now): array
+    {
+        $rows = [];
+        foreach ($nodes as $node) {
+            $order   = $node['order'];
+            $created = $order['createdAt'] ?? '';
+            $days    = $created ? (int)floor(($now - strtotime($created)) / 86400) : 0;
+            $holds   = $node['fulfillmentHolds'] ?? [];
+            $rows[] = [
+                'shopify_id'   => $order['legacyResourceId']            ?? '',
+                'order_number' => $order['name']                        ?? '',
+                'created_at'   => self::dateOnly($created),
+                'days_waiting' => $days,
+                'email'        => $order['email']                       ?? '',
+                'total'        => $order['totalPriceSet']['shopMoney']['amount'] ?? '',
+                'financial'    => $order['displayFinancialStatus']      ?? '',
+                'fulfillment'  => $order['displayFulfillmentStatus']    ?? '',
+                'hold_reason'  => $holds[0]['reason']                  ?? '',
+                'hold_notes'   => $holds[0]['reasonNotes']             ?? '',
+            ];
+        }
+        usort($rows, fn($a, $b) => $b['days_waiting'] <=> $a['days_waiting']);
+        return $rows;
     }
 
     private static function loadNoTracking(string $action, array $ctx): array
@@ -140,40 +154,55 @@ class FulfillmentIssuePageLoader
                 $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
                 $entries = self::suppressOutput(fn() => $shopify->fetchPostShipAddressChanges($start, $end));
 
-                $rows = [];
-                foreach ($entries as $e) {
-                    $o    = $e['order'];
-                    $addr = $o['shipping_address'] ?? null;
-                    $addrLine = $addr ? implode(', ', array_filter([
-                        $addr['address1']      ?? '',
-                        $addr['city']          ?? '',
-                        $addr['province_code'] ?? '',
-                        $addr['zip']           ?? '',
-                        $addr['country_code']  ?? '',
-                    ])) : '';
-                    $changedTs     = strtotime($e['changed_at']     ?? '');
-                    $fulfillTs     = strtotime($e['fulfillment_at'] ?? '');
-                    $minsAfterShip = ($changedTs && $fulfillTs) ? max(0, (int)(($changedTs - $fulfillTs) / 60)) : 0;
-                    $rows[] = [
-                        'shopify_id'      => $o['id']          ?? '',
-                        'order_number'    => $o['name']        ?? '',
-                        'created_at'      => self::dateOnly($o['created_at']     ?? ''),
-                        'fulfillment_at'  => self::dateOnly($e['fulfillment_at'] ?? ''),
-                        'changed_at'      => substr($e['changed_at'] ?? '', 0, 16),
-                        'mins_after_ship' => $minsAfterShip,
-                        'email'           => $o['email']       ?? '',
-                        'total'           => $o['total_price'] ?? '',
-                        'financial'       => $o['financial_status']   ?? '',
-                        'fulfillment'     => $o['fulfillment_status'] ?? '',
-                        'addr_name'       => trim(($addr['first_name'] ?? '') . ' ' . ($addr['last_name'] ?? '')),
-                        'addr_line'       => $addrLine,
-                    ];
-                }
-                usort($rows, fn($a, $b) => strcmp($b['changed_at'], $a['changed_at']));
+                $rows = self::buildPostShipAddrChangeRows($entries);
                 return ['rows' => $rows, 'start' => $start, 'end' => $end];
             });
 
         return compact('psResult', 'psError', 'psStart', 'psEnd');
+    }
+
+    /**
+     * Post-Ship Address Change rows: one per address-change event that
+     * occurred after fulfillment, sorted by changed_at descending.
+     * `mins_after_ship` is the gap between the fulfillment timestamp and the
+     * change event (0 if either timestamp is missing/unparseable).
+     *
+     * @param  array<int, array{order: array<string, mixed>, changed_at: string, fulfillment_at: string}> $entries
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildPostShipAddrChangeRows(array $entries): array
+    {
+        $rows = [];
+        foreach ($entries as $e) {
+            $o    = $e['order'];
+            $addr = $o['shipping_address'] ?? null;
+            $addrLine = $addr ? implode(', ', array_filter([
+                $addr['address1']      ?? '',
+                $addr['city']          ?? '',
+                $addr['province_code'] ?? '',
+                $addr['zip']           ?? '',
+                $addr['country_code']  ?? '',
+            ])) : '';
+            $changedTs     = strtotime($e['changed_at']     ?? '');
+            $fulfillTs     = strtotime($e['fulfillment_at'] ?? '');
+            $minsAfterShip = ($changedTs && $fulfillTs) ? max(0, (int)(($changedTs - $fulfillTs) / 60)) : 0;
+            $rows[] = [
+                'shopify_id'      => $o['id']          ?? '',
+                'order_number'    => $o['name']        ?? '',
+                'created_at'      => self::dateOnly($o['created_at']     ?? ''),
+                'fulfillment_at'  => self::dateOnly($e['fulfillment_at'] ?? ''),
+                'changed_at'      => substr($e['changed_at'] ?? '', 0, 16),
+                'mins_after_ship' => $minsAfterShip,
+                'email'           => $o['email']       ?? '',
+                'total'           => $o['total_price'] ?? '',
+                'financial'       => $o['financial_status']   ?? '',
+                'fulfillment'     => $o['fulfillment_status'] ?? '',
+                'addr_name'       => trim(($addr['first_name'] ?? '') . ' ' . ($addr['last_name'] ?? '')),
+                'addr_line'       => $addrLine,
+            ];
+        }
+        usort($rows, fn($a, $b) => strcmp($b['changed_at'], $a['changed_at']));
+        return $rows;
     }
 
     private static function loadSsShippedUnfulfilled(string $action, array $ctx): array
@@ -195,42 +224,7 @@ class FulfillmentIssuePageLoader
                     ];
                 });
 
-                $shIndex = [];
-                foreach ($shOrders as $o) {
-                    $num = Comparator::normalise((string)($o['order_number'] ?? ltrim($o['name'] ?? '', '#')));
-                    if ($num) {
-                        $shIndex[$num] = [
-                            'fulfillment_status' => $o['fulfillment_status'] ?? '',
-                            'financial_status'   => $o['financial_status']   ?? '',
-                            'shopify_id'         => $o['id']                 ?? '',
-                        ];
-                    }
-                }
-
-                $rows = [];
-                foreach ($ssOrders as $o) {
-                    if (($o['orderStatus'] ?? '') !== 'shipped') continue;
-                    $num = Comparator::normalise((string)($o['orderNumber'] ?? ''));
-                    if (!$num || !isset($shIndex[$num])) continue;
-
-                    $sh            = $shIndex[$num];
-                    $shFulfillment = $sh['fulfillment_status'] ?? '';
-                    if ($shFulfillment === 'fulfilled') continue;
-
-                    $rows[] = [
-                        'ss_order_id'    => $o['orderId']      ?? '',
-                        'order_number'   => $o['orderNumber']  ?? '',
-                        'order_date'     => self::dateOnly($o['orderDate'] ?? ''),
-                        'customer'       => trim($o['shipTo']['name'] ?? ''),
-                        'email'          => $o['customerEmail'] ?? '',
-                        'total'          => $o['orderTotal']   ?? 0,
-                        'sh_fulfillment' => $shFulfillment ?: 'unfulfilled',
-                        'sh_financial'   => $sh['financial_status'] ?? '',
-                        'shopify_id'     => $sh['shopify_id'] ?? '',
-                        'ss_url'         => $o['orderId'] ? 'https://app.shipstation.com/#!/orders/order-details/' . urlencode((string)$o['orderId']) : null,
-                    ];
-                }
-                usort($rows, fn($a, $b) => strcmp($b['order_date'], $a['order_date']));
+                $rows = self::buildSsShippedUnfulfilledRows($ssOrders, $shOrders);
 
                 $shippedCount = count(array_filter($ssOrders, fn($o) => ($o['orderStatus'] ?? '') === 'shipped'));
                 return [
@@ -242,6 +236,56 @@ class FulfillmentIssuePageLoader
             }, 30, true);
 
         return compact('ssuResult', 'ssuError', 'ssuStart', 'ssuEnd');
+    }
+
+    /**
+     * SS Shipped / Shopify Unfulfilled rows: ShipStation orders marked
+     * 'shipped' whose matching Shopify order is NOT 'fulfilled' - a sync
+     * failure between the two systems. Sorted by order_date descending.
+     *
+     * @param  array<int, array<string, mixed>> $ssOrders
+     * @param  array<int, array<string, mixed>> $shOrders
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildSsShippedUnfulfilledRows(array $ssOrders, array $shOrders): array
+    {
+        $shIndex = [];
+        foreach ($shOrders as $o) {
+            $num = Comparator::normalise((string)($o['order_number'] ?? ltrim($o['name'] ?? '', '#')));
+            if ($num) {
+                $shIndex[$num] = [
+                    'fulfillment_status' => $o['fulfillment_status'] ?? '',
+                    'financial_status'   => $o['financial_status']   ?? '',
+                    'shopify_id'         => $o['id']                 ?? '',
+                ];
+            }
+        }
+
+        $rows = [];
+        foreach ($ssOrders as $o) {
+            if (($o['orderStatus'] ?? '') !== 'shipped') continue;
+            $num = Comparator::normalise((string)($o['orderNumber'] ?? ''));
+            if (!$num || !isset($shIndex[$num])) continue;
+
+            $sh            = $shIndex[$num];
+            $shFulfillment = $sh['fulfillment_status'] ?? '';
+            if ($shFulfillment === 'fulfilled') continue;
+
+            $rows[] = [
+                'ss_order_id'    => $o['orderId']      ?? '',
+                'order_number'   => $o['orderNumber']  ?? '',
+                'order_date'     => self::dateOnly($o['orderDate'] ?? ''),
+                'customer'       => trim($o['shipTo']['name'] ?? ''),
+                'email'          => $o['customerEmail'] ?? '',
+                'total'          => $o['orderTotal']   ?? 0,
+                'sh_fulfillment' => $shFulfillment ?: 'unfulfilled',
+                'sh_financial'   => $sh['financial_status'] ?? '',
+                'shopify_id'     => $sh['shopify_id'] ?? '',
+                'ss_url'         => $o['orderId'] ? 'https://app.shipstation.com/#!/orders/order-details/' . urlencode((string)$o['orderId']) : null,
+            ];
+        }
+        usort($rows, fn($a, $b) => strcmp($b['order_date'], $a['order_date']));
+        return $rows;
     }
 
     private static function loadItemMismatch(string $action, array $ctx): array
@@ -551,56 +595,7 @@ class FulfillmentIssuePageLoader
                 $ss        = new ShipStation($ctx['ssKey'], $ctx['ssSecret']);
                 $shipments = self::suppressOutput(fn() => $ss->fetchShipmentsByDate($start, $end));
 
-                // Group by carrier code
-                $byCarrier = [];
-                foreach ($shipments as $s) {
-                    $carrier = trim((string)($s['carrierCode'] ?? 'Unknown'));
-                    if ($carrier === '') $carrier = 'Unknown';
-
-                    if (!isset($byCarrier[$carrier])) {
-                        $byCarrier[$carrier] = [
-                            'carrier'         => $carrier,
-                            'count'           => 0,
-                            'with_delivery'   => 0,
-                            'total_days'      => 0,
-                            'late_count'      => 0,
-                        ];
-                    }
-
-                    $byCarrier[$carrier]['count']++;
-
-                    $shipDateTs    = $s['shipDate']     ? strtotime($s['shipDate'])     : null;
-                    $deliveryDateTs = $s['deliveryDate'] ? strtotime($s['deliveryDate']) : null;
-
-                    if ($shipDateTs && $deliveryDateTs && $deliveryDateTs >= $shipDateTs) {
-                        $days = (int) ceil(($deliveryDateTs - $shipDateTs) / 86400);
-                        $byCarrier[$carrier]['total_days']    += $days;
-                        $byCarrier[$carrier]['with_delivery'] += 1;
-                        // Flag as late if delivery took more than 5 business days (simple threshold)
-                        if ($days > 5) {
-                            $byCarrier[$carrier]['late_count']++;
-                        }
-                    }
-                }
-
-                $rows = [];
-                foreach ($byCarrier as $carrier => $stat) {
-                    $count       = $stat['count'];
-                    $withDel     = $stat['with_delivery'];
-                    $avgDays     = $withDel > 0 ? round($stat['total_days'] / $withDel, 1) : null;
-                    $latePct     = $withDel > 0 ? round($stat['late_count'] / $withDel * 100, 1) : null;
-
-                    $rows[] = [
-                        'carrier'          => $carrier,
-                        'count'            => $count,
-                        'with_delivery'    => $withDel,
-                        'avg_days'         => $avgDays,
-                        'late_pct'         => $latePct,
-                        'late_count'       => $stat['late_count'],
-                    ];
-                }
-
-                usort($rows, fn($a, $b) => $b['count'] <=> $a['count']);
+                $rows = self::buildCarrierPerfRows($shipments);
 
                 return [
                     'rows'     => $rows,
@@ -611,6 +606,72 @@ class FulfillmentIssuePageLoader
             }, 30, true);
 
         return compact('cpResult', 'cpError', 'cpStart', 'cpEnd');
+    }
+
+    /**
+     * Carrier Performance rows: one per carrier code seen in the shipment
+     * set, with average delivery days and late-rate over shipments that
+     * have both a ship date and a delivery date (`with_delivery`).
+     * Shipments missing either date, or with a delivery date before the
+     * ship date (bad data), don't count toward avg_days/late_pct but do
+     * count toward `count`. "Late" is a fixed >5-day threshold. Sorted by
+     * shipment count descending. A missing/blank carrierCode groups under
+     * 'Unknown'.
+     *
+     * @param  array<int, array<string, mixed>> $shipments
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildCarrierPerfRows(array $shipments): array
+    {
+        $byCarrier = [];
+        foreach ($shipments as $s) {
+            $carrier = trim((string)($s['carrierCode'] ?? 'Unknown'));
+            if ($carrier === '') $carrier = 'Unknown';
+
+            if (!isset($byCarrier[$carrier])) {
+                $byCarrier[$carrier] = [
+                    'carrier'         => $carrier,
+                    'count'           => 0,
+                    'with_delivery'   => 0,
+                    'total_days'      => 0,
+                    'late_count'      => 0,
+                ];
+            }
+
+            $byCarrier[$carrier]['count']++;
+
+            $shipDateTs    = $s['shipDate']     ? strtotime($s['shipDate'])     : null;
+            $deliveryDateTs = $s['deliveryDate'] ? strtotime($s['deliveryDate']) : null;
+
+            if ($shipDateTs && $deliveryDateTs && $deliveryDateTs >= $shipDateTs) {
+                $days = (int) ceil(($deliveryDateTs - $shipDateTs) / 86400);
+                $byCarrier[$carrier]['total_days']    += $days;
+                $byCarrier[$carrier]['with_delivery'] += 1;
+                if ($days > 5) {
+                    $byCarrier[$carrier]['late_count']++;
+                }
+            }
+        }
+
+        $rows = [];
+        foreach ($byCarrier as $carrier => $stat) {
+            $count       = $stat['count'];
+            $withDel     = $stat['with_delivery'];
+            $avgDays     = $withDel > 0 ? round($stat['total_days'] / $withDel, 1) : null;
+            $latePct     = $withDel > 0 ? round($stat['late_count'] / $withDel * 100, 1) : null;
+
+            $rows[] = [
+                'carrier'          => $carrier,
+                'count'            => $count,
+                'with_delivery'    => $withDel,
+                'avg_days'         => $avgDays,
+                'late_pct'         => $latePct,
+                'late_count'       => $stat['late_count'],
+            ];
+        }
+
+        usort($rows, fn($a, $b) => $b['count'] <=> $a['count']);
+        return $rows;
     }
 
     private static function loadShippingMargin(string $action, array $ctx): array

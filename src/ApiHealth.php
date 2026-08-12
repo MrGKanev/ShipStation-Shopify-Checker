@@ -62,14 +62,15 @@ class ApiHealth
     /**
      * @return array<string, mixed>
      */
-    public static function checkShipStation(string $key, string $secret): array
+    public static function checkShipStation(string $key, string $secret, ?callable $request = null): array
     {
         if (!$key || !$secret) {
             return ['ok' => false, 'error' => 'SS_API_KEY / SS_API_SECRET not set.', 'checks' => []];
         }
 
         $auth = base64_encode("{$key}:{$secret}");
-        $check = self::curlJson('https://ssapi.shipstation.com/orders?pageSize=1', [
+        $request ??= [self::class, 'curlJson'];
+        $check = $request('https://ssapi.shipstation.com/orders?pageSize=1', [
             "Authorization: Basic {$auth}",
             'Accept: application/json',
         ]);

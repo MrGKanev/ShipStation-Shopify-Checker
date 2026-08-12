@@ -33,4 +33,20 @@ class UserActionLogTest extends TestCase
         $this->assertSame('ignore_order', $rows[1]['action']);
         $this->assertSame('1001', $rows[0]['details']['order_number']);
     }
+
+    public function testAppendPrunesOldestEntriesBeyondMaxEntries(): void
+    {
+        $ref = new \ReflectionClass(UserActionLog::class);
+        $max = $ref->getConstant('MAX_ENTRIES');
+
+        for ($i = 0; $i < $max + 10; $i++) {
+            UserActionLog::append('ignore_order', ['order_number' => (string) $i]);
+        }
+
+        $rows = UserActionLog::all();
+
+        $this->assertCount($max, $rows);
+        $this->assertSame((string) ($max + 9), $rows[0]['details']['order_number']);
+        $this->assertSame('10', $rows[$max - 1]['details']['order_number']);
+    }
 }

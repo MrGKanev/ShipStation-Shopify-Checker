@@ -211,11 +211,7 @@ class SearchLookupPageLoader
                         $mfs = $oid ? $shopifyMeta->getOrderMetafields($oid) : [];
 
                         if ($metafieldFilter !== '') {
-                            $mfs = array_values(array_filter($mfs, function ($mf) use ($metafieldFilter) {
-                                $nk = ($mf['namespace'] ?? '') . '.' . ($mf['key'] ?? '');
-                                return stripos($nk, $metafieldFilter) !== false
-                                    || stripos((string) ($mf['value'] ?? ''), $metafieldFilter) !== false;
-                            }));
+                            $mfs = self::filterMetafields($mfs, $metafieldFilter);
                         }
 
                         $metafieldOrders[] = [
@@ -232,6 +228,21 @@ class SearchLookupPageLoader
 
         return compact('metafieldDefs', 'metafieldOrders', 'metafieldInput', 'metafieldError',
                        'metafieldFilter', 'metafieldSearch', 'metafieldSearchError');
+    }
+
+    /**
+     * Case-insensitive substring match against "namespace.key" or the value.
+     *
+     * @param  array<int, array<string, mixed>> $mfs
+     * @return array<int, array<string, mixed>>
+     */
+    private static function filterMetafields(array $mfs, string $filter): array
+    {
+        return array_values(array_filter($mfs, function ($mf) use ($filter) {
+            $nk = ($mf['namespace'] ?? '') . '.' . ($mf['key'] ?? '');
+            return stripos($nk, $filter) !== false
+                || stripos((string) ($mf['value'] ?? ''), $filter) !== false;
+        }));
     }
 
     private static function loadTagSearch(string $action, array $ctx): array
@@ -329,43 +340,11 @@ class SearchLookupPageLoader
                     $ss = new ShipStation($ctx['ssKey'], $ctx['ssSecret']);
                     $trackingResults = [];
 
-                    $carrierUrls = [
-                        'usps'       => 'https://tools.usps.com/go/TrackConfirmAction?tLabels=',
-                        'fedex'      => 'https://www.fedex.com/fedextrack/?tracknumbers=',
-                        'ups'        => 'https://www.ups.com/track?tracknum=',
-                        'dhl'        => 'https://www.dhl.com/en/express/tracking.html?AWB=',
-                        'stamps_com' => 'https://tools.usps.com/go/TrackConfirmAction?tLabels=',
-                        'ontrac'     => 'https://www.ontrac.com/tracking/?number=',
-                        'lasership'  => 'https://www.lasership.com/track/',
-                    ];
-
                     foreach ($numbers as $num) {
                         $clean    = ltrim(trim($num), '#');
                         $ssOrders = $ss->findByOrderNumber($clean);
 
-                        if (empty($ssOrders)) {
-                            $trackingResults[] = ['number' => $clean, 'found' => false, 'shipments' => []];
-                            continue;
-                        }
-
-                        $shipments = [];
-                        foreach ($ssOrders as $o) {
-                            $carrier  = strtolower($o['carrierCode'] ?? '');
-                            $tracking = $o['trackingNumber'] ?? '';
-                            $baseUrl  = $carrierUrls[$carrier] ?? null;
-                            $shipments[] = [
-                                'orderId'        => $o['orderId']        ?? '',
-                                'orderStatus'    => $o['orderStatus']    ?? '',
-                                'carrierCode'    => $o['carrierCode']    ?? '',
-                                'serviceCode'    => $o['serviceCode']    ?? '',
-                                'trackingNumber' => $tracking,
-                                'shipDate'       => $o['shipDate']       ?? '',
-                                'trackingUrl'    => ($baseUrl && $tracking) ? $baseUrl . urlencode($tracking) : null,
-                                'ssUrl'          => $o['orderId'] ? 'https://app.shipstation.com/#!/orders/order-details/' . urlencode($o['orderId']) : null,
-                            ];
-                        }
-
-                        $trackingResults[] = ['number' => $clean, 'found' => true, 'shipments' => $shipments];
+                        $trackingResults[] = self::buildTrackingResult($clean, $ssOrders);
                     }
                 } catch (Throwable $e) {
                     $trackingError = $e->getMessage();
@@ -374,6 +353,51 @@ class SearchLookupPageLoader
         }
 
         return compact('trackingResults', 'trackingError', 'trackingInput');
+    }
+
+    /**
+     * Tracking Feed result for a single order number: the carrier-specific
+     * public tracking URL (looked up from a fixed carrier-code map) plus a
+     * direct ShipStation order-details link. Carriers not in the map, or a
+     * shipment with no tracking number yet, get a null trackingUrl.
+     *
+     * @param  array<int, array<string, mixed>> $ssOrders
+     * @return array{number: string, found: bool, shipments: array<int, array<string, mixed>>}
+     */
+    private static function buildTrackingResult(string $clean, array $ssOrders): array
+    {
+        if (empty($ssOrders)) {
+            return ['number' => $clean, 'found' => false, 'shipments' => []];
+        }
+
+        $carrierUrls = [
+            'usps'       => 'https://tools.usps.com/go/TrackConfirmAction?tLabels=',
+            'fedex'      => 'https://www.fedex.com/fedextrack/?tracknumbers=',
+            'ups'        => 'https://www.ups.com/track?tracknum=',
+            'dhl'        => 'https://www.dhl.com/en/express/tracking.html?AWB=',
+            'stamps_com' => 'https://tools.usps.com/go/TrackConfirmAction?tLabels=',
+            'ontrac'     => 'https://www.ontrac.com/tracking/?number=',
+            'lasership'  => 'https://www.lasership.com/track/',
+        ];
+
+        $shipments = [];
+        foreach ($ssOrders as $o) {
+            $carrier  = strtolower($o['carrierCode'] ?? '');
+            $tracking = $o['trackingNumber'] ?? '';
+            $baseUrl  = $carrierUrls[$carrier] ?? null;
+            $shipments[] = [
+                'orderId'        => $o['orderId']        ?? '',
+                'orderStatus'    => $o['orderStatus']    ?? '',
+                'carrierCode'    => $o['carrierCode']    ?? '',
+                'serviceCode'    => $o['serviceCode']    ?? '',
+                'trackingNumber' => $tracking,
+                'shipDate'       => $o['shipDate']       ?? '',
+                'trackingUrl'    => ($baseUrl && $tracking) ? $baseUrl . urlencode($tracking) : null,
+                'ssUrl'          => $o['orderId'] ? 'https://app.shipstation.com/#!/orders/order-details/' . urlencode($o['orderId']) : null,
+            ];
+        }
+
+        return ['number' => $clean, 'found' => true, 'shipments' => $shipments];
     }
 
     private static function setLimits(int $secs = 300): void

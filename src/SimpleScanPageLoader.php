@@ -296,57 +296,11 @@ class SimpleScanPageLoader
                 $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
                 $orders  = self::suppressOutput(fn() => $shopify->fetchRefundedOrders($start, $end));
 
-                $rows    = [];
-                $skuStat = [];  // [sku => ['units' => int, 'orders' => int, 'revenue' => float]]
-
-                foreach ($orders as $o) {
-                    foreach ($o['refunds'] ?? [] as $refund) {
-                        $items = [];
-                        foreach ($refund['refund_line_items'] ?? [] as $rli) {
-                            $li  = $rli['line_item'] ?? [];
-                            $sku = trim((string)($li['sku'] ?? ''));
-                            $qty = (int)($rli['quantity'] ?? 0);
-                            $sub = (float)($rli['subtotal'] ?? 0);
-
-                            $items[] = [
-                                'name'     => $li['name'] ?? $li['title'] ?? '',
-                                'sku'      => $sku,
-                                'quantity' => $qty,
-                                'subtotal' => $sub,
-                            ];
-
-                            if ($sku !== '' && $qty > 0) {
-                                if (!isset($skuStat[$sku])) {
-                                    $skuStat[$sku] = ['sku' => $sku, 'units' => 0, 'orders' => 0, 'revenue' => 0.0];
-                                }
-                                $skuStat[$sku]['units']   += $qty;
-                                $skuStat[$sku]['revenue'] += $sub;
-                                $skuStat[$sku]['orders']++;
-                            }
-                        }
-
-                        $rows[] = [
-                            'shopify_id'     => $o['id']            ?? '',
-                            'order_number'   => $o['name']          ?? '',
-                            'created_at'     => self::dateOnly($o['created_at'] ?? ''),
-                            'refund_date'    => self::dateOnly($refund['created_at'] ?? ''),
-                            'email'          => $o['email']         ?? '',
-                            'financial'      => $o['financial_status'] ?? '',
-                            'refund_total'   => (float)($refund['total_refunded'] ?? 0),
-                            'reason'         => trim($refund['note'] ?? ''),
-                            'items'          => $items,
-                        ];
-                    }
-                }
-
-                usort($rows, fn($a, $b) => strcmp($b['refund_date'], $a['refund_date']));
-
-                // Sort SKU stats by units returned descending
-                usort($skuStat, fn($a, $b) => $b['units'] <=> $a['units']);
+                [$rows, $skuStat] = self::buildReturnRows($orders);
 
                 return [
                     'rows'     => $rows,
-                    'sku_stat' => array_values($skuStat),
+                    'sku_stat' => $skuStat,
                     'scanned'  => count($orders),
                     'start'    => $start,
                     'end'      => $end,
@@ -354,6 +308,67 @@ class SimpleScanPageLoader
             }, 30);
 
         return compact('rtResult', 'rtError', 'rtStart', 'rtEnd');
+    }
+
+    /**
+     * Return / RMA Tracker rows: one row per refund transaction (not per
+     * order - an order refunded twice yields two rows), sorted by
+     * refund_date descending. `sku_stat` aggregates units/order-count/revenue
+     * per SKU across all refund line items, sorted by units descending, for
+     * the "per-SKU return rate summary" documented for this page.
+     *
+     * @param  array<int, array<string, mixed>> $orders
+     * @return array{0: array<int, array<string, mixed>>, 1: array<int, array<string, mixed>>} [rows, skuStat]
+     */
+    private static function buildReturnRows(array $orders): array
+    {
+        $rows    = [];
+        $skuStat = [];  // [sku => ['units' => int, 'orders' => int, 'revenue' => float]]
+
+        foreach ($orders as $o) {
+            foreach ($o['refunds'] ?? [] as $refund) {
+                $items = [];
+                foreach ($refund['refund_line_items'] ?? [] as $rli) {
+                    $li  = $rli['line_item'] ?? [];
+                    $sku = trim((string)($li['sku'] ?? ''));
+                    $qty = (int)($rli['quantity'] ?? 0);
+                    $sub = (float)($rli['subtotal'] ?? 0);
+
+                    $items[] = [
+                        'name'     => $li['name'] ?? $li['title'] ?? '',
+                        'sku'      => $sku,
+                        'quantity' => $qty,
+                        'subtotal' => $sub,
+                    ];
+
+                    if ($sku !== '' && $qty > 0) {
+                        if (!isset($skuStat[$sku])) {
+                            $skuStat[$sku] = ['sku' => $sku, 'units' => 0, 'orders' => 0, 'revenue' => 0.0];
+                        }
+                        $skuStat[$sku]['units']   += $qty;
+                        $skuStat[$sku]['revenue'] += $sub;
+                        $skuStat[$sku]['orders']++;
+                    }
+                }
+
+                $rows[] = [
+                    'shopify_id'     => $o['id']            ?? '',
+                    'order_number'   => $o['name']          ?? '',
+                    'created_at'     => self::dateOnly($o['created_at'] ?? ''),
+                    'refund_date'    => self::dateOnly($refund['created_at'] ?? ''),
+                    'email'          => $o['email']         ?? '',
+                    'financial'      => $o['financial_status'] ?? '',
+                    'refund_total'   => (float)($refund['total_refunded'] ?? 0),
+                    'reason'         => trim($refund['note'] ?? ''),
+                    'items'          => $items,
+                ];
+            }
+        }
+
+        usort($rows, fn($a, $b) => strcmp($b['refund_date'], $a['refund_date']));
+        usort($skuStat, fn($a, $b) => $b['units'] <=> $a['units']);
+
+        return [$rows, array_values($skuStat)];
     }
 
     private static function loadReturnedItems(string $action, array $ctx): array

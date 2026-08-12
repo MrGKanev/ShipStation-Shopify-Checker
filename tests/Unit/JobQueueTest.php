@@ -56,4 +56,30 @@ class JobQueueTest extends TestCase
         $this->assertSame('failed', $job['status']);
         $this->assertSame('bad credentials', $job['error']);
     }
+
+    public function testEnqueuePrunesOldestJobsBeyondMaxEntries(): void
+    {
+        $ref = new \ReflectionClass(JobQueue::class);
+        $max = $ref->getConstant('MAX_ENTRIES');
+
+        for ($i = 0; $i < $max + 10; $i++) {
+            JobQueue::enqueue('audit', ['seq' => $i]);
+        }
+
+        $jobs = JobQueue::all();
+
+        $this->assertCount($max, $jobs);
+        $this->assertSame($max + 9, $jobs[0]['payload']['seq']);
+        $this->assertSame(10, $jobs[$max - 1]['payload']['seq']);
+    }
+
+    public function testClaimNextSkipsNonPendingJobsAndReturnsNullWhenNoneLeft(): void
+    {
+        $id = JobQueue::enqueue('audit', []);
+        JobQueue::claimNext();
+
+        $this->assertNull(JobQueue::claimNext());
+        $this->assertSame('running', JobQueue::all()[0]['status']);
+        $this->assertSame($id, JobQueue::all()[0]['id']);
+    }
 }

@@ -37,4 +37,37 @@ class ToolRegistryTest extends TestCase
         $this->assertSame('run', $audit['Core Audit'][1]['page']);
         $this->assertSame('spotcheck', $search['Orders'][0]['page']);
     }
+
+    public function testGroupOfFallsBackToSettingsForUnknownPage(): void
+    {
+        $this->assertSame('settings', ToolRegistry::groupOf('does-not-exist'));
+    }
+
+    public function testTitleFallsBackToPageItselfForUnknownPage(): void
+    {
+        $this->assertSame('does-not-exist', ToolRegistry::title('does-not-exist'));
+    }
+
+    public function testTitlesIncludesEveryAllowedPage(): void
+    {
+        $titles = ToolRegistry::titles();
+
+        $this->assertSame(count(ToolRegistry::allowedPages()), count($titles));
+        $this->assertSame('Duplicate Shipping Addresses', $titles['addrdupes']);
+        $this->assertSame('Run History', $titles['runlog']);
+    }
+
+    public function testGroupMetaIncludesAllFourGroups(): void
+    {
+        $meta = ToolRegistry::groupMeta();
+
+        $this->assertSame(['audit', 'search', 'manage', 'settings'], array_keys($meta));
+        $this->assertSame('?page=hub-audit', $meta['audit']['href']);
+        $this->assertSame('Manage', $meta['manage']['label']);
+    }
+
+    public function testHubSectionsReturnsEmptyArrayForUnknownGroup(): void
+    {
+        $this->assertSame([], ToolRegistry::hubSections('does-not-exist'));
+    }
 }

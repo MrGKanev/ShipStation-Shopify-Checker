@@ -166,51 +166,7 @@ class OrderAnomalyPageLoader
                     });
                 }
 
-                $ssIndex = [];
-                foreach ($ssRows as $ssO) {
-                    $num = Comparator::normalise((string)($ssO['orderNumber'] ?? ''));
-                    if ($num) $ssIndex[$num][] = $ssO;
-                }
-
-                $rows = [];
-                foreach ($refundedOrders as $o) {
-                    $num = Comparator::normalise((string)($o['order_number'] ?? ltrim($o['name'] ?? '', '#')));
-                    $ssMatch = $ssIndex[$num] ?? [];
-
-                    $refundedAmt = 0.0;
-                    foreach ($o['refunds'] ?? [] as $ref) {
-                        foreach ($ref['refund_line_items'] ?? [] as $rli) {
-                            $refundedAmt += (float)($rli['subtotal'] ?? 0);
-                        }
-                    }
-                    if ($refundedAmt == 0 && ($o['financial_status'] ?? '') === 'refunded') {
-                        $refundedAmt = (float)($o['total_price'] ?? 0);
-                    }
-
-                    $ssStatuses = array_map(fn($s) => $s['orderStatus'] ?? 'unknown', $ssMatch);
-                    $anyActive = !empty(array_filter($ssStatuses, fn($s) => in_array($s, ['awaiting_shipment', 'awaiting_payment', 'on_hold'], true)));
-
-                    $risk = 'ok';
-                    if (empty($ssMatch)) $risk = 'missing';
-                    elseif ($anyActive) $risk = 'active';
-
-                    $rows[] = [
-                        'shopify_id'       => $o['id'] ?? '',
-                        'order_number'     => $o['name'] ?? ('#' . $num),
-                        'created_at'       => self::dateOnly($o['created_at'] ?? ''),
-                        'email'            => $o['email'] ?? '',
-                        'financial_status' => $o['financial_status'] ?? '',
-                        'total_price'      => (float)($o['total_price'] ?? 0),
-                        'refunded_amount'  => $refundedAmt,
-                        'ss_orders'        => $ssMatch,
-                        'ss_statuses'      => $ssStatuses,
-                        'risk'             => $risk,
-                    ];
-                }
-                usort($rows, function ($a, $b) {
-                    $rankOf = fn($r) => match($r) { 'active' => 0, 'missing' => 1, default => 2 };
-                    return $rankOf($a['risk']) <=> $rankOf($b['risk']);
-                });
+                $rows = self::buildRefundRows($refundedOrders, $ssRows);
                 return [
                     'rows'    => $rows,
                     'start'   => $start,
@@ -222,6 +178,69 @@ class OrderAnomalyPageLoader
             });
 
         return compact('refundsResult', 'refundsError', 'refundsStart', 'refundsEnd');
+    }
+
+    /**
+     * Refunds Tracker rows: one per refunded Shopify order, cross-checked
+     * against the matching ShipStation order(s) to flag whether the refund
+     * still has an active (unshipped/on-hold) ShipStation counterpart.
+     *
+     * `refunded_amount` prefers summing refund_line_items subtotals; if that
+     * comes out to 0 on a fully-refunded order (e.g. a refund with no line
+     * items, just a manual adjustment), it falls back to total_price.
+     *
+     * @param  array<int, array<string, mixed>> $refundedOrders
+     * @param  array<int, array<string, mixed>> $ssRows
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildRefundRows(array $refundedOrders, array $ssRows): array
+    {
+        $ssIndex = [];
+        foreach ($ssRows as $ssO) {
+            $num = Comparator::normalise((string)($ssO['orderNumber'] ?? ''));
+            if ($num) $ssIndex[$num][] = $ssO;
+        }
+
+        $rows = [];
+        foreach ($refundedOrders as $o) {
+            $num = Comparator::normalise((string)($o['order_number'] ?? ltrim($o['name'] ?? '', '#')));
+            $ssMatch = $ssIndex[$num] ?? [];
+
+            $refundedAmt = 0.0;
+            foreach ($o['refunds'] ?? [] as $ref) {
+                foreach ($ref['refund_line_items'] ?? [] as $rli) {
+                    $refundedAmt += (float)($rli['subtotal'] ?? 0);
+                }
+            }
+            if ($refundedAmt == 0 && ($o['financial_status'] ?? '') === 'refunded') {
+                $refundedAmt = (float)($o['total_price'] ?? 0);
+            }
+
+            $ssStatuses = array_map(fn($s) => $s['orderStatus'] ?? 'unknown', $ssMatch);
+            $anyActive = !empty(array_filter($ssStatuses, fn($s) => in_array($s, ['awaiting_shipment', 'awaiting_payment', 'on_hold'], true)));
+
+            $risk = 'ok';
+            if (empty($ssMatch)) $risk = 'missing';
+            elseif ($anyActive) $risk = 'active';
+
+            $rows[] = [
+                'shopify_id'       => $o['id'] ?? '',
+                'order_number'     => $o['name'] ?? ('#' . $num),
+                'created_at'       => self::dateOnly($o['created_at'] ?? ''),
+                'email'            => $o['email'] ?? '',
+                'financial_status' => $o['financial_status'] ?? '',
+                'total_price'      => (float)($o['total_price'] ?? 0),
+                'refunded_amount'  => $refundedAmt,
+                'ss_orders'        => $ssMatch,
+                'ss_statuses'      => $ssStatuses,
+                'risk'             => $risk,
+            ];
+        }
+        usort($rows, function ($a, $b) {
+            $rankOf = fn($r) => match($r) { 'active' => 0, 'missing' => 1, default => 2 };
+            return $rankOf($a['risk']) <=> $rankOf($b['risk']);
+        });
+        return $rows;
     }
 
     private static function loadDuplicates(string $action, array $ctx): array

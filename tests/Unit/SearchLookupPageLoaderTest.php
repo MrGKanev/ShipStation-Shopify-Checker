@@ -191,6 +191,45 @@ class SearchLookupPageLoaderTest extends TestCase
         $this->assertSame([], SearchLookupPageLoader::load('unknown', '', $this->ctx()));
     }
 
+    // ── filterMetafields ─────────────────────────────────────────────────────
+
+    private function filterMetafields(array $mfs, string $filter): array
+    {
+        $ref = new \ReflectionClass(SearchLookupPageLoader::class);
+        return $ref->getMethod('filterMetafields')->invoke(null, $mfs, $filter);
+    }
+
+    public function testFilterMetafieldsMatchesNamespaceAndKeyCaseInsensitively(): void
+    {
+        $mfs = [
+            ['namespace' => 'custom', 'key' => 'GiftMessage', 'value' => 'x'],
+            ['namespace' => 'custom', 'key' => 'other', 'value' => 'y'],
+        ];
+
+        $result = $this->filterMetafields($mfs, 'giftmessage');
+
+        $this->assertCount(1, $result);
+        $this->assertSame('GiftMessage', $result[0]['key']);
+    }
+
+    public function testFilterMetafieldsMatchesValue(): void
+    {
+        $mfs = [
+            ['namespace' => 'custom', 'key' => 'note', 'value' => 'Handle with care'],
+            ['namespace' => 'custom', 'key' => 'other', 'value' => 'nothing special'],
+        ];
+
+        $result = $this->filterMetafields($mfs, 'handle with');
+
+        $this->assertCount(1, $result);
+        $this->assertSame('note', $result[0]['key']);
+    }
+
+    public function testFilterMetafieldsReturnsEmptyWhenNoMatch(): void
+    {
+        $this->assertSame([], $this->filterMetafields([['namespace' => 'a', 'key' => 'b', 'value' => 'c']], 'nomatch'));
+    }
+
     private function ctx(array $overrides = []): array
     {
         return $overrides + [

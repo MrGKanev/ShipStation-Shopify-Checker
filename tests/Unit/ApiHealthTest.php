@@ -74,4 +74,75 @@ class ApiHealthTest extends TestCase
         $this->assertFalse($result['ok']);
         $this->assertSame(['read_fulfillments'], $result['missing_scopes']);
     }
+
+    public function testCheckShopifyReturnsUnconfiguredWhenTokenMissing(): void
+    {
+        $result = ApiHealth::checkShopify('example.myshopify.com', '', fn() => $this->fail('should not make a request'));
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('SHOPIFY_ACCESS_TOKEN', $result['error']);
+        $this->assertSame([], $result['checks']);
+    }
+
+    public function testCheckShopifyReturnsUnconfiguredWhenStoreIsNA(): void
+    {
+        $result = ApiHealth::checkShopify('N/A', 'tok_test', fn() => $this->fail('should not make a request'));
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('SHOPIFY_STORE', $result['error']);
+    }
+
+    public function testCheckShopifyMarksNotOkWhenGraphQLReturnsErrors(): void
+    {
+        $result = ApiHealth::checkShopify('example.myshopify.com', 'tok_test', fn() => [
+            'ok' => true,
+            'code' => 200,
+            'ms' => 10,
+            'error' => '',
+            'headers' => [],
+            'json' => [
+                'errors' => [['message' => 'Access denied']],
+            ],
+        ]);
+
+        $this->assertFalse($result['ok']);
+        $this->assertFalse($result['checks']['graphql']['ok']);
+        $this->assertStringContainsString('Access denied', $result['checks']['graphql']['error']);
+        $this->assertSame([], $result['missing_scopes']);
+    }
+
+    public function testCheckShipStationReturnsUnconfiguredWhenCredentialsMissing(): void
+    {
+        $result = ApiHealth::checkShipStation('', '', fn() => $this->fail('should not make a request'));
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('SS_API_KEY', $result['error']);
+        $this->assertSame([], $result['checks']);
+    }
+
+    public function testCheckShipStationSendsBasicAuthAndReportsSuccess(): void
+    {
+        $requests = [];
+        $result = ApiHealth::checkShipStation('key123', 'secret456', function (string $url, array $headers) use (&$requests): array {
+            $requests[] = compact('url', 'headers');
+            return ['ok' => true, 'code' => 200, 'ms' => 5, 'error' => '', 'headers' => [], 'json' => ['orders' => []]];
+        });
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame('', $result['error']);
+        $this->assertCount(1, $requests);
+        $this->assertSame('https://ssapi.shipstation.com/orders?pageSize=1', $requests[0]['url']);
+        $this->assertContains('Authorization: Basic ' . base64_encode('key123:secret456'), $requests[0]['headers']);
+    }
+
+    public function testCheckShipStationReportsFailureFromRequest(): void
+    {
+        $result = ApiHealth::checkShipStation('key123', 'secret456', fn() => [
+            'ok' => false, 'code' => 401, 'ms' => 5, 'error' => 'Unauthorized', 'headers' => [], 'json' => [],
+        ]);
+
+        $this->assertFalse($result['ok']);
+        $this->assertSame('Unauthorized', $result['error']);
+        $this->assertFalse($result['checks']['orders']['ok']);
+    }
 }

@@ -405,46 +405,7 @@ class ProductInventoryPageLoader
                     $shopify  = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
                     $products = self::suppressOutput(fn() => $shopify->fetchAllProducts('active'));
 
-                    $rows = [];
-                    foreach ($products as $p) {
-                        $variants = $p['variants'] ?? [];
-                        if (empty($variants)) {
-                            $rows[] = [
-                                'id'     => (string)($p['id'] ?? ''),
-                                'title'  => $p['title']        ?? '',
-                                'vendor' => $p['vendor']       ?? '',
-                                'type'   => $p['product_type'] ?? '',
-                                'reason' => 'no_variants',
-                                'detail' => 'No variants defined',
-                                'stock'  => null,
-                            ];
-                            continue;
-                        }
-
-                        $trackedCount = 0;
-                        $zeroStockCount = 0;
-                        $totalStock = 0;
-                        foreach ($variants as $v) {
-                            if (($v['inventory_management'] ?? '') === '') continue;
-                            if (($v['inventory_policy'] ?? 'deny') === 'continue') continue;
-                            $trackedCount++;
-                            $qty = (int)($v['inventory_quantity'] ?? 0);
-                            $totalStock += $qty;
-                            if ($qty <= 0) $zeroStockCount++;
-                        }
-
-                        if ($trackedCount > 0 && $trackedCount === $zeroStockCount) {
-                            $rows[] = [
-                                'id'     => (string)($p['id'] ?? ''),
-                                'title'  => $p['title']        ?? '',
-                                'vendor' => $p['vendor']       ?? '',
-                                'type'   => $p['product_type'] ?? '',
-                                'reason' => 'zero_stock',
-                                'detail' => "{$trackedCount} tracked variant" . ($trackedCount !== 1 ? 's' : '') . ', all at 0',
-                                'stock'  => $totalStock,
-                            ];
-                        }
-                    }
+                    $rows = self::buildZombieProductRows($products);
 
                     $zpResult = ['rows' => $rows, 'scanned' => count($products)];
                     self::appendRunLog(
@@ -463,6 +424,60 @@ class ProductInventoryPageLoader
         }
 
         return compact('zpResult', 'zpError');
+    }
+
+    /**
+     * Zombie Products rows: active products with either no variants at all,
+     * or where every tracked (non-'continue'-policy) variant is at zero/
+     * negative stock. Untracked variants don't count toward trackedCount, so
+     * a product with only untracked variants is never flagged as zero_stock.
+     *
+     * @param  array<int, array<string, mixed>> $products
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildZombieProductRows(array $products): array
+    {
+        $rows = [];
+        foreach ($products as $p) {
+            $variants = $p['variants'] ?? [];
+            if (empty($variants)) {
+                $rows[] = [
+                    'id'     => (string)($p['id'] ?? ''),
+                    'title'  => $p['title']        ?? '',
+                    'vendor' => $p['vendor']       ?? '',
+                    'type'   => $p['product_type'] ?? '',
+                    'reason' => 'no_variants',
+                    'detail' => 'No variants defined',
+                    'stock'  => null,
+                ];
+                continue;
+            }
+
+            $trackedCount = 0;
+            $zeroStockCount = 0;
+            $totalStock = 0;
+            foreach ($variants as $v) {
+                if (($v['inventory_management'] ?? '') === '') continue;
+                if (($v['inventory_policy'] ?? 'deny') === 'continue') continue;
+                $trackedCount++;
+                $qty = (int)($v['inventory_quantity'] ?? 0);
+                $totalStock += $qty;
+                if ($qty <= 0) $zeroStockCount++;
+            }
+
+            if ($trackedCount > 0 && $trackedCount === $zeroStockCount) {
+                $rows[] = [
+                    'id'     => (string)($p['id'] ?? ''),
+                    'title'  => $p['title']        ?? '',
+                    'vendor' => $p['vendor']       ?? '',
+                    'type'   => $p['product_type'] ?? '',
+                    'reason' => 'zero_stock',
+                    'detail' => "{$trackedCount} tracked variant" . ($trackedCount !== 1 ? 's' : '') . ', all at 0',
+                    'stock'  => $totalStock,
+                ];
+            }
+        }
+        return $rows;
     }
 
     private static function loadInventoryAging(string $action, array $ctx): array
@@ -568,63 +583,7 @@ class ProductInventoryPageLoader
                         ];
                     });
 
-                    // Build SKU sales map over last 30 days
-                    $skuSales = [];
-                    foreach ($orders as $o) {
-                        if (!empty($o['cancelled_at'])) continue;
-                        foreach ($o['line_items'] ?? [] as $li) {
-                            $sku = trim((string)($li['sku'] ?? ''));
-                            if ($sku === '') continue;
-                            $skuSales[$sku] = ($skuSales[$sku] ?? 0) + (int)($li['quantity'] ?? 1);
-                        }
-                    }
-
-                    $rows        = [];
-                    $variantCount = 0;
-                    foreach ($products as $p) {
-                        foreach ($p['variants'] ?? [] as $v) {
-                            $variantCount++;
-                            if (($v['inventory_management'] ?? '') === '') continue;
-                            if (($v['inventory_policy'] ?? 'deny') === 'continue') continue;
-
-                            $sku   = trim((string)($v['sku'] ?? ''));
-                            $stock = (int)($v['inventory_quantity'] ?? 0);
-                            $sold  = (int)($skuSales[$sku] ?? 0);
-
-                            // Only forecast variants that have had sales in the period
-                            // or are at critical stock levels
-                            if ($sold === 0 && $stock > 30) continue;
-
-                            $dailyRate   = round($sold / 30, 3);
-                            $daysToZero  = ($dailyRate > 0 && $stock > 0)
-                                ? (int) ceil($stock / $dailyRate)
-                                : null;
-
-                            // Skip rows with no risk and no recent sales
-                            if ($daysToZero === null && $sold === 0) continue;
-
-                            $rows[] = [
-                                'product_id'    => (string)($p['id'] ?? ''),
-                                'product_title' => $p['title'] ?? '',
-                                'variant_title' => $v['title'] ?? '',
-                                'sku'           => $sku,
-                                'stock'         => $stock,
-                                'sold_30d'      => $sold,
-                                'daily_rate'    => $dailyRate,
-                                'days_to_zero'  => $daysToZero,
-                            ];
-                        }
-                    }
-
-                    // Sort: null days_to_zero (infinite stock) last, then ascending by days_to_zero
-                    usort($rows, function ($a, $b) {
-                        $az = $a['days_to_zero'];
-                        $bz = $b['days_to_zero'];
-                        if ($az === null && $bz === null) return 0;
-                        if ($az === null) return 1;
-                        if ($bz === null) return -1;
-                        return $az <=> $bz;
-                    });
+                    [$rows, $variantCount] = self::buildInventoryForecastRows($products, $orders);
 
                     $ifResult = [
                         'rows'      => $rows,
@@ -654,6 +613,76 @@ class ProductInventoryPageLoader
         }
 
         return compact('ifResult', 'ifError');
+    }
+
+    /**
+     * Inventory Forecast rows: tracked, non-'continue'-policy variants with
+     * either recent (30-day) sales or low stock (<=30), projecting days to
+     * zero from the 30-day daily sell-through rate. A variant with no sales
+     * and stock <=30 but a stock of 0 already has daily_rate=0 so days_to_zero
+     * stays null - it's excluded too since there's nothing to forecast.
+     * Sorted ascending by days_to_zero, with null (no depletion risk) last.
+     *
+     * @param  array<int, array<string, mixed>> $products
+     * @param  array<int, array<string, mixed>> $orders
+     * @return array{0: array<int, array<string, mixed>>, 1: int} [rows, variantCount]
+     */
+    private static function buildInventoryForecastRows(array $products, array $orders): array
+    {
+        $skuSales = [];
+        foreach ($orders as $o) {
+            if (!empty($o['cancelled_at'])) continue;
+            foreach ($o['line_items'] ?? [] as $li) {
+                $sku = trim((string)($li['sku'] ?? ''));
+                if ($sku === '') continue;
+                $skuSales[$sku] = ($skuSales[$sku] ?? 0) + (int)($li['quantity'] ?? 1);
+            }
+        }
+
+        $rows        = [];
+        $variantCount = 0;
+        foreach ($products as $p) {
+            foreach ($p['variants'] ?? [] as $v) {
+                $variantCount++;
+                if (($v['inventory_management'] ?? '') === '') continue;
+                if (($v['inventory_policy'] ?? 'deny') === 'continue') continue;
+
+                $sku   = trim((string)($v['sku'] ?? ''));
+                $stock = (int)($v['inventory_quantity'] ?? 0);
+                $sold  = (int)($skuSales[$sku] ?? 0);
+
+                if ($sold === 0 && $stock > 30) continue;
+
+                $dailyRate   = round($sold / 30, 3);
+                $daysToZero  = ($dailyRate > 0 && $stock > 0)
+                    ? (int) ceil($stock / $dailyRate)
+                    : null;
+
+                if ($daysToZero === null && $sold === 0) continue;
+
+                $rows[] = [
+                    'product_id'    => (string)($p['id'] ?? ''),
+                    'product_title' => $p['title'] ?? '',
+                    'variant_title' => $v['title'] ?? '',
+                    'sku'           => $sku,
+                    'stock'         => $stock,
+                    'sold_30d'      => $sold,
+                    'daily_rate'    => $dailyRate,
+                    'days_to_zero'  => $daysToZero,
+                ];
+            }
+        }
+
+        usort($rows, function ($a, $b) {
+            $az = $a['days_to_zero'];
+            $bz = $b['days_to_zero'];
+            if ($az === null && $bz === null) return 0;
+            if ($az === null) return 1;
+            if ($bz === null) return -1;
+            return $az <=> $bz;
+        });
+
+        return [$rows, $variantCount];
     }
 
     private static function dateOnly(string $dt): string

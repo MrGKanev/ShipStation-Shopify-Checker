@@ -24,8 +24,195 @@ class RecordingEmailNotifier extends EmailNotifier
     }
 }
 
+/**
+ * Forces the mail()-fallback transport to fail, so notifyAuditSafely()'s
+ * catch path can be exercised without a real MTA.
+ */
+class FailingEmailNotifier extends EmailNotifier
+{
+    protected function usePhpMailer(): bool
+    {
+        return false;
+    }
+
+    protected function transportMail(string $to, string $subject, string $body, string $headers): bool
+    {
+        return false;
+    }
+}
+
 class EmailNotifierTest extends TestCase
 {
+    private const ENV_VARS = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM', 'ALERT_EMAIL', 'SMTP_SECURE'];
+
+    /** @var array<string, string|false> */
+    private array $previousEnv = [];
+
+    protected function setUp(): void
+    {
+        foreach (self::ENV_VARS as $name) {
+            $this->previousEnv[$name] = getenv($name);
+            putenv($name);
+        }
+    }
+
+    protected function tearDown(): void
+    {
+        foreach ($this->previousEnv as $name => $value) {
+            if ($value === false) {
+                putenv($name);
+            } else {
+                putenv("{$name}={$value}");
+            }
+        }
+    }
+
+    // ── isConfigured / fromEnvironment ──────────────────────────────────────
+
+    public function testIsConfiguredFalseWithoutEnvVars(): void
+    {
+        $this->assertFalse(EmailNotifier::isConfigured());
+        $this->assertNull(EmailNotifier::fromEnvironment());
+    }
+
+    public function testIsConfiguredTrueWithEnvVars(): void
+    {
+        putenv('SMTP_HOST=smtp.test');
+        putenv('ALERT_EMAIL=ops@test.com');
+
+        $this->assertTrue(EmailNotifier::isConfigured());
+        $this->assertInstanceOf(EmailNotifier::class, EmailNotifier::fromEnvironment());
+    }
+
+    public function testFromEnvironmentAppliesDefaultsAndFromFallback(): void
+    {
+        putenv('SMTP_HOST=smtp.test');
+        putenv('ALERT_EMAIL=ops@test.com');
+        putenv('SMTP_USER=user@test.com');
+
+        $notifier = EmailNotifier::fromEnvironment();
+        $this->assertNotNull($notifier);
+
+        $props = new \ReflectionObject($notifier);
+        $this->assertSame(587, $props->getProperty('port')->getValue($notifier));
+        $this->assertSame('tls', $props->getProperty('secure')->getValue($notifier));
+        $this->assertSame('user@test.com', $props->getProperty('from')->getValue($notifier));
+    }
+
+    // ── notifyAuditSafely ────────────────────────────────────────────────────
+
+    public function testNotifyAuditSafelyReturnsTrueOnSuccess(): void
+    {
+        $notifier = new RecordingEmailNotifier('smtp.test', 587, 'user@test.com', 'pw', 'from@test.com', 'ops@test.com', 'tls');
+
+        $result = $notifier->notifyAuditSafely(['store' => 'x']);
+
+        $this->assertTrue($result);
+        $this->assertCount(1, $notifier->sent);
+    }
+
+    public function testNotifyAuditSafelyReturnsFalseOnFailureWithoutThrowing(): void
+    {
+        $notifier = new FailingEmailNotifier('smtp.test', 587, 'user@test.com', 'pw', 'from@test.com', 'ops@test.com', 'tls');
+
+        $result = $notifier->notifyAuditSafely(['store' => 'x']);
+
+        $this->assertFalse($result);
+    }
+
+    // ── auditMessage ─────────────────────────────────────────────────────────
+
+    public function testAuditMessagePluralAndSingularAndZeroWording(): void
+    {
+        [$plural]   = EmailNotifier::auditMessage(['store' => 'x', 'missing_count' => 3]);
+        [$singular] = EmailNotifier::auditMessage(['store' => 'x', 'missing_count' => 1]);
+        [$zero]     = EmailNotifier::auditMessage(['store' => 'x', 'missing_count' => 0]);
+
+        $this->assertSame('Shopify Ops audit [x]: 3 missing orders', $plural);
+        $this->assertSame('Shopify Ops audit [x]: 1 missing order', $singular);
+        $this->assertSame('Shopify Ops audit [x]: No missing orders', $zero);
+    }
+
+    public function testAuditMessageListsUpToTenOrdersWithMoreCount(): void
+    {
+        $orders = [];
+        for ($i = 1; $i <= 15; $i++) {
+            $orders[] = ['name' => "#{$i}", 'total_price' => '10.00'];
+        }
+
+        [, $body] = EmailNotifier::auditMessage(['store' => 'x', 'missing_count' => 15, 'missing_orders' => $orders]);
+
+        $this->assertSame(10, substr_count($body, '<li>#'));
+        $this->assertStringContainsString('and 5 more', $body);
+    }
+
+    public function testAuditMessageOmitsOrderSectionWhenNoMissingOrders(): void
+    {
+        [, $body] = EmailNotifier::auditMessage(['store' => 'x', 'missing_count' => 0, 'missing_orders' => []]);
+
+        $this->assertStringNotContainsString('Missing orders', $body);
+    }
+
+    public function testAuditMessageEscapesStoreAndOrderNameInHtmlBody(): void
+    {
+        [, $body] = EmailNotifier::auditMessage([
+            'store'          => '<script>bad</script>',
+            'missing_count'  => 1,
+            'missing_orders' => [['name' => '<b>evil</b>']],
+        ]);
+
+        $this->assertStringNotContainsString('<script>', $body);
+        $this->assertStringContainsString('&lt;script&gt;bad&lt;/script&gt;', $body);
+        $this->assertStringNotContainsString('<b>evil</b>', $body);
+        $this->assertStringContainsString('&lt;b&gt;evil&lt;/b&gt;', $body);
+    }
+
+    public function testAuditMessageIncludesDurationFieldWhenPresent(): void
+    {
+        [, $body] = EmailNotifier::auditMessage(['store' => 'x', 'duration' => 4.2]);
+
+        $this->assertStringContainsString('Duration', $body);
+        $this->assertStringContainsString('4.2s', $body);
+    }
+
+    public function testAuditMessageOmitsDurationFieldWhenAbsent(): void
+    {
+        [, $body] = EmailNotifier::auditMessage(['store' => 'x']);
+
+        $this->assertStringNotContainsString('Duration', $body);
+    }
+
+    // ── scanMessage ──────────────────────────────────────────────────────────
+
+    public function testScanMessagePluralAndSingularWording(): void
+    {
+        [$plural]   = EmailNotifier::scanMessage(['tool' => 'scan_sla', 'rows_found' => 3]);
+        [$singular] = EmailNotifier::scanMessage(['tool' => 'scan_sla', 'rows_found' => 1]);
+
+        $this->assertSame('Shopify Ops scan [scan_sla]: 3 rows found', $plural);
+        $this->assertSame('Shopify Ops scan [scan_sla]: 1 row found', $singular);
+    }
+
+    public function testScanMessageOmitsScannedAndPeriodWhenAbsent(): void
+    {
+        [, $body] = EmailNotifier::scanMessage(['tool' => 'x', 'rows_found' => 0]);
+
+        $this->assertStringNotContainsString('Scanned', $body);
+        $this->assertStringNotContainsString('Period', $body);
+    }
+
+    public function testScanMessageIncludesScannedAndPeriodWhenPresent(): void
+    {
+        [, $body] = EmailNotifier::scanMessage([
+            'tool' => 'x', 'rows_found' => 0, 'scanned' => 42, 'start' => '2026-06-01', 'end' => '2026-06-19',
+        ]);
+
+        $this->assertStringContainsString('Scanned', $body);
+        $this->assertStringContainsString('42', $body);
+        $this->assertStringContainsString('Period', $body);
+        $this->assertStringContainsString('2026-06-01', $body);
+    }
+
     public function testSendReportSendsMultipartMessageWithCsvAttachmentViaMail(): void
     {
         $notifier = new RecordingEmailNotifier('smtp.test', 587, 'user@test.com', 'pw', 'from@test.com', 'ops@test.com', 'tls');
