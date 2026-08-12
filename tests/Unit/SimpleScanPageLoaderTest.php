@@ -31,6 +31,7 @@ class SimpleScanPageLoaderTest extends TestCase
         RunLog::setDataDir($this->tmpDir);
         AuditSnapshot::setDataDir($this->tmpDir);
         SlackRules::setDataDir($this->tmpDir);
+        EmailRules::setDataDir($this->tmpDir);
 
         $this->previousGet = $_GET;
         $this->previousPost = $_POST;

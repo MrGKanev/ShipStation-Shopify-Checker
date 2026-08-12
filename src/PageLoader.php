@@ -69,6 +69,7 @@ class PageLoader
             'returneditems'     => SimpleScanPageLoader::load($page, $action, $ctx),
             'jobs',
             'slackrules',
+            'emailrules',
             'apihealth',
             'configcheck',
             'actionlog',
@@ -162,6 +163,7 @@ class PageLoader
         $auditDuration  = 0;
         $auditFromCache = ['shopify' => false, 'ss' => false];
         $auditSlack     = ['configured' => SlackNotifier::isConfigured(), 'sent' => false, 'error' => ''];
+        $auditEmail     = ['configured' => EmailNotifier::isConfigured(), 'sent' => false, 'error' => ''];
         $cacheEntries   = $ctx['cacheObj']->entries();
         $cacheFlushed   = max(0, (int) ($_GET['cache_flushed'] ?? 0));
         $auditStart     = $_POST['audit_start'] ?? $_GET['start'] ?? date('Y-m-d', strtotime('-12 months'));
@@ -223,24 +225,39 @@ class PageLoader
 
                     $auditDuration = round(microtime(true) - $t0, 1);
 
+                    $auditSummary = [
+                        'store'          => $ctx['shopifyStore'],
+                        'start'          => $auditStart,
+                        'end'            => $auditEnd,
+                        'duration'       => $auditDuration,
+                        'missing_count'  => count($comparison['missing']),
+                        'missing_orders' => $comparison['missing'],
+                        'found'          => count($comparison['found']),
+                        'skipped'        => count($comparison['skipped']),
+                        'ignored'        => count($comparison['ignored']),
+                        'total_ss'       => count($ssOrders),
+                    ];
+
                     if (SlackRules::shouldNotifyAudit(count($comparison['missing'])) && ($notifier = SlackNotifier::fromEnvironment())) {
                         try {
-                            $notifier->notifyAudit([
-                                'store'          => $ctx['shopifyStore'],
-                                'start'          => $auditStart,
-                                'end'            => $auditEnd,
-                                'duration'       => $auditDuration,
-                                'missing_count'  => count($comparison['missing']),
-                                'missing_orders' => $comparison['missing'],
-                                'found'          => count($comparison['found']),
-                                'skipped'        => count($comparison['skipped']),
-                                'ignored'        => count($comparison['ignored']),
-                                'total_ss'       => count($ssOrders),
-                            ]);
+                            $notifier->notifyAudit($auditSummary);
                             $auditSlack['sent'] = true;
                         } catch (Throwable $e) {
                             $auditSlack['error'] = $e->getMessage();
                             Logger::getInstance()->warning('Slack audit notification failed: {message}', [
+                                'message'   => $e->getMessage(),
+                                'exception' => $e->getFile() . ':' . $e->getLine(),
+                            ]);
+                        }
+                    }
+
+                    if (EmailRules::shouldNotify('run_audit', count($comparison['missing'])) && ($emailNotifier = EmailNotifier::fromEnvironment())) {
+                        try {
+                            $emailNotifier->notifyAudit($auditSummary, EmailRules::recipientFor('run_audit'));
+                            $auditEmail['sent'] = true;
+                        } catch (Throwable $e) {
+                            $auditEmail['error'] = $e->getMessage();
+                            Logger::getInstance()->warning('Email audit notification failed: {message}', [
                                 'message'   => $e->getMessage(),
                                 'exception' => $e->getFile() . ':' . $e->getLine(),
                             ]);
@@ -284,7 +301,7 @@ class PageLoader
         }
 
         $cacheTtl = $ctx['cacheTtl'];
-        return compact('auditResult', 'auditError', 'auditDuration', 'auditFromCache', 'auditSlack',
+        return compact('auditResult', 'auditError', 'auditDuration', 'auditFromCache', 'auditSlack', 'auditEmail',
                        'auditStart', 'auditEnd', 'cacheEntries', 'cacheFlushed', 'cacheTtl');
     }
 

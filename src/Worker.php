@@ -139,19 +139,25 @@ final class Worker
 
         $duration = round(microtime(true) - $t0, 2);
 
+        $auditSummary = [
+            'store'          => $config['shopify_store'],
+            'start'          => $start,
+            'end'            => $end,
+            'duration'       => $duration,
+            'missing_count'  => count($comparison['missing']),
+            'missing_orders' => $comparison['missing'],
+            'found'          => count($comparison['found']),
+            'skipped'        => count($comparison['skipped']),
+            'ignored'        => count($comparison['ignored']),
+            'total_ss'       => count($ssOrders),
+        ];
+
         if (SlackRules::shouldNotifyAudit(count($comparison['missing'])) && ($notifier = SlackNotifier::fromEnvironment())) {
-            $notifier->notifyAuditSafely([
-                'store'          => $config['shopify_store'],
-                'start'          => $start,
-                'end'            => $end,
-                'duration'       => $duration,
-                'missing_count'  => count($comparison['missing']),
-                'missing_orders' => $comparison['missing'],
-                'found'          => count($comparison['found']),
-                'skipped'        => count($comparison['skipped']),
-                'ignored'        => count($comparison['ignored']),
-                'total_ss'       => count($ssOrders),
-            ], Logger::getInstance($rootDir . '/logs'));
+            $notifier->notifyAuditSafely($auditSummary, Logger::getInstance($rootDir . '/logs'));
+        }
+
+        if (EmailRules::shouldNotify('run_audit', count($comparison['missing'])) && ($emailNotifier = EmailNotifier::fromEnvironment())) {
+            $emailNotifier->notifyAuditSafely($auditSummary, Logger::getInstance($rootDir . '/logs'), EmailRules::recipientFor('run_audit'));
         }
 
         RunLog::append([

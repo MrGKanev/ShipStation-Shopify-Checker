@@ -112,10 +112,60 @@ class ToolRegistry
         'printqueue'    => ['group' => 'manage',   'title' => 'Print Queue'],
         'settings'      => ['group' => 'settings', 'title' => 'Settings'],
         'slackrules'    => ['group' => 'settings', 'title' => 'Slack Rules'],
+        'emailrules'    => ['group' => 'settings', 'title' => 'Email Rules'],
         'apihealth'     => ['group' => 'settings', 'title' => 'API Health'],
         'configcheck'   => ['group' => 'settings', 'title' => 'Config Check'],
         'webhookhealth' => ['group' => 'settings', 'title' => 'Webhook Health'],
     ];
+
+    /**
+     * Canonical list of RunLog `tool` keys for every audit/scan flow, with a
+     * human label, the page that triggers it, a grouping area, and its API
+     * dependency. Single source of truth shared by the Shopify Flow Health
+     * dashboard (ManageSettingsPageLoader) and the per-tool Email Rules
+     * (EmailRules) so both always agree on which tools exist.
+     *
+     * @var array<string, array{label: string, page: string, area: string, dependency: string}>
+     */
+    private const TRIGGER_CATALOG = [
+        'run_audit'             => ['label' => 'Main missing-order audit', 'page' => 'run', 'area' => 'Audit', 'dependency' => 'Shopify + ShipStation'],
+        'tag_audit'             => ['label' => 'Tag audit', 'page' => 'tagaudit', 'area' => 'Audit', 'dependency' => 'Shopify'],
+        'scan_bundle'           => ['label' => 'Bundle / required item check', 'page' => 'bundlecheck', 'area' => 'Audit', 'dependency' => 'Shopify'],
+        'scan_addresses'        => ['label' => 'Address validation', 'page' => 'addrcheck', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'scan_emails'           => ['label' => 'Email validation', 'page' => 'emailcheck', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'scan_hvorders'         => ['label' => 'High-value missing phone', 'page' => 'hvorders', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'find_refunds'          => ['label' => 'Refunded orders vs ShipStation', 'page' => 'refunds', 'area' => 'Risk', 'dependency' => 'Shopify + ShipStation'],
+        'scan_repeat_refunds'   => ['label' => 'Repeat refunds', 'page' => 'repeatrefunds', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'find_dupes'            => ['label' => 'Duplicate orders', 'page' => 'dupes', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'find_orphans'          => ['label' => 'ShipStation orphan orders', 'page' => 'orphans', 'area' => 'Risk', 'dependency' => 'Shopify + ShipStation'],
+        'scan_addr_changes'     => ['label' => 'Address changes after order', 'page' => 'addrchanges', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'scan_order_edits'      => ['label' => 'Order edits', 'page' => 'orderedits', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'scan_noteflags'        => ['label' => 'Order note flags', 'page' => 'noteflags', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'scan_addrdupes'        => ['label' => 'Shared address / email conflicts', 'page' => 'addrdupes', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'scan_discountabuse'    => ['label' => 'Discount abuse', 'page' => 'discountabuse', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'scan_tagpolicy'        => ['label' => 'Tag policy', 'page' => 'tagpolicy', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'scan_country_mismatch' => ['label' => 'Billing / shipping country mismatch', 'page' => 'countrymismatch', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'scan_partial_fulfill'  => ['label' => 'Partial fulfillment stall', 'page' => 'partialfulfill', 'area' => 'Fulfillment', 'dependency' => 'Shopify'],
+        'scan_onhold'           => ['label' => 'On-hold fulfillment stall', 'page' => 'onholdstall', 'area' => 'Fulfillment', 'dependency' => 'Shopify'],
+        'scan_notracking'       => ['label' => 'Fulfilled without tracking', 'page' => 'notracking', 'area' => 'Fulfillment', 'dependency' => 'Shopify'],
+        'scan_postshipaddr'     => ['label' => 'Post-shipment address changes', 'page' => 'postshipaddr', 'area' => 'Fulfillment', 'dependency' => 'Shopify'],
+        'scan_ssshipped'        => ['label' => 'ShipStation shipped, Shopify unfulfilled', 'page' => 'ssshipped', 'area' => 'Fulfillment', 'dependency' => 'Shopify + ShipStation'],
+        'scan_sla'              => ['label' => 'SLA breaches', 'page' => 'slabreaches', 'area' => 'Fulfillment', 'dependency' => 'Shopify'],
+        'scan_activess'         => ['label' => 'Refunded/cancelled but active in ShipStation', 'page' => 'activess', 'area' => 'Fulfillment', 'dependency' => 'Shopify + ShipStation'],
+        'scan_products'         => ['label' => 'Product content check', 'page' => 'productcheck', 'area' => 'Inventory', 'dependency' => 'Shopify'],
+        'scan_skudupes'         => ['label' => 'Duplicate SKU check', 'page' => 'skudupes', 'area' => 'Inventory', 'dependency' => 'Shopify'],
+        'scan_inventory'        => ['label' => 'Inventory oversell', 'page' => 'inventoryoversell', 'area' => 'Inventory', 'dependency' => 'Shopify + ShipStation'],
+        'scan_zombieproducts'   => ['label' => 'Zombie products', 'page' => 'zombieproducts', 'area' => 'Inventory', 'dependency' => 'Shopify'],
+        'scan_inventoryaging'   => ['label' => 'Inventory aging', 'page' => 'inventoryaging', 'area' => 'Inventory', 'dependency' => 'Shopify'],
+    ];
+
+    /**
+     * @return array<string, array{label: string, page: string, area: string, dependency: string}>
+     */
+    public static function triggerCatalog(): array
+    {
+        return self::TRIGGER_CATALOG;
+    }
 
     /**
      * @return array<string, array<int, array<string, string>>>

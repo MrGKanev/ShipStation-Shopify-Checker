@@ -106,6 +106,7 @@ class Auth
         'ban_ip'             => 'manage_settings',
         'unban_ip'           => 'manage_settings',
         'save_slack_rules'   => 'manage_settings',
+        'save_email_rules'   => 'manage_settings',
         'save_sidebar_settings' => 'manage_settings',
         'add_user'           => 'manage_users',
         'delete_user'        => 'manage_users',

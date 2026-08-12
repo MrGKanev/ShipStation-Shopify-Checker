@@ -47,20 +47,32 @@ class EmailNotifier
 
     /**
      * @param array<string, mixed> $summary
+     * @param string $toOverride When non-empty, sends to this address instead of
+     *        the constructor's $to - lets a single EmailNotifier (built once from
+     *        ALERT_EMAIL) also serve tools with a custom per-tool recipient.
      */
-    public function notifyAudit(array $summary): void
+    public function notifyAudit(array $summary, string $toOverride = ''): void
     {
         [$subject, $body] = self::auditMessage($summary);
-        $this->send($subject, $body);
+        $this->send($subject, $body, [], $toOverride);
     }
 
     /**
      * @param array<string, mixed> $summary
      */
-    public function notifyScan(array $summary): void
+    public function notifyScan(array $summary, string $toOverride = ''): void
     {
         [$subject, $body] = self::scanMessage($summary);
-        $this->send($subject, $body);
+        $this->send($subject, $body, [], $toOverride);
+    }
+
+    /**
+     * @param array<int, array{tool: string, label: string, count: int, run_at: string}> $sections
+     */
+    public function notifyDigest(array $sections, string $toOverride = ''): void
+    {
+        [$subject, $body] = self::digestMessage($sections);
+        $this->send($subject, $body, [], $toOverride);
     }
 
     /**
@@ -74,13 +86,30 @@ class EmailNotifier
     /**
      * @param array<string, mixed> $summary
      */
-    public function notifyAuditSafely(array $summary, ?LoggerInterface $logger = null): bool
+    public function notifyAuditSafely(array $summary, ?LoggerInterface $logger = null, string $toOverride = ''): bool
     {
         try {
-            $this->notifyAudit($summary);
+            $this->notifyAudit($summary, $toOverride);
             return true;
         } catch (Throwable $e) {
             $logger?->warning('Email audit notification failed: {message}', [
+                'message'   => $e->getMessage(),
+                'exception' => $e->getFile() . ':' . $e->getLine(),
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * @param array<int, array{tool: string, label: string, count: int, run_at: string}> $sections
+     */
+    public function notifyDigestSafely(array $sections, ?LoggerInterface $logger = null, string $toOverride = ''): bool
+    {
+        try {
+            $this->notifyDigest($sections, $toOverride);
+            return true;
+        } catch (Throwable $e) {
+            $logger?->warning('Email digest notification failed: {message}', [
                 'message'   => $e->getMessage(),
                 'exception' => $e->getFile() . ':' . $e->getLine(),
             ]);
@@ -208,14 +237,57 @@ class EmailNotifier
     }
 
     /**
+     * Rolls up one or more checks' latest qualifying run into a single
+     * email - used for tools set to "digest" mode instead of "immediate" in
+     * EmailRules, so a recipient gets one email/day instead of one per check.
+     *
+     * @param  array<int, array{tool: string, label: string, count: int, run_at: string}> $sections
+     * @return array{string, string} [subject, htmlBody]
+     */
+    public static function digestMessage(array $sections): array
+    {
+        $n = count($sections);
+        $subject = $n > 0
+            ? "Shopify Ops daily digest: {$n} check" . ($n === 1 ? '' : 's') . ' with issues'
+            : 'Shopify Ops daily digest: no issues today';
+
+        $rows = '';
+        foreach ($sections as $s) {
+            $count = (int) ($s['count'] ?? 0);
+            $rows .= '<tr>'
+                . '<td style="font-weight:bold;padding:4px 12px 4px 0;white-space:nowrap">' . self::h((string) ($s['label'] ?? $s['tool'] ?? '?')) . '</td>'
+                . '<td style="padding:4px 12px 4px 0">' . $count . '</td>'
+                . '<td style="padding:4px 0;color:#888">' . self::h((string) ($s['run_at'] ?? '')) . '</td>'
+                . '</tr>';
+        }
+
+        $table = $n > 0
+            ? '<table style="border-collapse:collapse;width:100%">'
+                . '<tr><th style="text-align:left;padding:4px 12px 4px 0">Check</th><th style="text-align:left;padding:4px 12px 4px 0">Count</th><th style="text-align:left;padding:4px 0">Run at</th></tr>'
+                . $rows
+                . '</table>'
+            : '<p>No enabled checks found issues in their latest run today.</p>';
+
+        $body = '<!DOCTYPE html><html><head><meta charset="utf-8"></head>'
+            . '<body style="font-family:sans-serif;color:#111;max-width:600px;margin:0 auto;padding:20px">'
+            . '<h2 style="margin-bottom:16px">Shopify Ops daily digest</h2>'
+            . $table
+            . '<p style="margin-top:20px;font-size:12px;color:#888">Sent by Shopify Ops</p>'
+            . '</body></html>';
+
+        return [$subject, $body];
+    }
+
+    /**
      * @param array<int, array{filename: string, content: string, mime?: string}> $attachments
      */
-    private function send(string $subject, string $htmlBody, array $attachments = []): void
+    private function send(string $subject, string $htmlBody, array $attachments = [], string $toOverride = ''): void
     {
+        $to = $toOverride !== '' ? $toOverride : $this->to;
         if ($this->usePhpMailer()) {
-            $this->sendViaPHPMailer($subject, $htmlBody, $attachments);
+            $this->sendViaPHPMailer($subject, $htmlBody, $attachments, $to);
         } else {
-            $this->sendViaMail($subject, $htmlBody, $attachments);
+            $this->sendViaMail($subject, $htmlBody, $attachments, $to);
         }
     }
 
@@ -231,7 +303,7 @@ class EmailNotifier
     /**
      * @param array<int, array{filename: string, content: string, mime?: string}> $attachments
      */
-    private function sendViaPHPMailer(string $subject, string $htmlBody, array $attachments = []): void
+    private function sendViaPHPMailer(string $subject, string $htmlBody, array $attachments = [], string $to = ''): void
     {
         $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
         $mail->isSMTP();
@@ -244,7 +316,7 @@ class EmailNotifier
             : \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port       = $this->port;
         $mail->setFrom($this->from ?: $this->user, 'Shopify Ops');
-        $mail->addAddress($this->to);
+        $mail->addAddress($to ?: $this->to);
         $mail->isHTML(true);
         $mail->Subject = $subject;
         $mail->Body    = $htmlBody;
@@ -257,21 +329,22 @@ class EmailNotifier
     /**
      * @param array<int, array{filename: string, content: string, mime?: string}> $attachments
      */
-    private function sendViaMail(string $subject, string $htmlBody, array $attachments = []): void
+    private function sendViaMail(string $subject, string $htmlBody, array $attachments = [], string $to = ''): void
     {
         $from = $this->from ?: $this->user;
+        $to   = $to ?: $this->to;
 
         if ($attachments === []) {
             $headers = "From: Shopify Ops <{$from}>\r\n"
                 . "Content-Type: text/html; charset=UTF-8\r\n"
                 . 'MIME-Version: 1.0';
-            $ok = $this->transportMail($this->to, $subject, $htmlBody, $headers);
+            $ok = $this->transportMail($to, $subject, $htmlBody, $headers);
         } else {
             $boundary = 'sops-' . bin2hex(random_bytes(16));
             $headers  = "From: Shopify Ops <{$from}>\r\n"
                 . "MIME-Version: 1.0\r\n"
                 . "Content-Type: multipart/mixed; boundary=\"{$boundary}\"";
-            $ok = $this->transportMail($this->to, $subject, self::buildMultipartBody($boundary, $htmlBody, $attachments), $headers);
+            $ok = $this->transportMail($to, $subject, self::buildMultipartBody($boundary, $htmlBody, $attachments), $headers);
         }
 
         if (!$ok) {

@@ -14,6 +14,7 @@ require_once __DIR__ . '/src/AuditSnapshot.php';
 require_once __DIR__ . '/src/ReportRegistry.php';
 require_once __DIR__ . '/src/UserActionLog.php';
 require_once __DIR__ . '/src/SlackRules.php';
+require_once __DIR__ . '/src/EmailRules.php';
 require_once __DIR__ . '/src/SidebarSettings.php';
 require_once __DIR__ . '/src/JobQueue.php';
 require_once __DIR__ . '/src/Cache.php';

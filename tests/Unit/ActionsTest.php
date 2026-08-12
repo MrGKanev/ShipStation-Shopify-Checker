@@ -41,6 +41,46 @@ class ActionsTest extends TestCase
         $this->assertSame(['1001', '1002'], Actions::normaliseOrderNumbers(['#1001', '', 'abc', '1002']));
     }
 
+    // ── buildEmailRulesFromRequest ───────────────────────────────────────────
+
+    public function testBuildEmailRulesFromRequestParsesSubmittedTool(): void
+    {
+        $rules = Actions::buildEmailRulesFromRequest([
+            'mode'         => ['scan_addresses' => 'immediate'],
+            'threshold'    => ['scan_addresses' => '3'],
+            'include_zero' => ['scan_addresses' => '1'],
+            'email'        => ['scan_addresses' => 'risk@example.com'],
+        ]);
+
+        $this->assertSame('immediate', $rules['scan_addresses']['mode']);
+        $this->assertSame(3, $rules['scan_addresses']['threshold']);
+        $this->assertTrue($rules['scan_addresses']['include_zero']);
+        $this->assertSame('risk@example.com', $rules['scan_addresses']['email']);
+    }
+
+    public function testBuildEmailRulesFromRequestDefaultsOmittedToolsToOff(): void
+    {
+        $rules = Actions::buildEmailRulesFromRequest(['mode' => ['scan_addresses' => 'immediate']]);
+
+        $this->assertSame('off', $rules['scan_bundle']['mode']);
+        $this->assertFalse($rules['scan_bundle']['include_zero']);
+        $this->assertSame('', $rules['scan_bundle']['email']);
+    }
+
+    public function testBuildEmailRulesFromRequestCoversEveryCatalogTool(): void
+    {
+        $rules = Actions::buildEmailRulesFromRequest([]);
+
+        $this->assertSame(array_keys(ToolRegistry::triggerCatalog()), array_keys($rules));
+    }
+
+    public function testBuildEmailRulesFromRequestUncheckedIncludeZeroIsFalse(): void
+    {
+        $rules = Actions::buildEmailRulesFromRequest(['mode' => ['run_audit' => 'immediate']]);
+
+        $this->assertFalse($rules['run_audit']['include_zero']);
+    }
+
     // ── validateNewUser ──────────────────────────────────────────────────────
 
     private function existingUser(string $name): array

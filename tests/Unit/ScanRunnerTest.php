@@ -16,6 +16,7 @@ final class ScanRunnerTest extends TestCase
         RunLog::setDataDir($this->tmpDir);
         AuditSnapshot::setDataDir($this->tmpDir);
         SlackRules::setDataDir($this->tmpDir);
+        EmailRules::setDataDir($this->tmpDir);
         $_GET = [];
         $_POST = [];
     }
@@ -129,6 +130,103 @@ final class ScanRunnerTest extends TestCase
 
         $this->assertSame('SS_API_KEY / SS_API_SECRET not set in .env.', $result['error']);
         $this->assertSame('validation_error', RunLog::all()[0]['status']);
+    }
+
+    public function testMissingShopifyCredentialsAreLoggedWhenSsNotRequired(): void
+    {
+        $_POST = ['scan_start' => '2026-06-01', 'scan_end' => '2026-06-10'];
+        $ctx = $this->ctx(['shopifyToken' => '', 'shopifyStore' => 'N/A']);
+
+        $result = ScanRunner::run('scan_test', 'scan_test', $ctx, 'scan', fn() => []);
+
+        $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $result['error']);
+        $this->assertSame('validation_error', RunLog::all()[0]['status']);
+    }
+
+    public function testShipStationCredentialsCheckedBeforeShopifyWhenBothMissing(): void
+    {
+        $_POST = ['scan_start' => '2026-06-01', 'scan_end' => '2026-06-10'];
+        $ctx = $this->ctx(['ssKey' => '', 'ssSecret' => '', 'shopifyToken' => '', 'shopifyStore' => 'N/A']);
+
+        $result = ScanRunner::run('scan_test', 'scan_test', $ctx, 'scan', fn() => [], 30, true);
+
+        $this->assertSame('SS_API_KEY / SS_API_SECRET not set in .env.', $result['error']);
+    }
+
+    public function testResultRowCountReadsMatchesKeyWhenRowsAbsent(): void
+    {
+        $_POST = ['scan_start' => '2026-06-01', 'scan_end' => '2026-06-10'];
+
+        ScanRunner::run('scan_test', 'scan_test', $this->ctx(), 'scan', fn() => ['matches' => [1, 2, 3]]);
+
+        $this->assertSame(3, RunLog::all()[0]['rows_found']);
+    }
+
+    public function testResultRowCountReadsPairsKeyWhenRowsAndMatchesAbsent(): void
+    {
+        $_POST = ['scan_start' => '2026-06-01', 'scan_end' => '2026-06-10'];
+
+        ScanRunner::run('scan_test', 'scan_test', $this->ctx(), 'scan', fn() => ['pairs' => [1, 2]]);
+
+        $this->assertSame(2, RunLog::all()[0]['rows_found']);
+    }
+
+    public function testResultRowCountIsNullForUnrecognisedResultShape(): void
+    {
+        $_POST = ['scan_start' => '2026-06-01', 'scan_end' => '2026-06-10'];
+
+        ScanRunner::run('scan_test', 'scan_test', $this->ctx(), 'scan', fn() => ['total' => 5]);
+
+        $row = RunLog::all()[0];
+        $this->assertNull($row['rows_found']);
+        $this->assertSame('ok', $row['status'], 'null rowsFound is not > 0, so status falls back to ok');
+    }
+
+    public function testNotifyScanSkippedWithoutCrashingWhenSlackNotConfigured(): void
+    {
+        $previous = getenv('SLACK_WEBHOOK_URL');
+        putenv('SLACK_WEBHOOK_URL');
+        $_POST = ['scan_start' => '2026-06-01', 'scan_end' => '2026-06-10'];
+
+        try {
+            $result = ScanRunner::run('scan_test', 'scan_test', $this->ctx(), 'scan', fn() => ['rows' => [['id' => 1]]]);
+        } finally {
+            if ($previous !== false) putenv("SLACK_WEBHOOK_URL={$previous}");
+        }
+
+        $this->assertSame('', $result['error']);
+        $this->assertSame(1, $result['result']['rows'][0]['id']);
+    }
+
+    public function testEmailNotifyAttemptedForImmediateModeSkippedWithoutCrashingWhenSmtpNotConfigured(): void
+    {
+        // 'scan_addresses' is a real ToolRegistry::triggerCatalog() key, unlike
+        // this file's usual 'scan_test' trigger - EmailRules::shouldNotify()
+        // drops unknown tool keys, so the gate needs a real one to exercise
+        // the true branch (reaching EmailNotifier::fromEnvironment()).
+        EmailRules::save(['scan_addresses' => ['mode' => 'immediate', 'threshold' => 1]]);
+        $previous = getenv('SMTP_HOST');
+        putenv('SMTP_HOST');
+        $_POST = ['scan_start' => '2026-06-01', 'scan_end' => '2026-06-10'];
+
+        try {
+            $result = ScanRunner::run('scan_addresses', 'scan_addresses', $this->ctx(), 'scan', fn() => ['rows' => [['id' => 1]]]);
+        } finally {
+            if ($previous !== false) putenv("SMTP_HOST={$previous}");
+        }
+
+        $this->assertSame('', $result['error']);
+    }
+
+    public function testEmailNotSentWhenModeIsOffEvenIfThresholdMet(): void
+    {
+        // EmailRules defaults every tool to 'off', so this should behave
+        // identically to a tool with no rule saved at all - no crash either way.
+        $_POST = ['scan_start' => '2026-06-01', 'scan_end' => '2026-06-10'];
+
+        $result = ScanRunner::run('scan_test', 'scan_test', $this->ctx(), 'scan', fn() => ['rows' => [['id' => 1]]]);
+
+        $this->assertSame('', $result['error']);
     }
 
     public function testThrownExceptionIsLoggedAsError(): void

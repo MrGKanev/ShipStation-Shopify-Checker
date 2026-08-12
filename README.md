@@ -75,6 +75,7 @@ php worker.php --store store_id --once
 ```cron
 0 6 * * * cd /var/www/shopify-ops && php audit.php >> logs/audit.log 2>&1
 */5 * * * * cd /var/www/shopify-ops && php worker.php --once >> logs/worker.log 2>&1
+0 9 * * * cd /var/www/shopify-ops && php email_digest.php >> logs/digest.log 2>&1
 ```
 
 ---

@@ -11,6 +11,9 @@ require_once __DIR__ . '/../../src/RunLog.php';
 require_once __DIR__ . '/../../src/Shopify.php';
 require_once __DIR__ . '/../../src/ApiHealth.php';
 require_once __DIR__ . '/../../src/ConfigValidator.php';
+require_once __DIR__ . '/../../src/ToolRegistry.php';
+require_once __DIR__ . '/../../src/EmailRules.php';
+require_once __DIR__ . '/../../src/EmailNotifier.php';
 require_once __DIR__ . '/../../src/ManageSettingsPageLoader.php';
 
 use PHPUnit\Framework\TestCase;
@@ -29,14 +32,22 @@ class ManageSettingsPageLoaderTest extends TestCase
         $this->cache = new Cache($this->tmpDir . '/cache', ttl: 3600);
         JobQueue::setDataDir($this->tmpDir);
         SlackRules::setDataDir($this->tmpDir);
+        EmailRules::setDataDir($this->tmpDir);
         UserActionLog::setDataDir($this->tmpDir);
         RunLog::setDataDir($this->tmpDir);
         AuditSnapshot::setDataDir($this->tmpDir);
 
         $this->previousSlackWebhook = getenv('SLACK_WEBHOOK_URL');
         putenv('SLACK_WEBHOOK_URL');
+        $this->previousSmtpHost = getenv('SMTP_HOST');
+        putenv('SMTP_HOST');
+        $this->previousAlertEmail = getenv('ALERT_EMAIL');
+        putenv('ALERT_EMAIL');
         $_GET = [];
     }
+
+    private string|false $previousSmtpHost;
+    private string|false $previousAlertEmail;
 
     protected function tearDown(): void
     {
@@ -44,6 +55,16 @@ class ManageSettingsPageLoaderTest extends TestCase
             putenv('SLACK_WEBHOOK_URL');
         } else {
             putenv('SLACK_WEBHOOK_URL=' . $this->previousSlackWebhook);
+        }
+        if ($this->previousSmtpHost === false) {
+            putenv('SMTP_HOST');
+        } else {
+            putenv('SMTP_HOST=' . $this->previousSmtpHost);
+        }
+        if ($this->previousAlertEmail === false) {
+            putenv('ALERT_EMAIL');
+        } else {
+            putenv('ALERT_EMAIL=' . $this->previousAlertEmail);
         }
 
         $this->removeDir($this->tmpDir);
@@ -160,6 +181,28 @@ class ManageSettingsPageLoaderTest extends TestCase
     public function testUnknownPageReturnsEmptyData(): void
     {
         $this->assertSame([], ManageSettingsPageLoader::load('unknown', '', $this->ctx()));
+    }
+
+    public function testEmailRulesLoadsPerToolRulesCatalogAndConfiguredFlag(): void
+    {
+        EmailRules::save(['scan_addresses' => ['mode' => 'immediate', 'threshold' => 2, 'email' => 'risk@example.com']]);
+        putenv('SMTP_HOST=smtp.test');
+        putenv('ALERT_EMAIL=ops@example.com');
+
+        $data = ManageSettingsPageLoader::load('emailrules', '', $this->ctx());
+
+        $this->assertSame('immediate', $data['emailRules']['scan_addresses']['mode']);
+        $this->assertSame('risk@example.com', $data['emailRules']['scan_addresses']['email']);
+        $this->assertTrue($data['emailConfigured']);
+        $this->assertArrayHasKey('run_audit', $data['emailCatalog']);
+        $this->assertSame(array_keys(ToolRegistry::triggerCatalog()), array_keys($data['emailCatalog']));
+    }
+
+    public function testEmailRulesReportsNotConfiguredWithoutSmtp(): void
+    {
+        $data = ManageSettingsPageLoader::load('emailrules', '', $this->ctx());
+
+        $this->assertFalse($data['emailConfigured']);
     }
 
     /**

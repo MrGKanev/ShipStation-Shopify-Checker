@@ -42,15 +42,19 @@ class PageLoaderTest extends TestCase
         UserActionLog::setDataDir($this->tmpDir);
         AuditSnapshot::setDataDir($this->tmpDir);
         Auth::setDataDir($this->tmpDir);
+        EmailRules::setDataDir($this->tmpDir);
 
         $this->previousSlackWebhook = getenv('SLACK_WEBHOOK_URL');
         putenv('SLACK_WEBHOOK_URL');
+        $this->previousSmtpHost = getenv('SMTP_HOST');
+        putenv('SMTP_HOST');
 
         $_GET = [];
         $_POST = [];
     }
 
     private string|false $previousSlackWebhook;
+    private string|false $previousSmtpHost;
 
     protected function tearDown(): void
     {
@@ -58,6 +62,11 @@ class PageLoaderTest extends TestCase
             putenv('SLACK_WEBHOOK_URL');
         } else {
             putenv('SLACK_WEBHOOK_URL=' . $this->previousSlackWebhook);
+        }
+        if ($this->previousSmtpHost === false) {
+            putenv('SMTP_HOST');
+        } else {
+            putenv('SMTP_HOST=' . $this->previousSmtpHost);
         }
         $this->removeDir($this->tmpDir);
         $_GET = [];

@@ -116,28 +116,44 @@ final class ScanRunner
         string $start,
         string $end
     ): void {
-        if ($rowsFound === null || !SlackRules::shouldNotifyScan($rowsFound)) {
+        if ($rowsFound === null) {
             return;
         }
 
-        $notifier = SlackNotifier::fromEnvironment();
-        if (!$notifier) {
-            return;
+        $scanned = is_array($result) ? ($result['scanned'] ?? $result['total_orders'] ?? null) : null;
+
+        if (SlackRules::shouldNotifyScan($rowsFound) && ($notifier = SlackNotifier::fromEnvironment())) {
+            try {
+                $notifier->notifyScan([
+                    'tool'       => $trigger,
+                    'rows_found' => $rowsFound,
+                    'scanned'    => $scanned,
+                    'start'      => $start,
+                    'end'        => $end,
+                ]);
+            } catch (Throwable $e) {
+                Logger::getInstance()->warning('Slack scan notification failed: {message}', [
+                    'message'   => $e->getMessage(),
+                    'exception' => $e->getFile() . ':' . $e->getLine(),
+                ]);
+            }
         }
 
-        try {
-            $notifier->notifyScan([
-                'tool'       => $trigger,
-                'rows_found' => $rowsFound,
-                'scanned'    => is_array($result) ? ($result['scanned'] ?? $result['total_orders'] ?? null) : null,
-                'start'      => $start,
-                'end'        => $end,
-            ]);
-        } catch (Throwable $e) {
-            Logger::getInstance()->warning('Slack scan notification failed: {message}', [
-                'message'   => $e->getMessage(),
-                'exception' => $e->getFile() . ':' . $e->getLine(),
-            ]);
+        if (EmailRules::shouldNotify($trigger, $rowsFound) && ($emailNotifier = EmailNotifier::fromEnvironment())) {
+            try {
+                $emailNotifier->notifyScan([
+                    'tool'       => $trigger,
+                    'rows_found' => $rowsFound,
+                    'scanned'    => $scanned,
+                    'start'      => $start,
+                    'end'        => $end,
+                ], EmailRules::recipientFor($trigger));
+            } catch (Throwable $e) {
+                Logger::getInstance()->warning('Email scan notification failed: {message}', [
+                    'message'   => $e->getMessage(),
+                    'exception' => $e->getFile() . ':' . $e->getLine(),
+                ]);
+            }
         }
     }
 

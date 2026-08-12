@@ -10,6 +10,8 @@ require_once __DIR__ . '/src/IgnoreList.php';
 require_once __DIR__ . '/src/RunLog.php';
 require_once __DIR__ . '/src/SlackRules.php';
 require_once __DIR__ . '/src/SlackNotifier.php';
+require_once __DIR__ . '/src/EmailRules.php';
+require_once __DIR__ . '/src/EmailNotifier.php';
 require_once __DIR__ . '/src/JobQueue.php';
 require_once __DIR__ . '/src/ShipStation.php';
 require_once __DIR__ . '/src/Shopify.php';

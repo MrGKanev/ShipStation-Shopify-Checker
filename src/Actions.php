@@ -22,6 +22,7 @@ class Actions
             'push_to_shipstation' => self::pushToShipStation($ctx),
             'queue_audit'         => self::queueAudit($ctx),
             'save_slack_rules'    => self::saveSlackRules($ctx),
+            'save_email_rules'    => self::saveEmailRules($ctx),
             'save_sidebar_settings' => self::saveSidebarSettings($ctx),
             'preview_push'        => self::previewPush($ctx),
             'order_detail'        => self::orderDetail($ctx),
@@ -222,6 +223,42 @@ class Actions
         SlackRules::save($rules);
         UserActionLog::append('save_slack_rules', SlackRules::load());
         header('Location: ?page=slackrules&saved=1'); exit;
+    }
+
+    private static function saveEmailRules(array $ctx): void
+    {
+        EmailRules::save(self::buildEmailRulesFromRequest($_POST));
+        UserActionLog::append('save_email_rules', []);
+        header('Location: ?page=emailrules&saved=1'); exit;
+    }
+
+    /**
+     * Parses the per-tool table submitted by views/emailrules.php (parallel
+     * arrays keyed by tool, e.g. mode[scan_addresses]=immediate) into
+     * EmailRules::save()'s expected shape. Values aren't validated here -
+     * EmailRules::normalise() clamps thresholds, rejects unknown modes, and
+     * drops malformed email addresses.
+     *
+     * @param  array<string, mixed> $post
+     * @return array<string, array{mode: string, threshold: int, include_zero: bool, email: string}>
+     */
+    public static function buildEmailRulesFromRequest(array $post): array
+    {
+        $modes        = (array) ($post['mode']         ?? []);
+        $thresholds   = (array) ($post['threshold']    ?? []);
+        $includeZeros = (array) ($post['include_zero'] ?? []);
+        $emails       = (array) ($post['email']        ?? []);
+
+        $rules = [];
+        foreach (ToolRegistry::triggerCatalog() as $tool => $meta) {
+            $rules[$tool] = [
+                'mode'         => (string) ($modes[$tool] ?? 'off'),
+                'threshold'    => (int) ($thresholds[$tool] ?? 1),
+                'include_zero' => isset($includeZeros[$tool]),
+                'email'        => trim((string) ($emails[$tool] ?? '')),
+            ];
+        }
+        return $rules;
     }
 
     private static function saveSidebarSettings(array $ctx): void

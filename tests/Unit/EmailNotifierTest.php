@@ -213,6 +213,118 @@ class EmailNotifierTest extends TestCase
         $this->assertStringContainsString('2026-06-01', $body);
     }
 
+    // ── toOverride recipient ────────────────────────────────────────────────
+
+    public function testNotifyAuditSendsToConstructorRecipientByDefault(): void
+    {
+        $notifier = new RecordingEmailNotifier('smtp.test', 587, 'user@test.com', 'pw', 'from@test.com', 'ops@test.com', 'tls');
+
+        $notifier->notifyAudit(['store' => 'x']);
+
+        $this->assertSame('ops@test.com', $notifier->sent[0]['to']);
+    }
+
+    public function testNotifyAuditSendsToOverrideWhenProvided(): void
+    {
+        $notifier = new RecordingEmailNotifier('smtp.test', 587, 'user@test.com', 'pw', 'from@test.com', 'ops@test.com', 'tls');
+
+        $notifier->notifyAudit(['store' => 'x'], 'risk@example.com');
+
+        $this->assertSame('risk@example.com', $notifier->sent[0]['to']);
+    }
+
+    public function testNotifyScanSendsToOverrideWhenProvided(): void
+    {
+        $notifier = new RecordingEmailNotifier('smtp.test', 587, 'user@test.com', 'pw', 'from@test.com', 'ops@test.com', 'tls');
+
+        $notifier->notifyScan(['tool' => 'x'], 'warehouse@example.com');
+
+        $this->assertSame('warehouse@example.com', $notifier->sent[0]['to']);
+    }
+
+    public function testNotifyAuditSafelyPassesThroughOverride(): void
+    {
+        $notifier = new RecordingEmailNotifier('smtp.test', 587, 'user@test.com', 'pw', 'from@test.com', 'ops@test.com', 'tls');
+
+        $notifier->notifyAuditSafely(['store' => 'x'], null, 'risk@example.com');
+
+        $this->assertSame('risk@example.com', $notifier->sent[0]['to']);
+    }
+
+    // ── digestMessage / notifyDigest ────────────────────────────────────────
+
+    public function testDigestMessageListsSectionsWithCounts(): void
+    {
+        [$subject, $body] = EmailNotifier::digestMessage([
+            ['tool' => 'scan_bundle', 'label' => 'Bundle Check', 'count' => 3, 'run_at' => '2026-06-20 09:00'],
+        ]);
+
+        $this->assertSame('Shopify Ops daily digest: 1 check with issues', $subject);
+        $this->assertStringContainsString('Bundle Check', $body);
+        $this->assertStringContainsString('>3<', $body);
+        $this->assertStringContainsString('2026-06-20 09:00', $body);
+    }
+
+    public function testDigestMessagePluralWordingForMultipleSections(): void
+    {
+        [$subject] = EmailNotifier::digestMessage([
+            ['tool' => 'a', 'label' => 'A', 'count' => 1, 'run_at' => ''],
+            ['tool' => 'b', 'label' => 'B', 'count' => 1, 'run_at' => ''],
+        ]);
+
+        $this->assertSame('Shopify Ops daily digest: 2 checks with issues', $subject);
+    }
+
+    public function testDigestMessageWithNoSectionsHasNoIssuesWording(): void
+    {
+        [$subject, $body] = EmailNotifier::digestMessage([]);
+
+        $this->assertSame('Shopify Ops daily digest: no issues today', $subject);
+        $this->assertStringContainsString('No enabled checks found issues', $body);
+    }
+
+    public function testDigestMessageEscapesLabel(): void
+    {
+        [, $body] = EmailNotifier::digestMessage([
+            ['tool' => 'x', 'label' => '<script>bad</script>', 'count' => 1, 'run_at' => ''],
+        ]);
+
+        $this->assertStringNotContainsString('<script>', $body);
+        $this->assertStringContainsString('&lt;script&gt;bad&lt;/script&gt;', $body);
+    }
+
+    public function testDigestMessageFallsBackToToolWhenLabelMissing(): void
+    {
+        [, $body] = EmailNotifier::digestMessage([
+            ['tool' => 'scan_bundle', 'count' => 1, 'run_at' => ''],
+        ]);
+
+        $this->assertStringContainsString('scan_bundle', $body);
+    }
+
+    public function testNotifyDigestSendsToOverrideWhenProvided(): void
+    {
+        $notifier = new RecordingEmailNotifier('smtp.test', 587, 'user@test.com', 'pw', 'from@test.com', 'ops@test.com', 'tls');
+
+        $notifier->notifyDigest([], 'digest@example.com');
+
+        $this->assertSame('digest@example.com', $notifier->sent[0]['to']);
+    }
+
+    public function testNotifyDigestSafelyReturnsFalseOnFailureWithoutThrowing(): void
+    {
+        $notifier = new FailingEmailNotifier('smtp.test', 587, 'user@test.com', 'pw', 'from@test.com', 'ops@test.com', 'tls');
+
+        $this->assertFalse($notifier->notifyDigestSafely([]));
+    }
+
+    public function testNotifyDigestSafelyReturnsTrueOnSuccess(): void
+    {
+        $notifier = new RecordingEmailNotifier('smtp.test', 587, 'user@test.com', 'pw', 'from@test.com', 'ops@test.com', 'tls');
+
+        $this->assertTrue($notifier->notifyDigestSafely([]));
+    }
+
     public function testSendReportSendsMultipartMessageWithCsvAttachmentViaMail(): void
     {
         $notifier = new RecordingEmailNotifier('smtp.test', 587, 'user@test.com', 'pw', 'from@test.com', 'ops@test.com', 'tls');

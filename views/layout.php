@@ -116,6 +116,7 @@
         <li><a href="?page=apihealth" class="<?= $page === 'apihealth' ? 'active' : '' ?>">API Health</a></li>
         <li><a href="?page=configcheck" class="<?= $page === 'configcheck' ? 'active' : '' ?>">Config Check</a></li>
         <li><a href="?page=slackrules" class="<?= $page === 'slackrules' ? 'active' : '' ?>">Slack Rules</a></li>
+        <li><a href="?page=emailrules" class="<?= $page === 'emailrules' ? 'active' : '' ?>">Email Rules</a></li>
         <li><a href="?page=webhookhealth" class="<?= $page === 'webhookhealth' ? 'active' : '' ?>">Webhook Health</a></li>
       </ul>
     <?php endif; ?>

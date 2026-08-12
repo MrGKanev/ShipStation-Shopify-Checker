@@ -43,6 +43,11 @@
     <?php elseif (($auditSlack['configured'] ?? false) && !empty($auditSlack['error'])): ?>
       <span class="source-badge cached" title="<?= esc($auditSlack['error']) ?>">Slack: failed</span>
     <?php endif; ?>
+    <?php if (($auditEmail['configured'] ?? false) && ($auditEmail['sent'] ?? false)): ?>
+      <span class="source-badge live">Email: sent</span>
+    <?php elseif (($auditEmail['configured'] ?? false) && !empty($auditEmail['error'])): ?>
+      <span class="source-badge cached" title="<?= esc($auditEmail['error']) ?>">Email: failed</span>
+    <?php endif; ?>
   </div>
 
   <div class="audit-summary">

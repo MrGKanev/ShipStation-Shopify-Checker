@@ -162,8 +162,8 @@ try {
             : "  Slack notification failed; audit result was still saved.\n";
     }
 
-    if (($sendDigest || EmailRules::shouldNotifyAudit(count($result['missing']))) && ($emailNotifier = EmailNotifier::fromEnvironment())) {
-        $sent = $emailNotifier->notifyAuditSafely($auditSummary);
+    if (($sendDigest || EmailRules::shouldNotify('run_audit', count($result['missing']))) && ($emailNotifier = EmailNotifier::fromEnvironment())) {
+        $sent = $emailNotifier->notifyAuditSafely($auditSummary, null, EmailRules::recipientFor('run_audit'));
         echo $sent
             ? "  Email " . ($sendDigest ? 'digest' : 'notification') . " sent.\n"
             : "  Email notification failed; audit result was still saved.\n";

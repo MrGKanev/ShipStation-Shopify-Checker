@@ -15,6 +15,12 @@
 | `APP_LOGO` | - | URL to an image that replaces the brand text |
 | `APP_STORE_NUMBER` | - | Store number - shown as subtitle on login and in the browser tab |
 | `SLACK_WEBHOOK_URL` | - | Slack Incoming Webhook URL. When set, completed audits send a concise summary to Slack. |
+| `SMTP_HOST` | - | SMTP server host. Required (with `ALERT_EMAIL`) for any email notification/report feature. |
+| `SMTP_PORT` | - | SMTP port (default: `587`) |
+| `SMTP_USER` / `SMTP_PASS` | - | SMTP auth credentials |
+| `SMTP_FROM` | - | From address (defaults to `SMTP_USER`) |
+| `SMTP_SECURE` | - | `tls` or `ssl` (default: `tls`) |
+| `ALERT_EMAIL` | - | Default recipient for audit/scan/digest emails. Per-tool rules can override this in **Settings → Email Rules**. |
 | `METRICS_TOKEN` | - | Bearer/query token for `metrics.php`. If empty, the endpoint is disabled by default. |
 | `METRICS_ALLOW_PUBLIC` | - | Set to `1` only for local/dev public metrics without `METRICS_TOKEN`. |
 
@@ -49,6 +55,16 @@ Set `SLACK_WEBHOOK_URL` in `.env`, then configure thresholds in **Settings → S
 - Audit notifications can require a minimum missing-order count.
 - All-clear audit notifications can be disabled.
 - Scan notifications are optional and default to off to avoid noisy channels.
+
+## Email rules
+
+Set `SMTP_HOST` and `ALERT_EMAIL` in `.env`, then configure each check individually in **Settings → Email Rules**. Unlike Slack (one shared toggle for "audit" and one for "all scans"), every audit/scan check gets its own row:
+
+- **Off** (default) - never emails.
+- **Immediate** - emails right after that check's own run, once its row/missing count clears the threshold.
+- **Digest** - held for a once-daily rollup email instead of firing per-run. Requires scheduling `email_digest.php` via cron (see [cron scheduling](../README.md#5-schedule-via-cron)); without that cron entry, digest-mode checks are recorded but never actually emailed.
+
+Each check can also override the recipient - leave its email field blank to fall back to `ALERT_EMAIL`.
 
 ## Tag policy rules
 

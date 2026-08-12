@@ -23,6 +23,7 @@ class WorkerTest extends TestCase
         IgnoreList::setDataDir($this->tmpDir);
         RunLog::setDataDir($this->tmpDir);
         SlackRules::setDataDir($this->tmpDir);
+        EmailRules::setDataDir($this->tmpDir);
         JobQueue::setDataDir($this->tmpDir);
     }
 
@@ -41,6 +42,33 @@ class WorkerTest extends TestCase
             is_dir($path) ? $this->removeDir($path) : @unlink($path);
         }
         @rmdir($dir);
+    }
+
+    // ── configureDataDirs ────────────────────────────────────────────────────
+
+    private function customFile(string $class): string
+    {
+        $prop = new \ReflectionProperty($class, 'customFile');
+        return $prop->getValue();
+    }
+
+    public function testConfigureDataDirsPointsEachStoreAtItsOwnSubdirectory(): void
+    {
+        Worker::configureDataDirs('store-b', $this->tmpDir);
+
+        $this->assertSame($this->tmpDir . '/data/store-b/ignored.json', $this->customFile(IgnoreList::class));
+        $this->assertSame($this->tmpDir . '/data/store-b/run_log.json', $this->customFile(RunLog::class));
+        $this->assertSame($this->tmpDir . '/data/store-b/slack_rules.json', $this->customFile(SlackRules::class));
+        $this->assertSame($this->tmpDir . '/data/store-b/jobs.json', $this->customFile(JobQueue::class));
+    }
+
+    public function testConfigureDataDirsDoesNothingForEmptyStoreId(): void
+    {
+        IgnoreList::setDataDir($this->tmpDir . '/preset');
+
+        Worker::configureDataDirs('', $this->tmpDir);
+
+        $this->assertSame($this->tmpDir . '/preset/ignored.json', $this->customFile(IgnoreList::class));
     }
 
     // ── resolveStore ─────────────────────────────────────────────────────────
