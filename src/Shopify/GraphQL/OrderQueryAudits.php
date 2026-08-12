@@ -228,4 +228,29 @@ class OrderQueryAudits
                 . Queries::orderTagFields()
         );
     }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersForTaxAudit(string $startDate, string $endDate): array
+    {
+        return $this->orders->fetchOrdersByQuery(
+            Queries::paidOrdersQuery($startDate, $endDate),
+            Queries::orderCoreFields()
+                . Queries::totalTaxFields()
+                . Queries::customerTaxFields()
+        );
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersForConsentAudit(string $startDate, string $endDate): array
+    {
+        return $this->orders->fetchOrdersByQuery(
+            Queries::paidOrdersQuery($startDate, $endDate),
+            Queries::orderCoreFields()
+                . Queries::customerConsentFields()
+        );
+    }
 }

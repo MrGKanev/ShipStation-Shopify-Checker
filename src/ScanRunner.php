@@ -130,6 +130,7 @@ final class ScanRunner
                     'scanned'    => $scanned,
                     'start'      => $start,
                     'end'        => $end,
+                    'mentions'   => SlackRules::mentionText(),
                 ]);
             } catch (Throwable $e) {
                 Logger::getInstance()->warning('Slack scan notification failed: {message}', [

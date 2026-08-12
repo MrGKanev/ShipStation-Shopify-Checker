@@ -150,6 +150,7 @@ final class Worker
             'skipped'        => count($comparison['skipped']),
             'ignored'        => count($comparison['ignored']),
             'total_ss'       => count($ssOrders),
+            'mentions'       => SlackRules::mentionText(),
         ];
 
         if (SlackRules::shouldNotifyAudit(count($comparison['missing'])) && ($notifier = SlackNotifier::fromEnvironment())) {

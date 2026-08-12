@@ -93,6 +93,8 @@ class SlackNotifier
             ? "{$missing} missing order" . ($missing === 1 ? '' : 's')
             : 'No missing orders';
 
+        $mentions = (string) ($summary['mentions'] ?? '');
+
         $fields = [
             ['type' => 'mrkdwn', 'text' => "*Store*\n{$store}"],
             ['type' => 'mrkdwn', 'text' => "*Period*\n{$start} -> {$end}"],
@@ -112,11 +114,11 @@ class SlackNotifier
                 'type' => 'header',
                 'text' => ['type' => 'plain_text', 'text' => "Shopify Ops audit: {$statusText}"],
             ],
-            [
-                'type'   => 'section',
-                'fields' => $fields,
-            ],
         ];
+        if ($mentions !== '') {
+            $blocks[] = ['type' => 'section', 'text' => ['type' => 'mrkdwn', 'text' => trim($mentions)]];
+        }
+        $blocks[] = ['type' => 'section', 'fields' => $fields];
 
         if ($orders !== []) {
             $lines = [];
@@ -133,7 +135,7 @@ class SlackNotifier
         }
 
         return [
-            'text'   => "Shopify Ops audit for {$store}: {$statusText}",
+            'text'   => "{$mentions}Shopify Ops audit for {$store}: {$statusText}",
             'blocks' => $blocks,
         ];
     }
@@ -149,6 +151,7 @@ class SlackNotifier
         $scanned = $summary['scanned'] ?? null;
         $start = (string)($summary['start'] ?? '');
         $end = (string)($summary['end'] ?? '');
+        $mentions = (string) ($summary['mentions'] ?? '');
 
         $fields = [
             ['type' => 'mrkdwn', 'text' => "*Tool*\n{$tool}"],
@@ -161,18 +164,20 @@ class SlackNotifier
             $fields[] = ['type' => 'mrkdwn', 'text' => "*Period*\n{$start} -> {$end}"];
         }
 
-        return [
-            'text' => "Shopify Ops scan {$tool}: {$rows} row" . ($rows === 1 ? '' : 's') . ' found',
-            'blocks' => [
-                [
-                    'type' => 'header',
-                    'text' => ['type' => 'plain_text', 'text' => "Shopify Ops scan: {$tool}"],
-                ],
-                [
-                    'type' => 'section',
-                    'fields' => $fields,
-                ],
+        $blocks = [
+            [
+                'type' => 'header',
+                'text' => ['type' => 'plain_text', 'text' => "Shopify Ops scan: {$tool}"],
             ],
+        ];
+        if ($mentions !== '') {
+            $blocks[] = ['type' => 'section', 'text' => ['type' => 'mrkdwn', 'text' => trim($mentions)]];
+        }
+        $blocks[] = ['type' => 'section', 'fields' => $fields];
+
+        return [
+            'text' => "{$mentions}Shopify Ops scan {$tool}: {$rows} row" . ($rows === 1 ? '' : 's') . ' found',
+            'blocks' => $blocks,
         ];
     }
 

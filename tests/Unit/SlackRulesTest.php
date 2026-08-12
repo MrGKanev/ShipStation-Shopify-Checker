@@ -94,4 +94,69 @@ class SlackRulesTest extends TestCase
     {
         $this->assertSame(SlackRules::defaults(), SlackRules::load());
     }
+
+    // ── mentions ─────────────────────────────────────────────────────────────
+
+    public function testMentionIdsEmptyByDefault(): void
+    {
+        $this->assertSame([], SlackRules::mentionIds());
+        $this->assertSame('', SlackRules::mentionText());
+    }
+
+    public function testMentionTextFormatsSingleId(): void
+    {
+        SlackRules::save(['mentions' => 'U012ABC3DE']);
+
+        $this->assertSame(['U012ABC3DE'], SlackRules::mentionIds());
+        $this->assertSame('<@U012ABC3DE> ', SlackRules::mentionText());
+    }
+
+    public function testMentionTextFormatsMultipleSpaceSeparatedIds(): void
+    {
+        SlackRules::save(['mentions' => 'U012ABC3DE U024XYZ9FG']);
+
+        $this->assertSame('<@U012ABC3DE> <@U024XYZ9FG> ', SlackRules::mentionText());
+    }
+
+    public function testNormaliseMentionsAcceptsCommaSeparatedInput(): void
+    {
+        $rules = SlackRules::normalise(['mentions' => 'U012ABC3DE, U024XYZ9FG']);
+
+        $this->assertSame('U012ABC3DE U024XYZ9FG', $rules['mentions']);
+    }
+
+    public function testNormaliseMentionsDropsGarbageTokens(): void
+    {
+        $rules = SlackRules::normalise(['mentions' => 'jane@example.com, not-an-id, U012ABC3DE']);
+
+        $this->assertSame('U012ABC3DE', $rules['mentions']);
+    }
+
+    public function testNormaliseMentionsDedupes(): void
+    {
+        $rules = SlackRules::normalise(['mentions' => 'U012ABC3DE U012ABC3DE']);
+
+        $this->assertSame('U012ABC3DE', $rules['mentions']);
+    }
+
+    public function testNormaliseMentionsUppercasesLowercaseId(): void
+    {
+        $rules = SlackRules::normalise(['mentions' => 'u012abc3de']);
+
+        $this->assertSame('U012ABC3DE', $rules['mentions']);
+    }
+
+    public function testNormaliseMentionsAcceptsGroupIdPrefix(): void
+    {
+        $rules = SlackRules::normalise(['mentions' => 'S012ABC3DE']);
+
+        $this->assertSame('S012ABC3DE', $rules['mentions']);
+    }
+
+    public function testNormaliseMentionsBlankInputStaysBlank(): void
+    {
+        $rules = SlackRules::normalise(['mentions' => '']);
+
+        $this->assertSame('', $rules['mentions']);
+    }
 }

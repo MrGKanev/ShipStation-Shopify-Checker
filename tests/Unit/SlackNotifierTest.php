@@ -124,6 +124,23 @@ class SlackNotifierTest extends TestCase
         $this->assertSame('Shopify Ops scan x: 1 row found', $payload['text']);
     }
 
+    public function testScanPayloadPrependsMentionsToTextAndAddsMrkdwnBlock(): void
+    {
+        $payload = SlackNotifier::scanPayload(['tool' => 'x', 'rows_found' => 1, 'mentions' => '<@U012ABC3DE> ']);
+
+        $this->assertSame('<@U012ABC3DE> Shopify Ops scan x: 1 row found', $payload['text']);
+        $this->assertSame('<@U012ABC3DE>', $payload['blocks'][1]['text']['text']);
+        $this->assertArrayHasKey('fields', $payload['blocks'][2]);
+    }
+
+    public function testScanPayloadWithoutMentionsHasNoMentionBlock(): void
+    {
+        $payload = SlackNotifier::scanPayload(['tool' => 'x', 'rows_found' => 1]);
+
+        $this->assertCount(2, $payload['blocks']);
+        $this->assertArrayHasKey('fields', $payload['blocks'][1]);
+    }
+
     public function testAuditPayloadIncludesSummaryFields(): void
     {
         $payload = SlackNotifier::auditPayload([
@@ -143,6 +160,23 @@ class SlackNotifierTest extends TestCase
         $this->assertSame('blocks', array_key_last($payload));
         $this->assertStringContainsString('Shopify Ops audit: 1 missing order', $payload['blocks'][0]['text']['text']);
         $this->assertStringContainsString('#1001', $payload['blocks'][2]['text']['text']);
+    }
+
+    public function testAuditPayloadPrependsMentionsToTextAndAddsMrkdwnBlock(): void
+    {
+        $payload = SlackNotifier::auditPayload(['store' => 'x', 'missing_count' => 1, 'mentions' => '<@U012ABC3DE> <@U024XYZ9FG> ']);
+
+        $this->assertSame('<@U012ABC3DE> <@U024XYZ9FG> Shopify Ops audit for x: 1 missing order', $payload['text']);
+        $this->assertSame('<@U012ABC3DE> <@U024XYZ9FG>', $payload['blocks'][1]['text']['text']);
+        $this->assertArrayHasKey('fields', $payload['blocks'][2]);
+    }
+
+    public function testAuditPayloadWithoutMentionsHasNoMentionBlock(): void
+    {
+        $payload = SlackNotifier::auditPayload(['store' => 'x', 'missing_count' => 0, 'missing_orders' => []]);
+
+        $this->assertCount(2, $payload['blocks']);
+        $this->assertArrayHasKey('fields', $payload['blocks'][1]);
     }
 
     public function testSendPostsJsonPayload(): void

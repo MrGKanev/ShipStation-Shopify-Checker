@@ -284,6 +284,19 @@ class ProductInventoryPageLoaderTest extends TestCase
         $this->assertSame('validation_error', RunLog::all()[0]['status']);
     }
 
+    public function testCatalogQualityInitialAndMissingShopifyCredentials(): void
+    {
+        $initial = ProductInventoryPageLoader::load('catalogquality', '', $this->ctx());
+
+        $this->assertNull($initial['cqResult']);
+        $this->assertSame('', $initial['cqError']);
+
+        $submitted = ProductInventoryPageLoader::load('catalogquality', 'scan_catalogquality', $this->ctx(['shopifyToken' => '', 'shopifyStore' => 'N/A']));
+
+        $this->assertNull($submitted['cqResult']);
+        $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $submitted['cqError']);
+    }
+
     public function testUnknownPageReturnsEmptyData(): void
     {
         $this->assertSame([], ProductInventoryPageLoader::load('unknown', '', $this->ctx()));

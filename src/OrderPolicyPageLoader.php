@@ -15,6 +15,7 @@ class OrderPolicyPageLoader
             'activess'      => self::loadActiveSsConflicts($action, $ctx),
             'discountabuse' => self::loadDiscountAbuse($action, $ctx),
             'tagpolicy'     => self::loadTagPolicy($action, $ctx),
+            'consentaudit'  => self::loadConsentAudit($action, $ctx),
             default         => [],
         };
     }
@@ -413,6 +414,53 @@ class OrderPolicyPageLoader
                 'fulfillment'  => $o['fulfillment_status'] ?? '',
                 'tags'         => $tags,
                 'violations'   => $violations,
+            ];
+        }
+        usort($rows, fn($a, $b) => strcmp($b['created_at'], $a['created_at']));
+        return $rows;
+    }
+
+    private static function loadConsentAudit(string $action, array $ctx): array
+    {
+        ['result' => $caResult, 'error' => $caError, 'start' => $caStart, 'end' => $caEnd] =
+            ScanRunner::run($action, 'scan_consentaudit', $ctx, 'ca', function ($ctx, $start, $end) {
+                self::setLimits(180);
+                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+                $orders = self::suppressOutput(fn() => $shopify->fetchOrdersForConsentAudit($start, $end));
+
+                $rows = self::buildConsentAuditRows($orders);
+                return ['rows' => $rows, 'scanned' => count($orders), 'start' => $start, 'end' => $end];
+            }, 30);
+
+        return compact('caResult', 'caError', 'caStart', 'caEnd');
+    }
+
+    /**
+     * Marketing Consent Audit rows: paid orders whose customer's email
+     * marketing consent state is not 'subscribed', sorted by created_at
+     * descending. SMS consent is surfaced as an informational column but
+     * does not gate the flag - email is this store's primary marketing
+     * channel.
+     *
+     * @param  array<int, array<string, mixed>> $orders
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildConsentAuditRows(array $orders): array
+    {
+        $rows = [];
+        foreach ($orders as $o) {
+            $emailConsent = $o['customer_email_consent'] ?? '';
+            if ($emailConsent === 'subscribed') continue;
+
+            $rows[] = [
+                'shopify_id'    => $o['id'] ?? '',
+                'order_number'  => $o['name'] ?? '',
+                'created_at'    => self::dateOnly($o['created_at'] ?? ''),
+                'email'         => $o['email'] ?? '',
+                'email_consent' => $emailConsent ?: 'unknown',
+                'sms_consent'   => ($o['customer_sms_consent'] ?? '') ?: 'unknown',
+                'financial'     => $o['financial_status'] ?? '',
+                'total'         => $o['total_price'] ?? '',
             ];
         }
         usort($rows, fn($a, $b) => strcmp($b['created_at'], $a['created_at']));

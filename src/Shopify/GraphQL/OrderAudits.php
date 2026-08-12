@@ -155,4 +155,20 @@ class OrderAudits
     {
         return $this->queryAudits->fetchOrdersForTagPolicy($startDate, $endDate);
     }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersForTaxAudit(string $startDate, string $endDate): array
+    {
+        return $this->queryAudits->fetchOrdersForTaxAudit($startDate, $endDate);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersForConsentAudit(string $startDate, string $endDate): array
+    {
+        return $this->queryAudits->fetchOrdersForConsentAudit($startDate, $endDate);
+    }
 }

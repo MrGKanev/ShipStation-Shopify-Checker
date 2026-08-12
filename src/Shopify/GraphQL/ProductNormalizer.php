@@ -43,6 +43,10 @@ class ProductNormalizer
             'product_type'         => $node['productType'] ?? '',
             'images'               => $images,
             'variants'             => $variants,
+            'published'            => !empty($node['onlineStoreUrl']),
+            'seo_title'            => trim((string)($node['seo']['title'] ?? '')),
+            'seo_description'      => trim((string)($node['seo']['description'] ?? '')),
+            'collection_count'     => count($node['collections']['edges'] ?? []),
             'admin_graphql_api_id' => $node['id'] ?? '',
         ];
     }

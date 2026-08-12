@@ -16,6 +16,7 @@ class ProductInventoryPageLoader
             'zombieproducts'     => self::loadZombieProducts($action, $ctx),
             'inventoryaging'     => self::loadInventoryAging($action, $ctx),
             'inventoryforecast'  => self::loadInventoryForecast($action, $ctx),
+            'catalogquality'     => self::loadCatalogQuality($action, $ctx),
             default              => [],
         };
     }
@@ -683,6 +684,84 @@ class ProductInventoryPageLoader
         });
 
         return [$rows, $variantCount];
+    }
+
+    private static function loadCatalogQuality(string $action, array $ctx): array
+    {
+        $cqResult = null;
+        $cqError  = '';
+
+        if ($action === 'scan_catalogquality') {
+            $runStartedAt = date('Y-m-d H:i:s');
+            $t0 = microtime(true);
+
+            if ($err = self::requireShopify($ctx)) {
+                $cqError = $err;
+                self::appendRunLog('scan_catalogquality', 'config_error', $runStartedAt, $t0, $cqError);
+            } else {
+                try {
+                    self::setLimits(120);
+                    $shopify  = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
+                    $products = self::suppressOutput(fn() => $shopify->fetchAllProducts('active'));
+                    $scanned  = count($products);
+                    $rows     = self::buildCatalogQualityRows($products);
+
+                    $cqResult = ['rows' => $rows, 'scanned' => $scanned];
+                    self::appendRunLog(
+                        'scan_catalogquality',
+                        count($rows) > 0 ? 'issues_found' : 'ok',
+                        $runStartedAt,
+                        $t0,
+                        scanned: $scanned,
+                        rowsFound: count($rows)
+                    );
+                } catch (Throwable $e) {
+                    $cqError = $e->getMessage();
+                    self::appendRunLog('scan_catalogquality', 'error', $runStartedAt, $t0, $cqError);
+                }
+            }
+        }
+
+        return compact('cqResult', 'cqError');
+    }
+
+    /**
+     * Catalog Quality rows: active products not published to the Online
+     * Store channel, missing an SEO title/description, or not assigned to
+     * any collection. A product can carry multiple issues at once.
+     *
+     * @param  array<int, array<string, mixed>> $products
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildCatalogQualityRows(array $products): array
+    {
+        $rows = [];
+        foreach ($products as $p) {
+            $issues = [];
+
+            if (empty($p['published'])) {
+                $issues[] = 'Not published to Online Store';
+            }
+            if (trim((string)($p['seo_title'] ?? '')) === '') {
+                $issues[] = 'Missing SEO title';
+            }
+            if (trim((string)($p['seo_description'] ?? '')) === '') {
+                $issues[] = 'Missing SEO description';
+            }
+            if ((int)($p['collection_count'] ?? 0) === 0) {
+                $issues[] = 'Not in any collection';
+            }
+
+            if (empty($issues)) continue;
+            $rows[] = [
+                'id'       => (string)($p['id'] ?? ''),
+                'title'    => $p['title']        ?? '',
+                'vendor'   => $p['vendor']       ?? '',
+                'type'     => $p['product_type'] ?? '',
+                'issues'   => $issues,
+            ];
+        }
+        return $rows;
     }
 
     private static function dateOnly(string $dt): string

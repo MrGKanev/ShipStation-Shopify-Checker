@@ -54,6 +54,18 @@ class OrderNormalizer
         if (array_key_exists('billingAddress', $node)) {
             $order['billing_address'] = OrderComponentNormalizer::normalizeAddress($node['billingAddress'] ?? null);
         }
+        if (array_key_exists('customer', $node)) {
+            $customer = (array)($node['customer'] ?? []);
+            if (array_key_exists('taxExempt', $customer)) {
+                $order['customer_tax_exempt'] = (bool)($customer['taxExempt'] ?? false);
+            }
+            if (array_key_exists('emailMarketingConsent', $customer)) {
+                $order['customer_email_consent'] = strtolower((string)($customer['emailMarketingConsent']['marketingState'] ?? ''));
+            }
+            if (array_key_exists('smsMarketingConsent', $customer)) {
+                $order['customer_sms_consent'] = strtolower((string)($customer['smsMarketingConsent']['marketingState'] ?? ''));
+            }
+        }
         if (isset($node['lineItems']['nodes'])) {
             $order['line_items'] = array_map(
                 fn($lineItem) => OrderComponentNormalizer::normalizeLineItem($lineItem),

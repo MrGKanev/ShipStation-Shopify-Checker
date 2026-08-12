@@ -67,6 +67,10 @@ class PageLoader
             'fulfilleditems'    => FulfillmentIssuePageLoader::load($page, $action, $ctx),
             'returns'           => SimpleScanPageLoader::load($page, $action, $ctx),
             'returneditems'     => SimpleScanPageLoader::load($page, $action, $ctx),
+            'taxaudit'          => SimpleScanPageLoader::load($page, $action, $ctx),
+            'consentaudit'      => OrderPolicyPageLoader::load($page, $action, $ctx),
+            'catalogquality'    => ProductInventoryPageLoader::load($page, $action, $ctx),
+            'giftcards'         => GiftCardPageLoader::load($page, $action, $ctx),
             'jobs',
             'slackrules',
             'emailrules',
@@ -236,6 +240,7 @@ class PageLoader
                         'skipped'        => count($comparison['skipped']),
                         'ignored'        => count($comparison['ignored']),
                         'total_ss'       => count($ssOrders),
+                        'mentions'       => SlackRules::mentionText(),
                     ];
 
                     if (SlackRules::shouldNotifyAudit(count($comparison['missing'])) && ($notifier = SlackNotifier::fromEnvironment())) {

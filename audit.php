@@ -153,6 +153,7 @@ try {
         'skipped'        => count($result['skipped']),
         'ignored'        => count($result['ignored']),
         'total_ss'       => count($ssOrders),
+        'mentions'       => SlackRules::mentionText(),
     ];
 
     if (($sendDigest || SlackRules::shouldNotifyAudit(count($result['missing']))) && ($notifier = SlackNotifier::fromEnvironment())) {

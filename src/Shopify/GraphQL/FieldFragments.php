@@ -240,4 +240,33 @@ GQL;
 
 GQL;
     }
+
+    public static function totalTaxFields(): string
+    {
+        return <<<'GQL'
+                totalTaxSet { shopMoney { amount currencyCode } }
+
+GQL;
+    }
+
+    public static function customerTaxFields(): string
+    {
+        return <<<'GQL'
+                customer {
+                  taxExempt
+                }
+
+GQL;
+    }
+
+    public static function customerConsentFields(): string
+    {
+        return <<<'GQL'
+                customer {
+                  emailMarketingConsent { marketingState }
+                  smsMarketingConsent { marketingState }
+                }
+
+GQL;
+    }
 }

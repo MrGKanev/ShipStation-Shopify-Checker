@@ -110,4 +110,19 @@ class Queries
     {
         return FieldFragments::eventFields();
     }
+
+    public static function totalTaxFields(): string
+    {
+        return FieldFragments::totalTaxFields();
+    }
+
+    public static function customerTaxFields(): string
+    {
+        return FieldFragments::customerTaxFields();
+    }
+
+    public static function customerConsentFields(): string
+    {
+        return FieldFragments::customerConsentFields();
+    }
 }

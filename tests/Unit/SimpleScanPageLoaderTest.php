@@ -122,6 +122,17 @@ class SimpleScanPageLoaderTest extends TestCase
         $this->assertSame('2026-06-20', $data['cmEnd']);
     }
 
+    public function testTaxAuditMissingShopifyCredentials(): void
+    {
+        $_POST = ['tx_start' => '2026-06-01', 'tx_end' => '2026-06-20', 'tx_min' => '10'];
+
+        $data = SimpleScanPageLoader::load('taxaudit', 'scan_taxaudit', $this->ctx(['shopifyToken' => '', 'shopifyStore' => 'N/A']));
+
+        $this->assertNull($data['txResult']);
+        $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $data['txError']);
+        $this->assertSame(10.0, $data['txMin']);
+    }
+
     public function testPartialFulfillCarriesThresholdAndMissingCredentials(): void
     {
         $_GET = ['pf_threshold' => '12'];

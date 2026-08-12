@@ -157,6 +157,17 @@ class OrderPolicyPageLoaderTest extends TestCase
         $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $submitted['tpError']);
     }
 
+    public function testConsentAuditMissingShopifyCredentials(): void
+    {
+        $_POST = ['ca_start' => '2026-06-01', 'ca_end' => '2026-06-20'];
+
+        $data = OrderPolicyPageLoader::load('consentaudit', 'scan_consentaudit', $this->ctx(['shopifyToken' => '', 'shopifyStore' => 'N/A']));
+
+        $this->assertNull($data['caResult']);
+        $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $data['caError']);
+        $this->assertSame('validation_error', RunLog::all()[0]['status']);
+    }
+
     public function testUnknownPageReturnsEmptyData(): void
     {
         $this->assertSame([], OrderPolicyPageLoader::load('unknown', '', $this->ctx()));

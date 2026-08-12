@@ -31,6 +31,7 @@ class SlackRules
             'scan_enabled'       => false,
             'scan_min_rows'      => 1,
             'include_zero_audit' => true,
+            'mentions'           => '',
         ];
     }
 
@@ -72,7 +73,40 @@ class SlackRules
             'scan_enabled'       => (bool)($rules['scan_enabled'] ?? $d['scan_enabled']),
             'scan_min_rows'      => max(1, (int)($rules['scan_min_rows'] ?? $d['scan_min_rows'])),
             'include_zero_audit' => (bool)($rules['include_zero_audit'] ?? $d['include_zero_audit']),
+            'mentions'           => self::normaliseMentions((string)($rules['mentions'] ?? $d['mentions'])),
         ];
+    }
+
+    /**
+     * Extracts valid-looking Slack user/group IDs (e.g. "U012ABC3DE",
+     * "S0123ABCDE" for a group) from free-text input - garbage tokens
+     * (names, emails, stray punctuation) are silently dropped rather than
+     * rejecting the whole save, since operators may paste IDs copied from
+     * various places with extra whitespace/commas.
+     */
+    private static function normaliseMentions(string $raw): string
+    {
+        preg_match_all('/[UWS][A-Z0-9]{8,}/', strtoupper($raw), $matches);
+        return implode(' ', array_unique($matches[0]));
+    }
+
+    /**
+     * @return string[] Slack user/group IDs configured for @-mention on notifications.
+     */
+    public static function mentionIds(): array
+    {
+        $mentions = self::load()['mentions'];
+        return $mentions === '' ? [] : explode(' ', $mentions);
+    }
+
+    /**
+     * Formatted "<@ID1> <@ID2> " ready to prepend to a Slack message, or ''
+     * when no mentions are configured.
+     */
+    public static function mentionText(): string
+    {
+        $ids = self::mentionIds();
+        return $ids === [] ? '' : implode(' ', array_map(fn($id) => "<@{$id}>", $ids)) . ' ';
     }
 
     public static function shouldNotifyAudit(int $missingCount): bool

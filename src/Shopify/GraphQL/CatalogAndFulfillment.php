@@ -32,6 +32,9 @@ class CatalogAndFulfillment
                 descriptionHtml
                 vendor
                 productType
+                onlineStoreUrl
+                seo { title description }
+                collections(first: 1) { edges { node { id } } }
                 mediaCount { count }
                 variants(first: 250) {
                   edges {
@@ -110,6 +113,59 @@ class CatalogAndFulfillment
                 }
             }
         }, 40);
+
+        return $all;
+    }
+
+    /**
+     * Fetches all gift cards from the store, normalized into a flat array shape.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchGiftCards(): array
+    {
+        $all      = [];
+        $template = <<<'GQL'
+        {
+          giftCards(first: 250{{AFTER}}) {
+            pageInfo { hasNextPage endCursor }
+            edges {
+              node {
+                id
+                maskedCode
+                balance { amount currencyCode }
+                initialValue { amount currencyCode }
+                expiresOn
+                enabled
+                createdAt
+                customer { email }
+              }
+            }
+          }
+        }
+        GQL;
+
+        $this->client->paginateGraphQL(
+            $template,
+            'giftCards',
+            function (array $edges) use (&$all) {
+                foreach ($edges as $edge) {
+                    $node = $edge['node'] ?? [];
+                    $all[] = [
+                        'id'               => (string)($node['id'] ?? ''),
+                        'masked_code'      => $node['maskedCode'] ?? '',
+                        'balance'          => (float)($node['balance']['amount'] ?? 0),
+                        'initial_value'    => (float)($node['initialValue']['amount'] ?? 0),
+                        'currency'         => $node['balance']['currencyCode'] ?? $node['initialValue']['currencyCode'] ?? '',
+                        'expires_on'       => $node['expiresOn'] ?? null,
+                        'enabled'          => (bool)($node['enabled'] ?? false),
+                        'created_at'       => $node['createdAt'] ?? '',
+                        'customer_email'   => $node['customer']['email'] ?? '',
+                    ];
+                }
+            },
+            1000
+        );
 
         return $all;
     }

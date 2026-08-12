@@ -98,6 +98,10 @@ class Auth
         'scan_inventoryforecast'=> 'run_audit',
         'scan_returns'          => 'run_audit',
         'scan_ltv'              => 'run_audit',
+        'scan_catalogquality'   => 'run_audit',
+        'scan_giftcards'        => 'run_audit',
+        'scan_taxaudit'         => 'run_audit',
+        'scan_consentaudit'     => 'run_audit',
 
         // Admin-only checks and settings
         'test_connection'    => 'manage_settings',

@@ -63,11 +63,17 @@ class ToolRegistry
                     ['page' => 'inventoryaging',    'icon' => '📦', 'name' => 'Inventory Aging',         'desc' => 'Zero-stock active variants that still sold recently'],
                     ['page' => 'inventoryforecast', 'icon' => '🔮', 'name' => 'Inventory Forecast',      'desc' => 'Days until zero stock based on 30-day sell-through rate per SKU'],
                     ['page' => 'zombieproducts',    'icon' => '🧟', 'name' => 'Zombie Products',         'desc' => 'Active products with no variants or all tracked variants permanently out of stock'],
+                    ['page' => 'catalogquality',    'icon' => '🔍', 'name' => 'Catalog Quality',         'desc' => 'Active products not published to Online Store, missing SEO fields, or not in any collection'],
+                ],
+                'Gift Cards' => [
+                    ['page' => 'giftcards', 'icon' => '🎁', 'name' => 'Gift Cards', 'desc' => 'Unused or soon-to-expire gift card balances'],
                 ],
                 'Fraud & Compliance' => [
                     ['page' => 'countrymismatch', 'icon' => '🌍', 'name' => 'Billing ≠ Shipping Country', 'desc' => 'Paid orders where billing and shipping countries differ - a documented fraud signal'],
                     ['page' => 'discountabuse',   'icon' => '🎟', 'name' => 'Discount Abuse',             'desc' => 'Discount code clusters at the same shipping address across different emails'],
                     ['page' => 'tagpolicy',       'icon' => '🏷', 'name' => 'Tag Policy Audit',           'desc' => 'Required and forbidden Shopify tag combinations from local policy rules'],
+                    ['page' => 'taxaudit',        'icon' => '🧾', 'name' => 'Tax Audit',                  'desc' => 'Paid orders above a minimum amount with $0 tax charged to a non-exempt customer'],
+                    ['page' => 'consentaudit',    'icon' => '📢', 'name' => 'Marketing Consent Audit',    'desc' => 'Orders from customers without active email marketing consent - a compliance risk if targeted'],
                 ],
             ],
         ],
@@ -157,6 +163,10 @@ class ToolRegistry
         'scan_inventory'        => ['label' => 'Inventory oversell', 'page' => 'inventoryoversell', 'area' => 'Inventory', 'dependency' => 'Shopify + ShipStation'],
         'scan_zombieproducts'   => ['label' => 'Zombie products', 'page' => 'zombieproducts', 'area' => 'Inventory', 'dependency' => 'Shopify'],
         'scan_inventoryaging'   => ['label' => 'Inventory aging', 'page' => 'inventoryaging', 'area' => 'Inventory', 'dependency' => 'Shopify'],
+        'scan_catalogquality'   => ['label' => 'Catalog quality', 'page' => 'catalogquality', 'area' => 'Inventory', 'dependency' => 'Shopify'],
+        'scan_giftcards'        => ['label' => 'Gift card expiry / unused balance', 'page' => 'giftcards', 'area' => 'Inventory', 'dependency' => 'Shopify'],
+        'scan_taxaudit'         => ['label' => 'Zero-tax paid orders', 'page' => 'taxaudit', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'scan_consentaudit'     => ['label' => 'Marketing consent audit', 'page' => 'consentaudit', 'area' => 'Risk', 'dependency' => 'Shopify'],
     ];
 
     /**

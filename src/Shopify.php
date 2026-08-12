@@ -404,6 +404,36 @@ class Shopify
     }
 
     /**
+     * Fetches paid orders with total tax and customer tax-exempt status for the Tax Audit.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersForTaxAudit(string $startDate, string $endDate): array
+    {
+        return $this->orderAudits->fetchOrdersForTaxAudit($startDate, $endDate);
+    }
+
+    /**
+     * Fetches paid orders with customer marketing consent state for the Marketing Consent Audit.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersForConsentAudit(string $startDate, string $endDate): array
+    {
+        return $this->orderAudits->fetchOrdersForConsentAudit($startDate, $endDate);
+    }
+
+    /**
+     * Fetches all gift cards from the store.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchGiftCards(): array
+    {
+        return $this->catalogAndFulfillment->fetchGiftCards();
+    }
+
+    /**
      * Fetches all registered Shopify webhooks via the Admin REST API.
      * Returns the raw webhook objects from the API.
      *

@@ -40,6 +40,11 @@
         <label>Minimum scan rows</label>
         <input type="number" min="1" name="scan_min_rows" value="<?= esc($slackRules['scan_min_rows']) ?>">
       </div>
+      <div class="field" style="flex:1 1 100%">
+        <label>Mentions</label>
+        <input type="text" name="mentions" value="<?= esc($slackRules['mentions']) ?>" placeholder="U012ABC3DE U024XYZ9FG" style="width:100%">
+        <div class="hint">Space-separated Slack user or group IDs to @-mention on every notification (find a user's ID via their Slack profile → "Copy member ID"). Leave blank for none.</div>
+      </div>
       <button class="btn btn-submit-end" type="submit">Save Rules</button>
     </div>
   </form>

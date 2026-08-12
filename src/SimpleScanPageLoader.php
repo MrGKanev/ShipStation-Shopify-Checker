@@ -16,6 +16,7 @@ class SimpleScanPageLoader
             'partialfulfill'  => self::loadPartialFulfill($action, $ctx),
             'returns'         => self::loadReturns($action, $ctx),
             'returneditems'   => self::loadReturnedItems($action, $ctx),
+            'taxaudit'        => self::loadTaxAudit($action, $ctx),
             default           => [],
         };
     }
@@ -428,6 +429,56 @@ class SimpleScanPageLoader
         }
 
         return ['rows' => $rows, 'totals' => $totals, 'scanned' => count($orders)];
+    }
+
+    private static function loadTaxAudit(string $action, array $ctx): array
+    {
+        $txMin = max(0, (float)($_POST['tx_min'] ?? $_GET['tx_min'] ?? 5));
+
+        ['result' => $txResult, 'error' => $txError, 'start' => $txStart, 'end' => $txEnd] =
+            ScanRunner::run($action, 'scan_taxaudit', $ctx, 'tx', function ($ctx, $start, $end) use (&$txMin) {
+                $txMin = max(0, (float)($_POST['tx_min'] ?? 5));
+                self::setLimits(180);
+                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+                $orders  = self::suppressOutput(fn() => $shopify->fetchOrdersForTaxAudit($start, $end));
+
+                $rows = self::buildTaxAuditRows($orders, $txMin);
+                return ['rows' => $rows, 'scanned' => count($orders), 'start' => $start, 'end' => $end, 'min' => $txMin];
+            });
+
+        return compact('txResult', 'txError', 'txStart', 'txEnd', 'txMin');
+    }
+
+    /**
+     * Tax Audit rows: paid orders at or above $txMin with $0 tax charged,
+     * whose customer is not marked tax-exempt, sorted by total descending.
+     * No jurisdiction logic is applied - this is a review signal, not a
+     * definitive tax-compliance verdict.
+     *
+     * @param  array<int, array<string, mixed>> $orders
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildTaxAuditRows(array $orders, float $txMin): array
+    {
+        $rows = [];
+        foreach ($orders as $o) {
+            $total = (float)($o['total_price'] ?? 0);
+            if ($total < $txMin) continue;
+            $tax = (float)($o['total_tax'] ?? 0);
+            if ($tax > 0) continue;
+            if (!empty($o['customer_tax_exempt'])) continue;
+
+            $rows[] = [
+                'shopify_id'   => $o['id'] ?? '',
+                'order_number' => $o['name'] ?? '',
+                'created_at'   => self::dateOnly($o['created_at'] ?? ''),
+                'email'        => $o['email'] ?? '',
+                'total'        => $total,
+                'financial'    => $o['financial_status'] ?? '',
+            ];
+        }
+        usort($rows, fn($a, $b) => $b['total'] <=> $a['total']);
+        return $rows;
     }
 
     private static function dateOnly(string $dt): string

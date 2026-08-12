@@ -219,6 +219,7 @@ class Actions
             'scan_enabled'       => isset($_POST['scan_enabled']),
             'scan_min_rows'      => $_POST['scan_min_rows'] ?? 1,
             'include_zero_audit' => isset($_POST['include_zero_audit']),
+            'mentions'           => $_POST['mentions'] ?? '',
         ];
         SlackRules::save($rules);
         UserActionLog::append('save_slack_rules', SlackRules::load());
