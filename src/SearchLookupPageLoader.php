@@ -89,14 +89,15 @@ class SearchLookupPageLoader
                     $spotError = $err;
                 } else {
                     try {
-                        $ss      = $checkSS ? new ShipStation($ctx['ssKey'], $ctx['ssSecret']) : null;
-                        $shopify = $checkSh ? new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']) : null;
+                        $ss      = $checkSS ? new ShipStation($ctx['ssKey'], $ctx['ssSecret'], $ctx['cacheObj'] ?? null) : null;
+                        $shopify = $checkSh ? new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'] ?? null) : null;
+                        $shopifyMatches = $shopify ? $shopify->findByOrderNumbers($numbers) : [];
 
                         $spotResults = [];
                         foreach ($numbers as $num) {
                             $clean    = ltrim(trim($num), '#');
                             $ssOrders = $ss      ? $ss->findByOrderNumber($clean)     : null;
-                            $shOrders = $shopify ? $shopify->findByOrderNumber($clean) : null;
+                            $shOrders = $shopify ? ($shopifyMatches[$clean] ?? []) : null;
 
                             $spotResults[] = [
                                 'input'          => $num,
@@ -146,7 +147,7 @@ class SearchLookupPageLoader
                            'metafieldFilter', 'metafieldSearch', 'metafieldSearchError');
         }
 
-        $shopifyMeta = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+        $shopifyMeta = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'] ?? null);
 
         try {
             $metafieldDefs = $shopifyMeta->fetchMetafieldDefinitions('ORDER');
@@ -197,9 +198,16 @@ class SearchLookupPageLoader
                 $metafieldError = 'Maximum 20 order numbers at once.';
             } else {
                 $metafieldOrders = [];
+                $ordersByNumber = $shopifyMeta->findByOrderNumbers($numbers);
+                $allOrders = [];
+                foreach ($ordersByNumber as $orders) {
+                    foreach ($orders as $order) $allOrders[] = $order;
+                }
+                $metafieldsByOrder = $shopifyMeta->getOrderMetafieldsByOrderIds(array_column($allOrders, 'id'));
+
                 foreach ($numbers as $num) {
                     $clean    = ltrim($num, '#');
-                    $shOrders = $shopifyMeta->findByOrderNumber($clean);
+                    $shOrders = $ordersByNumber[$clean] ?? [];
 
                     if (empty($shOrders)) {
                         $metafieldOrders[] = ['number' => $clean, 'shopify_id' => null, 'metafields' => [], 'found' => false];
@@ -208,7 +216,7 @@ class SearchLookupPageLoader
 
                     foreach ($shOrders as $shOrder) {
                         $oid = (string) ($shOrder['id'] ?? '');
-                        $mfs = $oid ? $shopifyMeta->getOrderMetafields($oid) : [];
+                        $mfs = $oid ? ($metafieldsByOrder[$oid] ?? []) : [];
 
                         if ($metafieldFilter !== '') {
                             $mfs = self::filterMetafields($mfs, $metafieldFilter);
@@ -337,7 +345,7 @@ class SearchLookupPageLoader
                 $trackingError = $err;
             } else {
                 try {
-                    $ss = new ShipStation($ctx['ssKey'], $ctx['ssSecret']);
+                    $ss = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], $ctx['cacheObj'] ?? null);
                     $trackingResults = [];
 
                     foreach ($numbers as $num) {

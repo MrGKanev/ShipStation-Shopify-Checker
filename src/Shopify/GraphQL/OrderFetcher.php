@@ -8,7 +8,10 @@ namespace Shopify\GraphQL;
  */
 class OrderFetcher
 {
-    public function __construct(private readonly Client $client)
+    public function __construct(
+        private readonly Client $client,
+        private readonly ?\Cache $cache = null
+    )
     {
     }
 
@@ -17,8 +20,9 @@ class OrderFetcher
      */
     public function fetchEventsByQuery(string $queryStr, int $maxPages = 1000): array
     {
-        $events = [];
-        $query = <<<'GQL'
+        $fetch = function () use ($queryStr, $maxPages): array {
+            $events = [];
+            $query = <<<'GQL'
         query FetchOrderEventsByQuery($query: String!, $after: String) {
           events(first: 250, sortKey: CREATED_AT, reverse: true, query: $query, after: $after) {
             pageInfo { hasNextPage endCursor }
@@ -30,24 +34,29 @@ class OrderFetcher
           }
         }
         GQL;
-        $query = str_replace('{{EVENT_FIELDS}}', Queries::eventFields(), $query);
+            $query = str_replace('{{EVENT_FIELDS}}', Queries::eventFields(), $query);
 
-        $this->client->paginateGraphQLVariables(
-            $query,
-            'events',
-            ['query' => $queryStr],
-            function (array $edges) use (&$events) {
-                foreach ($edges as $edge) {
-                    $node = $edge['node'] ?? null;
-                    if (is_array($node)) {
-                        $events[] = Normalizer::normalizeEvent($node);
+            $this->client->paginateGraphQLVariables(
+                $query,
+                'events',
+                ['query' => $queryStr],
+                function (array $edges) use (&$events) {
+                    foreach ($edges as $edge) {
+                        $node = $edge['node'] ?? null;
+                        if (is_array($node)) {
+                            $events[] = Normalizer::normalizeEvent($node);
+                        }
                     }
-                }
-            },
-            $maxPages
-        );
+                },
+                $maxPages
+            );
 
-        return $events;
+            return $events;
+        };
+
+        return $this->cache
+            ? $this->cache->remember('shopify_events', "v1|{$maxPages}|{$queryStr}", $fetch, 300)
+            : $fetch();
     }
 
     /**
@@ -105,8 +114,9 @@ class OrderFetcher
      */
     public function fetchOrdersByQuery(string $queryStr, string $nodeFields, ?callable $nodeFilter = null): array
     {
-        $all = [];
-        $query = <<<'GQL'
+        $fetch = function () use ($queryStr, $nodeFields, $nodeFilter): array {
+            $all = [];
+            $query = <<<'GQL'
         query FetchOrdersByQuery($query: String!, $after: String) {
           orders(first: 250, sortKey: CREATED_AT, reverse: true, query: $query, after: $after) {
             pageInfo { hasNextPage endCursor }
@@ -118,32 +128,40 @@ class OrderFetcher
           }
         }
         GQL;
-        $query = str_replace('{{NODE_FIELDS}}', $nodeFields, $query);
+            $query = str_replace('{{NODE_FIELDS}}', $nodeFields, $query);
 
-        $result = $this->client->paginateGraphQLVariables(
-            $query,
-            'orders',
-            ['query' => $queryStr],
-            function (array $edges) use (&$all, $nodeFilter) {
-                foreach ($edges as $edge) {
-                    $node = $edge['node'] ?? [];
-                    if ($nodeFilter !== null && !$nodeFilter($node)) {
-                        continue;
+            $result = $this->client->paginateGraphQLVariables(
+                $query,
+                'orders',
+                ['query' => $queryStr],
+                function (array $edges) use (&$all, $nodeFilter) {
+                    foreach ($edges as $edge) {
+                        $node = $edge['node'] ?? [];
+                        if ($nodeFilter !== null && !$nodeFilter($node)) {
+                            continue;
+                        }
+                        $all[] = Normalizer::normalizeOrder($node);
                     }
-                    $all[] = Normalizer::normalizeOrder($node);
-                }
-            },
-            1000
-        );
+                },
+                1000
+            );
 
-        if ($result['truncated'] ?? false) {
-            $this->logWarning('Shopify order query truncated after {pages} pages; results may be incomplete: {query}', [
-                'pages' => $result['pages'] ?? '?',
-                'query' => $queryStr,
-            ]);
-        }
+            if ($result['truncated'] ?? false) {
+                $this->logWarning('Shopify order query truncated after {pages} pages; results may be incomplete: {query}', [
+                    'pages' => $result['pages'] ?? '?',
+                    'query' => $queryStr,
+                ]);
+            }
 
-        return $all;
+            return $all;
+        };
+
+        // Scan pages often re-run the same date query. Keep the result fresh
+        // enough for operational use while avoiding another full pagination.
+        $key = 'v1|' . hash('sha256', $queryStr . "\0" . $nodeFields);
+        return $this->cache
+            ? $this->cache->remember('shopify_scan', $key, $fetch, 900)
+            : $fetch();
     }
 
     private function logWarning(string $message, array $context = []): void

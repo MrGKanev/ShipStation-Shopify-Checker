@@ -88,6 +88,25 @@ final class Worker
             Comparator::buildSSEmailIndex($ssOrders)
         );
 
+        return self::finishAuditComparison($comparison, $reportDir, $start, $end, $isOnHold);
+    }
+
+    /**
+     * Applies the hold-state result, classifies remaining misses and writes the
+     * report. Kept separate so runAuditJob() can supply a batched hold lookup.
+     *
+     * @param array{missing: list<array>, found: list<array>, skipped: list<array>, ignored: list<array>} $comparison
+     * @param callable(array): bool $isOnHold
+     * @return array{missing: list<array>, found: list<array>, skipped: list<array>, ignored: list<array>}
+     */
+    public static function finishAuditComparison(
+        array $comparison,
+        string $reportDir,
+        string $start,
+        string $end,
+        callable $isOnHold
+    ): array {
+
         $comparison = Comparator::applyOnHoldSkip($comparison, $isOnHold);
 
         foreach ($comparison['missing'] as &$order) {
@@ -127,14 +146,20 @@ final class Worker
         $shopifyOrders = $shopify->fetchAllOrders($start, $end);
         $ssOrders      = $ss->fetchAllOrders($start, $ssEnd);
 
-        $comparison = self::buildAuditComparison(
+        $comparison = Comparator::compare(
             $shopifyOrders,
-            $ssOrders,
+            Comparator::buildSSIndex($ssOrders),
             IgnoreList::load(),
+            Comparator::buildSSEmailIndex($ssOrders)
+        );
+        $onHoldIds = $shopify->findOnHoldOrderIds(array_column($comparison['missing'], 'id'));
+
+        $comparison = self::finishAuditComparison(
+            $comparison,
             $reportDir,
             $start,
             $end,
-            fn(array $order) => $shopify->isOnHold((string)($order['id'] ?? ''))
+            fn(array $order) => isset($onHoldIds[(string)($order['id'] ?? '')])
         );
 
         $duration = round(microtime(true) - $t0, 2);

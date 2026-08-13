@@ -17,9 +17,9 @@ class ShipStationClientTest extends TestCase
         return $stack;
     }
 
-    private function ss(array $responses, array &$history = []): ShipStation
+    private function ss(array $responses, array &$history = [], ?Cache $cache = null): ShipStation
     {
-        return new ShipStation('key', 'secret', null, $this->makeStack($responses, $history));
+        return new ShipStation('key', 'secret', $cache, $this->makeStack($responses, $history));
     }
 
     private function json(mixed $data, int $status = 200): Response
@@ -62,6 +62,25 @@ class ShipStationClientTest extends TestCase
 
         $uri = (string) $history[0]['request']->getUri();
         $this->assertStringContainsString('orderNumber=5555', $uri);
+    }
+
+    public function testTargetedLookupCacheDoesNotCrossOrderNumbers(): void
+    {
+        $tmpDir = sys_get_temp_dir() . '/ss_lookup_isolation_' . uniqid();
+        $cache = new Cache($tmpDir, ttl: 3600);
+        $history = [];
+        $ss = $this->ss([
+            $this->json(['orders' => [['orderNumber' => '1001']], 'pages' => 1]),
+            $this->json(['orders' => [['orderNumber' => '1002']], 'pages' => 1]),
+        ], $history, $cache);
+
+        try {
+            $this->assertSame('1001', $ss->findByOrderNumber('1001')[0]['orderNumber']);
+            $this->assertSame('1002', $ss->findByOrderNumber('1002')[0]['orderNumber']);
+            $this->assertCount(2, $history);
+        } finally {
+            $this->removeDir($tmpDir);
+        }
     }
 
     // ── 429 retry ─────────────────────────────────────────────────────────────
@@ -197,6 +216,24 @@ class ShipStationClientTest extends TestCase
         $result = $ss->fetchVoidedShipments('2026-06-01', '2026-06-20');
 
         $this->assertSame([], $result);
+    }
+
+    public function testFetchShipmentsByDateCachesRepeatedRangeForFifteenMinutes(): void
+    {
+        $tmpDir = sys_get_temp_dir() . '/ss_shipment_cache_' . uniqid();
+        $cache = new Cache($tmpDir, ttl: 3600);
+        $history = [];
+        $ss = $this->ss([$this->json(['shipments' => [['shipmentId' => 1]], 'total' => 1])], $history, $cache);
+
+        try {
+            $this->assertSame([['shipmentId' => 1]], $ss->fetchShipmentsByDate('2026-06-01', '2026-06-20'));
+            $this->assertSame([['shipmentId' => 1]], $ss->fetchShipmentsByDate('2026-06-01', '2026-06-20'));
+
+            $this->assertCount(1, $history);
+            $this->assertTrue($cache->wasHit('ss_shipments'));
+        } finally {
+            $this->removeDir($tmpDir);
+        }
     }
 
     public function testFetchVoidedShipmentsPaginatesUntilTotalReached(): void

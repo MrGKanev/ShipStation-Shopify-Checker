@@ -103,44 +103,48 @@ class PageLoader
         if (is_dir($reportDir)) {
             $files = glob($reportDir . '/missing_*.csv') ?: [];
             rsort($files);
-
-            foreach ($files as $csvPath) {
-                preg_match('/missing_(\d{4}-\d{2}-\d{2})\.csv$/', $csvPath, $m);
-                $date    = $m[1] ?? 'unknown';
-                $rawRows = [];
-
-                $csv = Reader::from($csvPath, 'r');
-                $csv->setHeaderOffset(0);
-                foreach ($csv->getRecords() as $record) {
-                    $rawRows[] = $record;
-                }
-
-                foreach ($rawRows as $row) {
-                    $num = Comparator::normalise((string) ($row['order_number'] ?? ''));
-                    if (!$num) continue;
-                    if (!isset($orderHistory[$num])) {
-                        $orderHistory[$num] = ['count' => 0, 'first' => $date, 'last' => $date];
-                    }
-                    $orderHistory[$num]['count']++;
-                    if ($date < $orderHistory[$num]['first']) $orderHistory[$num]['first'] = $date;
-                    if ($date > $orderHistory[$num]['last'])  $orderHistory[$num]['last']  = $date;
-                }
-
-                $missing = array_values(array_filter(
-                    $rawRows,
-                    fn($o) => !isset($ignoredOrders[Comparator::normalise((string) ($o['order_number'] ?? ''))])
+            $manifest = implode('|', array_map(
+                fn(string $path) => basename($path) . ':' . filemtime($path) . ':' . filesize($path) . ':' . fileinode($path),
+                $files
+            ));
+            $build = fn() => self::buildReportHistory($files);
+            $summary = $ctx['cacheObj']
+                ? $ctx['cacheObj']->remember('report_history', $manifest, $build, 3600)
+                : $build();
+            $reports = $summary['reports'];
+            $orderHistory = $summary['orderHistory'];
+            foreach ($reports as &$report) {
+                $report['count'] = count(array_filter(
+                    $report['orderNumbers'] ?? [],
+                    fn(string $number) => !isset($ignoredOrders[$number])
                 ));
-
-                $reports[] = ['date' => $date, 'csvPath' => $csvPath, 'missing' => $missing, 'count' => count($missing)];
             }
+            unset($report);
         }
 
         $latestReport = $reports[0] ?? null;
         $selectedDate = $_GET['date'] ?? ($latestReport['date'] ?? null);
+        $populateMissing = function (array $report) use ($ignoredOrders): array {
+            $missing = self::visibleReportRows($report['csvPath'], $ignoredOrders);
+            return $report + ['missing' => $missing, 'count' => count($missing)];
+        };
+
         $selectedReport = null;
-        foreach ($reports as $r) {
-            if ($r['date'] === $selectedDate) { $selectedReport = $r; break; }
+        foreach ($reports as $i => $r) {
+            if ($r['date'] !== $selectedDate) continue;
+            $selectedReport = $reports[$i] = $populateMissing($r);
+            break;
         }
+        // views/dashboard.php and views/layout.php read $latestReport['missing']
+        // unconditionally, so reports[0] must carry it even when $selectedDate
+        // (driven by the global ?date= param) points at an older report.
+        if (isset($reports[0])) {
+            $reports[0] = ($selectedReport !== null && $reports[0]['date'] === $selectedDate)
+                ? $selectedReport
+                : $populateMissing($reports[0]);
+        }
+        $latestReport   = $reports[0] ?? null;
+        $selectedReport ??= $latestReport;
 
         $shopifyStore     = $ctx['shopifyStore'];
         $shopifyAdminBase = 'https://'
@@ -156,6 +160,45 @@ class PageLoader
 
         return compact('reports', 'orderHistory', 'latestReport', 'selectedDate', 'selectedReport',
                        'shopifyAdminBase', 'pushLog', 'runLog', 'jobLog', 'actionLog', 'bannedIps', 'recentRuns');
+    }
+
+    /** @return array{reports: array<int, array{date: string, csvPath: string, count: int}>, orderHistory: array<string, array{count: int, first: string, last: string}>} */
+    private static function buildReportHistory(array $files): array
+    {
+        $reports = [];
+        $orderHistory = [];
+        foreach ($files as $csvPath) {
+            preg_match('/missing_(\d{4}-\d{2}-\d{2})\.csv$/', $csvPath, $m);
+            $date = $m[1] ?? 'unknown';
+            $rows = self::visibleReportRows($csvPath, []);
+            $orderNumbers = [];
+            foreach ($rows as $row) {
+                $num = Comparator::normalise((string)($row['order_number'] ?? ''));
+                if ($num === '') continue;
+                $orderNumbers[] = $num;
+                $entry = $orderHistory[$num] ?? ['count' => 0, 'first' => $date, 'last' => $date];
+                $entry['count']++;
+                $entry['first'] = min($entry['first'], $date);
+                $entry['last'] = max($entry['last'], $date);
+                $orderHistory[$num] = $entry;
+            }
+            $reports[] = ['date' => $date, 'csvPath' => $csvPath, 'count' => count($rows), 'orderNumbers' => $orderNumbers];
+        }
+        return compact('reports', 'orderHistory');
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private static function visibleReportRows(string $csvPath, array $ignoredOrders): array
+    {
+        $csv = Reader::from($csvPath, 'r');
+        $csv->setHeaderOffset(0);
+        $rows = [];
+        foreach ($csv->getRecords() as $row) {
+            if (!isset($ignoredOrders[Comparator::normalise((string)($row['order_number'] ?? ''))])) {
+                $rows[] = $row;
+            }
+        }
+        return $rows;
     }
 
     // ── Audit ─────────────────────────────────────────────────────────────────

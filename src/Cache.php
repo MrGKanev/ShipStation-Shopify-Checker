@@ -35,31 +35,48 @@ class Cache
      * @param  string   $prefix  Short label ('ss', 'shopify').
      * @param  string   $key     Anything that uniquely identifies the request.
      * @param  callable $fetch   Called with no args; must return the value to cache.
+     * @param  int|null $ttl     Optional per-entry freshness cap. The cache's
+     *                            configured TTL remains the upper bound.
      * @return T
      */
-    public function remember(string $prefix, string $key, callable $fetch): mixed
+    public function remember(string $prefix, string $key, callable $fetch, ?int $ttl = null): mixed
     {
-        if ($this->ttl <= 0) {
+        if ($this->ttl <= 0 || ($ttl !== null && $ttl <= 0)) {
             return $fetch();
         }
 
         $file = $this->path($prefix, $key);
 
-        if (file_exists($file)) {
-            $raw     = file_get_contents($file);
-            $wrapper = $raw ? json_decode($raw, true) : null;
-            if (is_array($wrapper) && ($wrapper['expires_at'] ?? 0) > time()) {
-                $this->hits[$prefix] = true;
-                return $wrapper['data'];
-            }
-            // Expired - file stays on disk until pruneExpired() removes it after retention period
+        if ($this->readFresh($file, $cached)) {
+            $this->hits[$prefix] = true;
+            return $cached;
         }
 
-        $data    = $fetch();
-        $wrapper = ['expires_at' => time() + $this->ttl, 'data' => $data];
-        AtomicFile::writeJson($file, $wrapper, 0);
+        // A cold cache can otherwise cause multiple PHP workers to start the
+        // same expensive paginated API request. Lock per cache entry, then
+        // check again after acquiring it so only the first worker fetches.
+        $lock = fopen($file . '.lock', 'c+');
+        if ($lock === false) {
+            throw new RuntimeException("Could not open cache lock for {$file}");
+        }
 
-        return $data;
+        try {
+            flock($lock, LOCK_EX);
+            if ($this->readFresh($file, $cached)) {
+                $this->hits[$prefix] = true;
+                return $cached;
+            }
+
+            $data = $fetch();
+            AtomicFile::writeJson($file, [
+                'expires_at' => time() + $this->effectiveTtl($ttl),
+                'data'       => $data,
+            ], 0);
+            return $data;
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
     }
 
     public function getTtl(): int       { return $this->ttl; }
@@ -93,6 +110,31 @@ class Cache
     }
 
     /**
+     * Serialise work for one cache key without changing its cached value.
+     * Useful for cache formats such as ShipStation's paged checkpoints, where
+     * the fetch itself is not stored in Cache::remember().
+     */
+    public function synchronized(string $prefix, string $key, callable $work): mixed
+    {
+        if ($this->ttl <= 0) {
+            return $work();
+        }
+
+        $lock = fopen($this->path($prefix, $key) . '.lock', 'c+');
+        if ($lock === false) {
+            throw new RuntimeException("Could not open cache lock for {$prefix}");
+        }
+
+        try {
+            flock($lock, LOCK_EX);
+            return $work();
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+    }
+
+    /**
      * Write a value directly to the cache (bypasses the fetch callable).
      */
     public function put(string $prefix, string $key, mixed $data): void
@@ -118,7 +160,19 @@ class Cache
             preg_match('/"expires_at"\s*:\s*(\d+)/', $head, $m);
             if (isset($m[1]) && (int) $m[1] < $deadline) {
                 @unlink($f);
+                @unlink($f . '.lock');
                 $count++;
+            }
+        }
+
+        // remember()/synchronized() open a per-key .lock file that outlives its
+        // .json entry (or, for synchronized()-only keys such as ShipStation
+        // checkpoints, never has one). Age those out too so the cache dir
+        // doesn't accumulate one file per key forever.
+        foreach (glob($this->dir . '/*.lock') ?: [] as $lockFile) {
+            $jsonFile = substr($lockFile, 0, -strlen('.lock'));
+            if (!file_exists($jsonFile) && (@filemtime($lockFile) ?: 0) < $deadline) {
+                @unlink($lockFile);
             }
         }
 
@@ -145,7 +199,13 @@ class Cache
     {
         $pattern = $this->dir . '/' . $prefix . '_*.json';
         $files   = glob($pattern) ?: [];
-        foreach ($files as $f) unlink($f);
+        foreach ($files as $f) {
+            unlink($f);
+            @unlink($f . '.lock');
+        }
+        foreach (glob($this->dir . '/' . $prefix . '_*.json.lock') ?: [] as $orphanLock) {
+            @unlink($orphanLock);
+        }
         $count = count($files);
 
         $cpBase = $this->dir . '/checkpoints';
@@ -191,6 +251,27 @@ class Cache
     private function path(string $prefix, string $key): string
     {
         return $this->dir . '/' . $prefix . '_' . hash('sha256', $key) . '.json';
+    }
+
+    private function effectiveTtl(?int $ttl): int
+    {
+        return $ttl === null ? $this->ttl : max(1, min($this->ttl, $ttl));
+    }
+
+    private function readFresh(string $file, mixed &$data): bool
+    {
+        if (!file_exists($file)) {
+            return false;
+        }
+
+        $raw     = file_get_contents($file);
+        $wrapper = $raw ? json_decode($raw, true) : null;
+        if (!is_array($wrapper) || !array_key_exists('data', $wrapper) || ($wrapper['expires_at'] ?? 0) <= time()) {
+            return false;
+        }
+
+        $data = $wrapper['data'];
+        return true;
     }
 
     private static function removeTree(string $path): int

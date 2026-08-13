@@ -21,7 +21,7 @@ class AdminLookups
         ?\Cache $cache = null
     ) {
         $this->orders     = new OrderLookup($client, $cache);
-        $this->customData = new CustomDataLookups($client);
+        $this->customData = new CustomDataLookups($client, $cache);
         $this->insights   = new OrderInsights($client);
     }
 
@@ -31,6 +31,11 @@ class AdminLookups
     public function findByOrderNumber(string $orderNumber): array
     {
         return $this->orders->findByOrderNumber($orderNumber);
+    }
+
+    public function findByOrderNumbers(array $orderNumbers): array
+    {
+        return $this->orders->findByOrderNumbers($orderNumbers);
     }
 
     /**
@@ -44,6 +49,12 @@ class AdminLookups
     public function isOnHold(string $orderId): bool
     {
         return $this->orders->isOnHold($orderId);
+    }
+
+    /** @return array<string, true> */
+    public function findOnHoldOrderIds(array $orderIds): array
+    {
+        return $this->orders->findOnHoldOrderIds($orderIds);
     }
 
     /**
@@ -60,6 +71,11 @@ class AdminLookups
     public function getOrderMetafields(string $orderId): array
     {
         return $this->customData->getOrderMetafields($orderId);
+    }
+
+    public function getOrderMetafieldsByOrderIds(array $orderIds): array
+    {
+        return $this->customData->getOrderMetafieldsByOrderIds($orderIds);
     }
 
     /**

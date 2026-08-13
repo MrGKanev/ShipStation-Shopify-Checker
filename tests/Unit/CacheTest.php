@@ -65,6 +65,108 @@ class CacheTest extends TestCase
         $this->assertSame(2, $calls);
     }
 
+    public function testRememberCapsAnEntryTtlWithoutChangingTheGlobalTtl(): void
+    {
+        $this->cache->remember('pfx', 'short-lived', fn() => ['v' => 1], 5);
+
+        $file = $this->tmpDir . '/pfx_' . hash('sha256', 'short-lived') . '.json';
+        $saved = json_decode((string) file_get_contents($file), true);
+
+        $this->assertGreaterThanOrEqual(time() + 4, $saved['expires_at']);
+        $this->assertLessThanOrEqual(time() + 5, $saved['expires_at']);
+        $this->assertSame(60, $this->cache->getTtl());
+    }
+
+    public function testRememberNeverLetsAPerEntryTtlExceedTheGlobalTtl(): void
+    {
+        // Global ttl is 60s; a caller asking for a 1-day entry must still be
+        // capped down to the cache's configured ceiling.
+        $this->cache->remember('pfx', 'over-cap', fn() => ['v' => 1], 86400);
+
+        $file = $this->tmpDir . '/pfx_' . hash('sha256', 'over-cap') . '.json';
+        $saved = json_decode((string) file_get_contents($file), true);
+
+        $this->assertLessThanOrEqual(time() + $this->cache->getTtl(), $saved['expires_at']);
+    }
+
+    public function testRememberTreatsWrapperMissingDataKeyAsNotFresh(): void
+    {
+        // A valid JSON object with a future expires_at but no "data" key should
+        // never happen from AtomicFile::writeJson (both keys are always written
+        // together), but if it ever does via a corrupted/hand-edited file, it
+        // must trigger a re-fetch rather than silently handing back null.
+        $file = $this->tmpDir . '/pfx_' . hash('sha256', 'k') . '.json';
+        file_put_contents($file, json_encode(['expires_at' => time() + 60]));
+
+        $calls  = 0;
+        $result = $this->cache->remember('pfx', 'k', function () use (&$calls) {
+            $calls++;
+            return ['recovered' => true];
+        });
+
+        $this->assertSame(1, $calls, 'a wrapper without a data key must not be treated as a valid cache hit');
+        $this->assertSame(['recovered' => true], $result);
+    }
+
+    public function testRememberHoldsAnExclusiveLockForTheDurationOfTheFetch(): void
+    {
+        // This is the whole point of the per-key lock: while one caller is
+        // fetching, a second locker on the same key must not be able to
+        // acquire it (which is what stops concurrent PHP workers from both
+        // starting the same expensive paginated API request).
+        $file = $this->tmpDir . '/pfx_' . hash('sha256', 'contended') . '.json';
+        $acquiredDuringFetch = null;
+
+        $this->cache->remember('pfx', 'contended', function () use ($file, &$acquiredDuringFetch) {
+            $probe = fopen($file . '.lock', 'c+');
+            $acquiredDuringFetch = flock($probe, LOCK_EX | LOCK_NB);
+            if ($acquiredDuringFetch) {
+                flock($probe, LOCK_UN);
+            }
+            fclose($probe);
+            return ['v' => 1];
+        });
+
+        $this->assertFalse($acquiredDuringFetch, 'a second locker must not acquire the lock while a fetch is in flight');
+    }
+
+    public function testRememberReleasesLockAfterASuccessfulFetch(): void
+    {
+        $file = $this->tmpDir . '/pfx_' . hash('sha256', 'k') . '.json';
+        $this->cache->remember('pfx', 'k', fn() => ['v' => 1]);
+
+        $probe     = fopen($file . '.lock', 'c+');
+        $reacquire = flock($probe, LOCK_EX | LOCK_NB);
+        fclose($probe);
+
+        $this->assertTrue($reacquire, 'the lock must be released once remember() returns');
+    }
+
+    public function testRememberReleasesLockEvenWhenFetchThrows(): void
+    {
+        $file = $this->tmpDir . '/pfx_' . hash('sha256', 'boom') . '.json';
+
+        try {
+            $this->cache->remember('pfx', 'boom', fn() => throw new RuntimeException('API unavailable'));
+            $this->fail('Expected exception was not thrown.');
+        } catch (RuntimeException) {
+        }
+
+        $probe     = fopen($file . '.lock', 'c+');
+        $reacquire = flock($probe, LOCK_EX | LOCK_NB);
+        fclose($probe);
+
+        $this->assertTrue($reacquire, 'a fetch failure must not leave the lock held forever and deadlock the next request');
+    }
+
+    public function testRememberWithZeroTtlNeverCreatesALockFile(): void
+    {
+        $noCache = new Cache($this->tmpDir, ttl: 0);
+        $noCache->remember('pfx', 'key', fn() => ['v' => 1]);
+
+        $this->assertEmpty(glob($this->tmpDir . '/*.lock'), 'a disabled cache must not touch the filesystem at all');
+    }
+
     // ── wasHit ────────────────────────────────────────────────────────────────
 
     public function testWasHitFalseBeforeAnyCall(): void
@@ -103,6 +205,65 @@ class CacheTest extends TestCase
     {
         $noCache = new Cache($this->tmpDir, ttl: 0);
         $this->assertFalse($noCache->isFresh('pfx', 'key'));
+    }
+
+    // ── synchronized ──────────────────────────────────────────────────────────
+
+    public function testSynchronizedReturnsTheWorkResultAndNeverTouchesCacheData(): void
+    {
+        $result = $this->cache->synchronized('pfx', 'key', fn() => ['computed' => true]);
+
+        $this->assertSame(['computed' => true], $result);
+        $this->assertEmpty(glob($this->tmpDir . '/*.json'), 'synchronized() must not write a cache entry itself');
+    }
+
+    public function testSynchronizedRunsWorkDirectlyForZeroTtlCache(): void
+    {
+        $noCache = new Cache($this->tmpDir, ttl: 0);
+        $calls   = 0;
+
+        $noCache->synchronized('pfx', 'key', function () use (&$calls) {
+            $calls++;
+            return 'ok';
+        });
+
+        $this->assertSame(1, $calls);
+        $this->assertEmpty(glob($this->tmpDir . '/*.lock'));
+    }
+
+    public function testSynchronizedHoldsAnExclusiveLockForTheDurationOfWork(): void
+    {
+        $lockFile = $this->cache->getDir() . '/pfx_' . hash('sha256', 'checkpoint-key') . '.json.lock';
+        $acquiredDuringWork = null;
+
+        $this->cache->synchronized('pfx', 'checkpoint-key', function () use ($lockFile, &$acquiredDuringWork) {
+            $probe = fopen($lockFile, 'c+');
+            $acquiredDuringWork = flock($probe, LOCK_EX | LOCK_NB);
+            if ($acquiredDuringWork) {
+                flock($probe, LOCK_UN);
+            }
+            fclose($probe);
+            return 'done';
+        });
+
+        $this->assertFalse($acquiredDuringWork, 'a second locker must not acquire the lock while work is in flight');
+    }
+
+    public function testSynchronizedReleasesLockEvenWhenWorkThrows(): void
+    {
+        $lockFile = $this->cache->getDir() . '/pfx_' . hash('sha256', 'checkpoint-key') . '.json.lock';
+
+        try {
+            $this->cache->synchronized('pfx', 'checkpoint-key', fn() => throw new RuntimeException('fetch page failed'));
+            $this->fail('Expected exception was not thrown.');
+        } catch (RuntimeException) {
+        }
+
+        $probe     = fopen($lockFile, 'c+');
+        $reacquire = flock($probe, LOCK_EX | LOCK_NB);
+        fclose($probe);
+
+        $this->assertTrue($reacquire, 'a failed checkpoint refresh must not deadlock the next request for the same range');
     }
 
     // ── put ───────────────────────────────────────────────────────────────────
@@ -156,6 +317,15 @@ class CacheTest extends TestCase
     public function testFlushOnEmptyDirReturnsZero(): void
     {
         $this->assertSame(0, $this->cache->flush());
+    }
+
+    public function testFlushRemovesLockFiles(): void
+    {
+        $this->cache->remember('a', 'k1', fn() => [1]);
+
+        $this->cache->flush();
+
+        $this->assertEmpty(glob($this->tmpDir . '/*.lock'));
     }
 
     public function testFlushRemovesCheckpointDirectories(): void
@@ -250,6 +420,45 @@ class CacheTest extends TestCase
         $this->assertSame(['new' => true], $result);
     }
 
+    public function testExpiredShortLivedEntryCannotMaskNewData(): void
+    {
+        $this->cache->remember('shopify_scan', 'range-a', fn() => ['version' => 'old'], 900);
+        $file = $this->tmpDir . '/shopify_scan_' . hash('sha256', 'range-a') . '.json';
+        file_put_contents($file, json_encode(['expires_at' => time() - 1, 'data' => ['version' => 'old']]));
+
+        $this->assertSame(['version' => 'new'], $this->cache->remember('shopify_scan', 'range-a', fn() => ['version' => 'new'], 900));
+    }
+
+    public function testCorruptCacheFileIsIgnoredAndFetchedAgain(): void
+    {
+        $file = $this->tmpDir . '/shopify_scan_' . hash('sha256', 'broken') . '.json';
+        file_put_contents($file, '{not valid json');
+
+        $this->assertSame(['recovered' => true], $this->cache->remember('shopify_scan', 'broken', fn() => ['recovered' => true]));
+    }
+
+    public function testFailedRefreshDoesNotOverwriteExistingExpiredPayload(): void
+    {
+        $file = $this->tmpDir . '/shopify_scan_' . hash('sha256', 'failed-refresh') . '.json';
+        file_put_contents($file, json_encode(['expires_at' => time() - 1, 'data' => ['last_known' => true]]));
+
+        try {
+            $this->cache->remember('shopify_scan', 'failed-refresh', fn() => throw new RuntimeException('API unavailable'));
+            $this->fail('Expected refresh failure.');
+        } catch (RuntimeException $e) {
+            $this->assertSame('API unavailable', $e->getMessage());
+        }
+
+        $saved = json_decode((string)file_get_contents($file), true);
+        $this->assertSame(['last_known' => true], $saved['data']);
+    }
+
+    public function testSameKeyUnderDifferentPrefixesNeverCollides(): void
+    {
+        $this->assertSame(['source' => 'shopify'], $this->cache->remember('shopify_scan', 'same-key', fn() => ['source' => 'shopify']));
+        $this->assertSame(['source' => 'shipstation'], $this->cache->remember('ss_shipments', 'same-key', fn() => ['source' => 'shipstation']));
+    }
+
     public function testExpiredFileRemainsOnDiskUntilExplicitlyPruned(): void
     {
         // Write an expired file for key A
@@ -301,6 +510,41 @@ class CacheTest extends TestCase
 
         $this->assertSame(0, $deleted);
         $this->assertCount(1, glob($this->tmpDir . '/*.json'));
+    }
+
+    public function testPruneExpiredRemovesLockFileAlongsideItsExpiredEntry(): void
+    {
+        $pruneCache = new Cache($this->tmpDir, ttl: 60, retention: 60);
+        $pruneCache->remember('pfx', 'k', fn() => ['ok' => true]);
+        $file = $this->tmpDir . '/pfx_' . hash('sha256', 'k') . '.json';
+        file_put_contents($file, json_encode(['expires_at' => time() - 120, 'data' => []]));
+
+        $pruneCache->pruneExpired();
+
+        $this->assertFalse(file_exists($file . '.lock'), 'lock file must not outlive its cache entry');
+    }
+
+    public function testPruneExpiredRemovesOrphanLockFilesPastRetention(): void
+    {
+        $pruneCache = new Cache($this->tmpDir, ttl: 60, retention: 60);
+        // synchronized()-only keys (e.g. ShipStation checkpoints) never get a .json sibling
+        $lockFile = $this->tmpDir . '/ss_' . hash('sha256', 'checkpoint-key') . '.json.lock';
+        touch($lockFile, time() - 120);
+
+        $pruneCache->pruneExpired();
+
+        $this->assertFalse(file_exists($lockFile));
+    }
+
+    public function testPruneExpiredKeepsRecentOrphanLockFiles(): void
+    {
+        $pruneCache = new Cache($this->tmpDir, ttl: 60, retention: 3600);
+        $lockFile = $this->tmpDir . '/ss_' . hash('sha256', 'checkpoint-key') . '.json.lock';
+        touch($lockFile);
+
+        $pruneCache->pruneExpired();
+
+        $this->assertTrue(file_exists($lockFile), 'a lock file still in active use should not be deleted');
     }
 
     public function testPruneExpiredDeletesCheckpointDirectoriesPastRetention(): void

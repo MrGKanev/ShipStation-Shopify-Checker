@@ -20,7 +20,7 @@ class OrderLookup
         Client $client,
         ?\Cache $cache = null
     ) {
-        $this->directLookup = new OrderDirectLookup($client);
+        $this->directLookup = new OrderDirectLookup($client, $cache);
         $this->holdLookup   = new OrderHoldLookup($client, $cache);
         $this->eventLookup  = new OrderEventLookup($client);
     }
@@ -31,6 +31,11 @@ class OrderLookup
     public function findByOrderNumber(string $orderNumber): array
     {
         return $this->directLookup->findByOrderNumber($orderNumber);
+    }
+
+    public function findByOrderNumbers(array $orderNumbers): array
+    {
+        return $this->directLookup->findByOrderNumbers($orderNumbers);
     }
 
     /**
@@ -44,6 +49,12 @@ class OrderLookup
     public function isOnHold(string $orderId): bool
     {
         return $this->holdLookup->isOnHold($orderId);
+    }
+
+    /** @return array<string, true> */
+    public function findOnHoldOrderIds(array $orderIds): array
+    {
+        return $this->holdLookup->findOnHoldOrderIds($orderIds);
     }
 
     /**

@@ -8,7 +8,7 @@ namespace Shopify\GraphQL;
  */
 class CustomDataLookups
 {
-    public function __construct(private readonly Client $client)
+    public function __construct(private readonly Client $client, private readonly ?\Cache $cache = null)
     {
     }
 
@@ -17,6 +17,7 @@ class CustomDataLookups
      */
     public function fetchMetafieldDefinitions(string $ownerType = 'ORDER'): array
     {
+        $fetch = function () use ($ownerType): array {
         $query = <<<GQL
         {
           metafieldDefinitions(first: 250, ownerType: {$ownerType}) {
@@ -36,6 +37,10 @@ class CustomDataLookups
         $data  = $this->client->graphql($query);
         $edges = $data['data']['metafieldDefinitions']['edges'] ?? [];
         return array_map(fn($e) => $e['node'], $edges);
+        };
+        return $this->cache
+            ? $this->cache->remember('shopify_metadata', "definitions|v1|{$ownerType}", $fetch, 3600)
+            : $fetch();
     }
 
     /**
@@ -86,6 +91,40 @@ class CustomDataLookups
         } while ($hasNext && $cursor);
 
         return $metafields;
+    }
+
+    /** @return array<string, array<int, array<string, mixed>>> keyed by order ID */
+    public function getOrderMetafieldsByOrderIds(array $orderIds): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('strval', $orderIds))));
+        if ($ids === []) return [];
+        $query = <<<'GQL'
+        query GetOrderMetafieldsBatch($ids: [ID!]!) {
+          nodes(ids: $ids) { ... on Order {
+            id legacyResourceId
+            metafields(first: 250) { pageInfo { hasNextPage } nodes {
+              id namespace key value type createdAt updatedAt
+            }}
+          }}
+        }
+        GQL;
+        $result = array_fill_keys($ids, []);
+        $overflow = [];
+        foreach (array_chunk($ids, 50) as $chunk) {
+            $gids = array_map(fn(string $id) => Normalizer::orderGid($id), $chunk);
+            $data = $this->client->graphql($query, ['ids' => $gids]);
+            foreach (($data['data']['nodes'] ?? []) as $node) {
+                $id = (string)($node['legacyResourceId'] ?? '');
+                if ($id === '') continue;
+                $conn = $node['metafields'] ?? [];
+                foreach (($conn['nodes'] ?? []) as $metafield) {
+                    if (is_array($metafield)) $result[$id][] = Normalizer::normalizeMetafield($metafield, $id);
+                }
+                if ($conn['pageInfo']['hasNextPage'] ?? false) $overflow[] = $id;
+            }
+        }
+        foreach ($overflow as $id) $result[$id] = $this->getOrderMetafields($id);
+        return $result;
     }
 
     /**

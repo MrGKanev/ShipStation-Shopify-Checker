@@ -8,7 +8,10 @@ namespace Shopify\GraphQL;
  */
 class CatalogAndFulfillment
 {
-    public function __construct(private readonly Client $client)
+    public function __construct(
+        private readonly Client $client,
+        private readonly ?\Cache $cache = null
+    )
     {
     }
 
@@ -17,9 +20,10 @@ class CatalogAndFulfillment
      */
     public function fetchAllProducts(string $status = 'active'): array
     {
-        $all      = [];
-        $queryArg = Queries::productStatusGraphQLArg($status);
-        $template = <<<GQL
+        $fetch = function () use ($status): array {
+            $all      = [];
+            $queryArg = Queries::productStatusGraphQLArg($status);
+            $template = <<<GQL
         {
           products(first: 250{$queryArg}{{AFTER}}) {
             pageInfo { hasNextPage endCursor }
@@ -56,18 +60,25 @@ class CatalogAndFulfillment
         }
         GQL;
 
-        $this->client->paginateGraphQL(
-            $template,
-            'products',
-            function (array $edges) use (&$all) {
-                foreach ($edges as $edge) {
-                    $all[] = Normalizer::normalizeProduct($edge['node'] ?? []);
-                }
-            },
-            1000
-        );
+            $this->client->paginateGraphQL(
+                $template,
+                'products',
+                function (array $edges) use (&$all) {
+                    foreach ($edges as $edge) {
+                        $all[] = Normalizer::normalizeProduct($edge['node'] ?? []);
+                    }
+                },
+                1000
+            );
 
-        return $all;
+            return $all;
+        };
+
+        // Inventory data changes more often than the full-order audit data;
+        // cap this cache at 15 minutes even when CACHE_TTL is longer.
+        return $this->cache
+            ? $this->cache->remember('shopify_catalog', "v1|{$status}", $fetch, 900)
+            : $fetch();
     }
 
     /**

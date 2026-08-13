@@ -28,7 +28,14 @@
 
 ## Caching
 
-API responses are cached under `cache/` as JSON files keyed by platform and date range. Default TTL: 23 hours (`CACHE_TTL=82800`). Repeated runs within the same day reuse the cache automatically.
+API responses are cached under `cache/` as JSON files keyed by platform and request shape. `CACHE_TTL` is the maximum cache duration (default: 23 hours / `82800` seconds). Heavy full-order audits use that maximum; operational data has shorter caps so it does not become stale:
+
+- order scan results, product catalog and shipment date-range reports: 15 minutes;
+- Shopify event scans: 5 minutes;
+- active ShipStation queues and targeted order lookups: 60 seconds;
+- Shopify metafield definitions and report-history summaries: 1 hour.
+
+Repeated runs inside those windows reuse cached data automatically. A cache miss is locked per key, so concurrent requests wait for one fetch instead of each starting the same paginated API sync.
 
 To force a fresh fetch: **Clear all cache** in the Run Audit page, or set `CACHE_TTL=0` in `.env`.
 

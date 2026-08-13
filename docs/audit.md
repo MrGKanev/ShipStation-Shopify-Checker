@@ -5,7 +5,7 @@
 1. Fetches all Shopify orders in the configured date range (cursor-paginated, up to 250/page)
 2. Fetches all ShipStation orders for the same range **plus a 7-day trailing buffer** (catches sub-orders entered a few days after the Shopify order)
 3. Filters out orders that should never appear in ShipStation (see [What gets skipped](#what-gets-skipped))
-4. For any order not found in ShipStation, checks whether it is on hold in Shopify (cached per order ID)
+4. For any order not found in ShipStation, checks whether it is on hold in Shopify in GraphQL batches (50 orders per request), then caches each resolved order ID
 5. Diffs the two sets and flags genuinely missing orders
 6. Saves a CSV report under `reports/`
 7. Scans the fetched Shopify orders for potential duplicates (same email + amount within 24 h)
@@ -24,7 +24,7 @@
 | `no_shipping` | `shipping_lines` is empty |
 | `ignored` | Manually dismissed via the dashboard |
 
-> **`on_hold`** is not exposed on the order object - it lives on the Fulfillment Order level and requires a separate API call, cached per order ID.
+> **`on_hold`** is not exposed on the order object - it lives on the Fulfillment Order level. The queued audit resolves it in GraphQL batches and caches each order's result; an order with more than 20 fulfillment orders falls back to a fully paginated individual lookup.
 
 ---
 

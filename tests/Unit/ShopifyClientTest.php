@@ -17,9 +17,9 @@ class ShopifyClientTest extends TestCase
         return $stack;
     }
 
-    private function shopify(array $responses, array &$history = []): Shopify
+    private function shopify(array $responses, array &$history = [], ?Cache $cache = null): Shopify
     {
-        return new Shopify('test.myshopify.com', 'tok_test', null, $this->makeStack($responses, $history));
+        return new Shopify('test.myshopify.com', 'tok_test', $cache, $this->makeStack($responses, $history));
     }
 
     private function json(mixed $data, int $status = 200, array $headers = []): Response
@@ -577,6 +577,57 @@ class ShopifyClientTest extends TestCase
             'status:any (financial_status:paid OR financial_status:partially_paid) created_at:>=2026-06-01T00:00:00Z created_at:<=2026-06-19T23:59:59Z (fulfillment_status:unfulfilled OR fulfillment_status:partial)',
             $body['variables']['query']
         );
+    }
+
+    public function testFetchOrdersForAddressScanCachesRepeatedQueryForFifteenMinutes(): void
+    {
+        $tmpDir = sys_get_temp_dir() . '/shopify_scan_cache_' . uniqid();
+        $cache = new Cache($tmpDir, ttl: 3600);
+        $history = [];
+        $shopify = $this->shopify([$this->graphQLOrders([])], $history, $cache);
+
+        try {
+            $shopify->fetchOrdersForAddressScan('2026-06-01', '2026-06-19');
+            $shopify->fetchOrdersForAddressScan('2026-06-01', '2026-06-19');
+
+            $this->assertCount(1, $history);
+            $this->assertTrue($cache->wasHit('shopify_scan'));
+        } finally {
+            $this->removeDir($tmpDir);
+        }
+    }
+
+    public function testShopifyScanCacheSeparatesDifferentAuditShapes(): void
+    {
+        $tmpDir = sys_get_temp_dir() . '/shopify_scan_shape_' . uniqid();
+        $cache = new Cache($tmpDir, ttl: 3600);
+        $history = [];
+        $shopify = $this->shopify([$this->graphQLOrders([]), $this->graphQLOrders([])], $history, $cache);
+
+        try {
+            $shopify->fetchOrdersForAddressScan('2026-06-01', '2026-06-19');
+            $shopify->fetchOrdersWithNotes('2026-06-01', '2026-06-19');
+
+            $this->assertCount(2, $history, 'field selection is part of the cache key; one audit must not receive another audit\'s shape');
+        } finally {
+            $this->removeDir($tmpDir);
+        }
+    }
+
+    public function testShopifyScanCacheSeparatesDateRanges(): void
+    {
+        $tmpDir = sys_get_temp_dir() . '/shopify_scan_range_' . uniqid();
+        $cache = new Cache($tmpDir, ttl: 3600);
+        $history = [];
+        $shopify = $this->shopify([$this->graphQLOrders([]), $this->graphQLOrders([])], $history, $cache);
+
+        try {
+            $shopify->fetchOrdersForAddressScan('2026-06-01', '2026-06-10');
+            $shopify->fetchOrdersForAddressScan('2026-06-11', '2026-06-20');
+            $this->assertCount(2, $history);
+        } finally {
+            $this->removeDir($tmpDir);
+        }
     }
 
     public function testFetchOrdersWithAddressChangesUsesGraphQLEventsAndBatchOrderFetch(): void
@@ -1689,6 +1740,48 @@ class ShopifyClientTest extends TestCase
         $this->assertStringContainsString('products(first: 250, query: "status:active"', $body['query']);
     }
 
+    public function testFetchAllProductsCachesRepeatedCatalogFetchForFifteenMinutes(): void
+    {
+        $tmpDir = sys_get_temp_dir() . '/shopify_catalog_cache_' . uniqid();
+        $cache = new Cache($tmpDir, ttl: 3600);
+        $history = [];
+        $shopify = $this->shopify([$this->json([
+            'data' => ['products' => [
+                'pageInfo' => ['hasNextPage' => false, 'endCursor' => null],
+                'edges' => [],
+            ]],
+        ])], $history, $cache);
+
+        try {
+            $this->assertSame([], $shopify->fetchAllProducts());
+            $this->assertSame([], $shopify->fetchAllProducts());
+
+            $this->assertCount(1, $history);
+            $this->assertTrue($cache->wasHit('shopify_catalog'));
+        } finally {
+            $this->removeDir($tmpDir);
+        }
+    }
+
+    public function testCatalogCacheSeparatesProductStatuses(): void
+    {
+        $tmpDir = sys_get_temp_dir() . '/shopify_catalog_status_' . uniqid();
+        $cache = new Cache($tmpDir, ttl: 3600);
+        $history = [];
+        $emptyProducts = fn() => $this->json(['data' => ['products' => [
+            'pageInfo' => ['hasNextPage' => false, 'endCursor' => null], 'edges' => [],
+        ]]]);
+        $shopify = $this->shopify([$emptyProducts(), $emptyProducts()], $history, $cache);
+
+        try {
+            $shopify->fetchAllProducts('active');
+            $shopify->fetchAllProducts('archived');
+            $this->assertCount(2, $history);
+        } finally {
+            $this->removeDir($tmpDir);
+        }
+    }
+
     // ── fetchWebhooks ────────────────────────────────────────────────────────
     // Uses an injectable $request callable (mirroring ApiHealth::checkShopify())
     // rather than Guzzle, since it's the one REST (non-GraphQL) endpoint in
@@ -1741,5 +1834,107 @@ class ShopifyClientTest extends TestCase
 
         $this->assertSame([], $result['webhooks']);
         $this->assertSame('', $result['error']);
+    }
+
+    public function testFindByOrderNumbersUsesOneOrQuery(): void
+    {
+        $history = [];
+        $shopify = $this->shopify([$this->json(['data' => ['orders' => [
+            'edges' => [
+                ['node' => $this->orderNode(['name' => '#1001', 'legacyResourceId' => '1'])],
+                ['node' => $this->orderNode(['name' => '#1002', 'legacyResourceId' => '2'])],
+            ],
+        ]]])], $history);
+
+        $result = $shopify->findByOrderNumbers(['1001', '#1002']);
+
+        $this->assertCount(1, $history);
+        $this->assertCount(1, $result['1001']);
+        $this->assertCount(1, $result['1002']);
+        $body = json_decode((string) $history[0]['request']->getBody(), true);
+        $this->assertSame('(name:1001 OR name:1002)', $body['variables']['query']);
+    }
+
+    public function testGetOrderMetafieldsByOrderIdsUsesBatchNodesQuery(): void
+    {
+        $history = [];
+        $shopify = $this->shopify([$this->json(['data' => ['nodes' => [[
+            'id' => 'gid://shopify/Order/42',
+            'legacyResourceId' => '42',
+            'metafields' => [
+                'pageInfo' => ['hasNextPage' => false],
+                'nodes' => [[
+                    'id' => 'gid://shopify/Metafield/9', 'namespace' => 'custom', 'key' => 'flag',
+                    'value' => 'yes', 'type' => 'single_line_text_field',
+                    'createdAt' => '2026-01-01T00:00:00Z', 'updatedAt' => '2026-01-01T00:00:00Z',
+                ]],
+            ],
+        ]]]])], $history);
+
+        $result = $shopify->getOrderMetafieldsByOrderIds(['42']);
+
+        $this->assertSame('yes', $result[42][0]['value']);
+        $body = json_decode((string) $history[0]['request']->getBody(), true);
+        $this->assertSame(['gid://shopify/Order/42'], $body['variables']['ids']);
+    }
+
+    public function testTargetedShopifyLookupUsesShortCacheWithoutCrossingNumbers(): void
+    {
+        $tmpDir = sys_get_temp_dir() . '/shopify_lookup_cache_' . uniqid();
+        $cache = new Cache($tmpDir, ttl: 3600);
+        $history = [];
+        $response = fn(string $name, string $id) => $this->json(['data' => ['orders' => [
+            'edges' => [['node' => $this->orderNode(['name' => $name, 'legacyResourceId' => $id])]],
+        ]]]);
+        $shopify = $this->shopify([$response('#1001', '1'), $response('#1002', '2')], $history, $cache);
+
+        try {
+            $shopify->findByOrderNumber('1001');
+            $shopify->findByOrderNumber('1001');
+            $shopify->findByOrderNumber('1002');
+            $this->assertCount(2, $history);
+            $this->assertTrue($cache->wasHit('shopify_lookup'));
+        } finally {
+            $this->removeDir($tmpDir);
+        }
+    }
+
+    public function testMetafieldDefinitionsUseLongerMetadataCache(): void
+    {
+        $tmpDir = sys_get_temp_dir() . '/shopify_metadata_cache_' . uniqid();
+        $cache = new Cache($tmpDir, ttl: 7200);
+        $history = [];
+        $shopify = $this->shopify([$this->json(['data' => ['metafieldDefinitions' => [
+            'edges' => [['node' => ['namespace' => 'custom', 'key' => 'flag', 'name' => 'Flag', 'description' => '', 'type' => ['name' => 'single_line_text_field']]]],
+        ]]])], $history, $cache);
+
+        try {
+            $this->assertCount(1, $shopify->fetchMetafieldDefinitions());
+            $this->assertCount(1, $shopify->fetchMetafieldDefinitions());
+            $this->assertCount(1, $history);
+            $this->assertTrue($cache->wasHit('shopify_metadata'));
+        } finally {
+            $this->removeDir($tmpDir);
+        }
+    }
+
+    private function removeDir(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+
+        foreach (scandir($dir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $path = $dir . '/' . $entry;
+            if (is_dir($path)) {
+                $this->removeDir($path);
+            } else {
+                unlink($path);
+            }
+        }
+        rmdir($dir);
     }
 }

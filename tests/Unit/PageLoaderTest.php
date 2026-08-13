@@ -210,6 +210,19 @@ class PageLoaderTest extends TestCase
         $this->assertSame(1, $data['reports'][1]['count']);
     }
 
+    public function testReportHistorySummaryIsCachedButInvalidatesForNewReportFile(): void
+    {
+        $this->writeMissingCsv('2026-06-01', [['order_number' => '1001']]);
+        PageLoader::load('dashboard', '', $this->ctx());
+        PageLoader::load('dashboard', '', $this->ctx());
+        $this->assertTrue($this->cache->wasHit('report_history'));
+
+        $this->writeMissingCsv('2026-06-02', [['order_number' => '1002']]);
+        $data = PageLoader::load('dashboard', '', $this->ctx());
+
+        $this->assertSame(['2026-06-02', '2026-06-01'], array_column($data['reports'], 'date'));
+    }
+
     public function testIgnoredOrdersFilteredOutOfMissingList(): void
     {
         $this->writeMissingCsv('2026-06-01', [['order_number' => '1001'], ['order_number' => '1002']]);
@@ -252,6 +265,21 @@ class PageLoaderTest extends TestCase
         $data = PageLoader::load('dashboard', '', $this->ctx());
 
         $this->assertSame('2026-06-01', $data['selectedReport']['date']);
+    }
+
+    public function testLatestReportKeepsMissingKeyWhenDateParamPicksOlderReport(): void
+    {
+        // views/dashboard.php iterates $latestReport['missing'] unconditionally,
+        // regardless of which date the global ?date= param selected.
+        $this->writeMissingCsv('2026-06-01', [['order_number' => '1001']]);
+        $this->writeMissingCsv('2026-06-15', [['order_number' => '1002']]);
+        $_GET['date'] = '2026-06-01';
+
+        $data = PageLoader::load('dashboard', '', $this->ctx());
+
+        $this->assertSame('2026-06-15', $data['latestReport']['date']);
+        $this->assertArrayHasKey('missing', $data['latestReport']);
+        $this->assertSame('1002', $data['latestReport']['missing'][0]['order_number']);
     }
 
     public function testDashboardTrendWorseWhenLatestCountHigher(): void

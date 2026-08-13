@@ -132,4 +132,95 @@ class OrderHoldLookupTest extends TestCase
             @rmdir($tmpDir);
         }
     }
+
+    public function testFindOnHoldOrderIdsBatchesOrdersAndCachesTheResolvedStates(): void
+    {
+        $tmpDir = sys_get_temp_dir() . '/order_hold_batch_' . uniqid();
+        $cache = new Cache($tmpDir, ttl: 3600);
+        $history = [];
+        $lookup = $this->lookup([$this->json([
+            'data' => ['nodes' => [
+                [
+                    'id' => 'gid://shopify/Order/123',
+                    'fulfillmentOrders' => [
+                        'pageInfo' => ['hasNextPage' => false],
+                        'nodes' => [['status' => 'ON_HOLD']],
+                    ],
+                ],
+                [
+                    'id' => 'gid://shopify/Order/456',
+                    'fulfillmentOrders' => [
+                        'pageInfo' => ['hasNextPage' => false],
+                        'nodes' => [['status' => 'OPEN']],
+                    ],
+                ],
+            ]],
+        ])], $history, $cache);
+
+        try {
+            $this->assertSame(['123' => true], $lookup->findOnHoldOrderIds(['123', '456', '123']));
+            $this->assertCount(1, $history);
+
+            $body = json_decode((string) $history[0]['request']->getBody(), true);
+            $this->assertSame(['gid://shopify/Order/123', 'gid://shopify/Order/456'], $body['variables']['ids']);
+            $this->assertStringContainsString('fulfillmentOrders(first: 20)', $body['query']);
+
+            $this->assertTrue($lookup->isOnHold('123'));
+            $this->assertFalse($lookup->isOnHold('456'));
+            $this->assertCount(1, $history, 'batch-resolved states should populate the existing per-order cache');
+        } finally {
+            foreach (glob($tmpDir . '/*') ?: [] as $f) {
+                unlink($f);
+            }
+            @rmdir($tmpDir);
+        }
+    }
+
+    public function testFindOnHoldOrderIdsFallsBackToIndividualPagingForOverflowOrder(): void
+    {
+        $history = [];
+        $lookup = $this->lookup([
+            $this->json([
+                'data' => ['nodes' => [[
+                    'id' => 'gid://shopify/Order/123',
+                    'fulfillmentOrders' => [
+                        'pageInfo' => ['hasNextPage' => true],
+                        'nodes' => [['status' => 'OPEN']],
+                    ],
+                ]]],
+            ]),
+            $this->fulfillmentOrdersResponse([['id' => 'gid://shopify/FulfillmentOrder/21', 'status' => 'ON_HOLD']]),
+        ], $history);
+
+        $this->assertSame(['123' => true], $lookup->findOnHoldOrderIds(['123']));
+        $this->assertCount(2, $history);
+
+        $fallbackBody = json_decode((string) $history[1]['request']->getBody(), true);
+        $this->assertSame('gid://shopify/Order/123', $fallbackBody['variables']['id']);
+    }
+
+    public function testFindOnHoldOrderIdsSplitsLargeSetsIntoFiftyOrderBatches(): void
+    {
+        $ids = range(1, 51);
+        $openOrder = fn(int $id): array => [
+            'id' => "gid://shopify/Order/{$id}",
+            'fulfillmentOrders' => [
+                'pageInfo' => ['hasNextPage' => false],
+                'nodes' => [['status' => 'OPEN']],
+            ],
+        ];
+        $history = [];
+        $lookup = $this->lookup([
+            $this->json(['data' => ['nodes' => array_map($openOrder, array_slice($ids, 0, 50))]]),
+            $this->json(['data' => ['nodes' => array_map($openOrder, array_slice($ids, 50))]]),
+        ], $history);
+
+        $this->assertSame([], $lookup->findOnHoldOrderIds($ids));
+        $this->assertCount(2, $history);
+
+        $first = json_decode((string) $history[0]['request']->getBody(), true);
+        $second = json_decode((string) $history[1]['request']->getBody(), true);
+        $this->assertCount(50, $first['variables']['ids']);
+        $this->assertSame(['gid://shopify/Order/51'], $second['variables']['ids']);
+    }
 }

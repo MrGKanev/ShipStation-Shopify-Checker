@@ -63,75 +63,77 @@ class ShipStation
         }
 
         $cacheKey = "{$startDate}|{$endDate}";
-        $cpDir   = $this->cache->checkpointDir('ss', $cacheKey);
-        $metaFile = $cpDir . '/_meta.json';
-        $staleAvailable = false;
+        return $this->cache->synchronized('ss', $cacheKey, function () use ($startDate, $endDate, $cacheKey): array {
+            $cpDir   = $this->cache->checkpointDir('ss', $cacheKey);
+            $metaFile = $cpDir . '/_meta.json';
+            $staleAvailable = false;
 
-        // Cache hit: all pages already on disk and still fresh
-        if (file_exists($metaFile)) {
-            $meta = json_decode(file_get_contents($metaFile), true);
-            if (is_array($meta) && ($meta['expires_at'] ?? 0) > time()) {
-                $this->logInfo('ShipStation orders loaded from checkpoint ({start} -> {end})', [
-                    'start' => $startDate,
-                    'end'   => $endDate,
-                ]);
-                return $this->mergePageFiles($cpDir);
+            // Cache hit: all pages already on disk and still fresh
+            if (file_exists($metaFile)) {
+                $meta = json_decode(file_get_contents($metaFile), true);
+                if (is_array($meta) && ($meta['expires_at'] ?? 0) > time()) {
+                    $this->logInfo('ShipStation orders loaded from checkpoint ({start} -> {end})', [
+                        'start' => $startDate,
+                        'end'   => $endDate,
+                    ]);
+                    return $this->mergePageFiles($cpDir);
+                }
+
+                $staleAvailable = $this->hasCheckpointPages($cpDir);
             }
 
-            $staleAvailable = $this->hasCheckpointPages($cpDir);
-        }
+            if ($staleAvailable) {
+                $tmpDir = $this->temporaryCheckpointDir($cpDir);
+                try {
+                    mkdir($tmpDir, 0755, true);
+                    $this->fetchAllOrderPages($startDate, $endDate, $tmpDir);
+                    AtomicFile::writeJson($tmpDir . '/_meta.json', ['expires_at' => time() + $this->cache->getTtl()], 0);
+                    $this->replaceCheckpoint($tmpDir, $cpDir);
 
-        if ($staleAvailable) {
-            $tmpDir = $this->temporaryCheckpointDir($cpDir);
-            try {
-                mkdir($tmpDir, 0755, true);
-                $this->fetchAllOrderPages($startDate, $endDate, $tmpDir);
-                AtomicFile::writeJson($tmpDir . '/_meta.json', ['expires_at' => time() + $this->cache->getTtl()], 0);
-                $this->replaceCheckpoint($tmpDir, $cpDir);
-
-                $all = $this->mergePageFiles($cpDir);
-                $this->logInfo('ShipStation orders refreshed ({start} -> {end}); {count} orders', [
-                    'start' => $startDate,
-                    'end'   => $endDate,
-                    'count' => count($all),
-                ]);
-                return $all;
-            } catch (Throwable $e) {
-                $this->removeCheckpoint($tmpDir);
-                $this->logWarning('ShipStation refresh failed ({start} -> {end}); stale checkpoint left in place: {message}', [
-                    'start'   => $startDate,
-                    'end'     => $endDate,
-                    'message' => $e->getMessage(),
-                ]);
-                throw $e;
+                    $all = $this->mergePageFiles($cpDir);
+                    $this->logInfo('ShipStation orders refreshed ({start} -> {end}); {count} orders', [
+                        'start' => $startDate,
+                        'end'   => $endDate,
+                        'count' => count($all),
+                    ]);
+                    return $all;
+                } catch (Throwable $e) {
+                    $this->removeCheckpoint($tmpDir);
+                    $this->logWarning('ShipStation refresh failed ({start} -> {end}); stale checkpoint left in place: {message}', [
+                        'start'   => $startDate,
+                        'end'     => $endDate,
+                        'message' => $e->getMessage(),
+                    ]);
+                    throw $e;
+                }
             }
-        }
 
-        if (!is_dir($cpDir)) {
-            mkdir($cpDir, 0755, true);
-        }
+            if (!is_dir($cpDir)) {
+                mkdir($cpDir, 0755, true);
+            }
 
-        // Find last completed page so we can resume after a crash
-        $existingPages = glob($cpDir . '/page_*.json') ?: [];
-        $startPage     = count($existingPages) + 1;
+            // Find last completed page so we can resume after a crash
+            $existingPages = glob($cpDir . '/page_*.json') ?: [];
+            $startPage     = count($existingPages) + 1;
 
-        if ($startPage > 1) {
-            $this->logInfo('Resuming ShipStation fetch from page {page}', ['page' => $startPage]);
-        }
+            if ($startPage > 1) {
+                $this->logInfo('Resuming ShipStation fetch from page {page}', ['page' => $startPage]);
+            }
 
-        $this->fetchAllOrderPages($startDate, $endDate, $cpDir, $startPage);
+            $this->fetchAllOrderPages($startDate, $endDate, $cpDir, $startPage);
 
-        // Write meta (TTL marker) - page files ARE the cache now
-        AtomicFile::writeJson($metaFile, ['expires_at' => time() + $this->cache->getTtl()], 0);
+            // Write meta (TTL marker) - page files ARE the cache now
+            AtomicFile::writeJson($metaFile, ['expires_at' => time() + $this->cache->getTtl()], 0);
 
-        $all = $this->mergePageFiles($cpDir);
-        $this->logInfo('ShipStation orders stored ({start} -> {end}); {count} orders', [
-            'start' => $startDate,
-            'end'   => $endDate,
-            'count' => count($all),
-        ]);
+            $all = $this->mergePageFiles($cpDir);
+            $this->logInfo('ShipStation orders stored ({start} -> {end}); {count} orders', [
+                'start' => $startDate,
+                'end'   => $endDate,
+                'count' => count($all),
+            ]);
 
-        return $all;
+            return $all;
+        });
     }
 
     private function hasCheckpointPages(string $cpDir): bool
@@ -247,18 +249,22 @@ class ShipStation
 
     /**
      * Look up orders in ShipStation that match a given Shopify order number.
-     * (Not cached - targeted lookup, always live.)
+     * Cached briefly to deduplicate repeated Spot Check and Tracking lookups
+     * without making operational data materially stale.
      *
      * @return array<int, array<string, mixed>>
      */
     public function findByOrderNumber(string $orderNumber): array
     {
-        $params = http_build_query([
-            'orderNumber' => $orderNumber,
-            'pageSize'    => 50,
-        ]);
-        $data = $this->get("/orders?{$params}");
-        return $data['orders'] ?? [];
+        $fetch = function () use ($orderNumber): array {
+            $params = http_build_query([
+                'orderNumber' => $orderNumber,
+                'pageSize'    => 50,
+            ]);
+            $data = $this->get("/orders?{$params}");
+            return $data['orders'] ?? [];
+        };
+        return $this->remember('ss_lookup', "order|v1|{$orderNumber}", $fetch, 60);
     }
 
     /**
@@ -330,9 +336,10 @@ class ShipStation
 
     public function fetchVoidedShipments(string $startDate, string $endDate): array
     {
-        $all  = [];
-        $page = 1;
-        do {
+        $fetch = function () use ($startDate, $endDate): array {
+            $all  = [];
+            $page = 1;
+            do {
             $params = http_build_query([
                 'voidDate_start' => $startDate . ' 00:00:00',
                 'voidDate_end'   => $endDate   . ' 23:59:59',
@@ -344,9 +351,12 @@ class ShipStation
             if (empty($items)) break;
             array_push($all, ...$items);
             $total = $result['total'] ?? 0;
-            $page++;
-        } while (count($all) < $total);
-        return $all;
+                $page++;
+            } while (count($all) < $total);
+            return $all;
+        };
+
+        return $this->remember('ss_shipments', "voided|v1|{$startDate}|{$endDate}", $fetch, 900);
     }
 
     /**
@@ -357,9 +367,10 @@ class ShipStation
      */
     public function fetchShipmentsByDate(string $startDate, string $endDate): array
     {
-        $all  = [];
-        $page = 1;
-        do {
+        $fetch = function () use ($startDate, $endDate): array {
+            $all  = [];
+            $page = 1;
+            do {
             $params = http_build_query([
                 'shipDate_start' => $startDate . ' 00:00:00',
                 'shipDate_end'   => $endDate   . ' 23:59:59',
@@ -371,9 +382,12 @@ class ShipStation
             if (empty($items)) break;
             array_push($all, ...$items);
             $total = $result['total'] ?? 0;
-            $page++;
-        } while (count($all) < $total);
-        return $all;
+                $page++;
+            } while (count($all) < $total);
+            return $all;
+        };
+
+        return $this->remember('ss_shipments', "shipped|v1|{$startDate}|{$endDate}", $fetch, 900);
     }
 
     /**
@@ -384,9 +398,10 @@ class ShipStation
      */
     public function fetchAwaitingOrders(): array
     {
-        $all  = [];
-        $page = 1;
-        do {
+        $fetch = function (): array {
+            $all  = [];
+            $page = 1;
+            do {
             $params = http_build_query([
                 'orderStatus' => 'awaiting_shipment',
                 'pageSize'    => self::PAGE_SIZE,
@@ -396,9 +411,12 @@ class ShipStation
             $batch = $data['orders'] ?? [];
             array_push($all, ...$batch);
             $totalPages = $data['pages'] ?? 1;
-            $page++;
-        } while ($page <= $totalPages);
-        return $all;
+                $page++;
+            } while ($page <= $totalPages);
+            return $all;
+        };
+
+        return $this->remember('ss_active', 'awaiting|v1', $fetch, 60);
     }
 
     /**
@@ -408,11 +426,13 @@ class ShipStation
      */
     public function fetchActiveOrders(): array
     {
-        $all = [];
-        foreach (['awaiting_payment', 'awaiting_shipment', 'on_hold'] as $status) {
-            array_push($all, ...$this->fetchOrdersByStatus($status));
-        }
-        return $all;
+        return $this->remember('ss_active', 'all|v1', function (): array {
+            $all = [];
+            foreach (['awaiting_payment', 'awaiting_shipment', 'on_hold'] as $status) {
+                array_push($all, ...$this->fetchOrdersByStatus($status));
+            }
+            return $all;
+        }, 60);
     }
 
     /**
@@ -447,6 +467,14 @@ class ShipStation
             $page++;
         } while ($page <= $totalPages);
         return $all;
+    }
+
+    /** @param callable(): array<int, array<string, mixed>> $fetch */
+    private function remember(string $prefix, string $key, callable $fetch, int $ttl): array
+    {
+        return $this->cache
+            ? $this->cache->remember($prefix, $key, $fetch, $ttl)
+            : $fetch();
     }
 
     // ── Private ───────────────────────────────────────────────────────

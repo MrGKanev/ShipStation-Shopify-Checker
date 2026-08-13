@@ -43,10 +43,10 @@ class Shopify
         $this->accessToken   = $accessToken;
         $this->graphqlClient = new GraphQLClient($baseUrl, $accessToken, $stack);
         $this->orderArchive          = new OrderArchive($this->graphqlClient, $cache);
-        $this->orderFetcher          = new OrderFetcher($this->graphqlClient);
+        $this->orderFetcher          = new OrderFetcher($this->graphqlClient, $cache);
         $this->orderAudits           = new OrderAudits($this->orderFetcher);
         $this->adminLookups          = new AdminLookups($this->graphqlClient, $cache);
-        $this->catalogAndFulfillment = new CatalogAndFulfillment($this->graphqlClient);
+        $this->catalogAndFulfillment = new CatalogAndFulfillment($this->graphqlClient, $cache);
     }
 
     // ── Public ────────────────────────────────────────────────────────
@@ -73,6 +73,12 @@ class Shopify
         return $this->adminLookups->findByOrderNumber($orderNumber);
     }
 
+    /** @return array<string, array<int, array<string, mixed>>> */
+    public function findByOrderNumbers(array $orderNumbers): array
+    {
+        return $this->adminLookups->findByOrderNumbers($orderNumbers);
+    }
+
     /**
      * Fetches a single order by its Shopify numeric ID for detail views and ShipStation push.
      *
@@ -97,6 +103,17 @@ class Shopify
     }
 
     /**
+     * Batch variant of isOnHold(), intended for audit result sets.
+     *
+     * @param array<int, int|string> $orderIds
+     * @return array<string, true> IDs of orders currently on hold
+     */
+    public function findOnHoldOrderIds(array $orderIds): array
+    {
+        return $this->adminLookups->findOnHoldOrderIds($orderIds);
+    }
+
+    /**
      * Fetches all metafield definitions for a given owner type via GraphQL (default: ORDER).
      * REST API does not expose metafield_definitions - GraphQL is required.
      *
@@ -115,6 +132,12 @@ class Shopify
     public function getOrderMetafields(string $orderId): array
     {
         return $this->adminLookups->getOrderMetafields($orderId);
+    }
+
+    /** @return array<string, array<int, array<string, mixed>>> */
+    public function getOrderMetafieldsByOrderIds(array $orderIds): array
+    {
+        return $this->adminLookups->getOrderMetafieldsByOrderIds($orderIds);
     }
 
     /**
