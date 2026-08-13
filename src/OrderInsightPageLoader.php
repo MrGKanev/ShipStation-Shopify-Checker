@@ -90,6 +90,7 @@ class OrderInsightPageLoader
                         $timeline = self::buildOrderTimeline($order, $events, $ssOrders, $ssShipments);
                         $risks = self::analyzeOrderRisks($order, $ssOrders);
                         $timeToShip = self::calcTimeToShip($order);
+                        $riskScore = RiskScorer::score($order);
 
                         $tlResult = [
                             'order'        => $order,
@@ -98,6 +99,7 @@ class OrderInsightPageLoader
                             'timeline'     => $timeline,
                             'risks'        => $risks,
                             'time_to_ship' => $timeToShip,
+                            'risk_score'   => $riskScore,
                             'label'        => $order['name'] ?? ('#' . $num),
                         ];
                     }
@@ -169,12 +171,16 @@ class OrderInsightPageLoader
                     $amt += (float)($tx['amount'] ?? 0);
                 }
             }
+            $detailParts = [];
+            if ($amt > 0) $detailParts[] = '$' . number_format($amt, 2);
+            if (!empty($r['note'])) $detailParts[] = $r['note'];
+
             $items[] = [
                 'ts'       => $r['created_at'],
                 'type'     => 'refund',
                 'source'   => 'shopify',
                 'title'    => 'Refund processed',
-                'detail'   => $amt > 0 ? '$' . number_format($amt, 2) : '',
+                'detail'   => implode(' · ', $detailParts),
                 'tracking' => '',
                 'url'      => '',
             ];
@@ -233,7 +239,7 @@ class OrderInsightPageLoader
                 'title'    => 'ShipStation: ' . ucfirst(str_replace('_', ' ', $status)),
                 'detail'   => $ssId ? 'SS ID ' . $ssId : '',
                 'tracking' => '',
-                'url'      => $ssId ? 'https://app.shipstation.com/#!/orders/order-details/' . urlencode($ssId) : '',
+                'url'      => $ssId ? 'https://app.shipstation.com/#!/orders/order-details/' . urlencode((string)$ssId) : '',
             ];
         }
 

@@ -108,6 +108,31 @@ class OrderDirectLookup
             displayFulfillmentStatus
             totalPriceSet { shopMoney { amount currencyCode } }
             totalTaxSet { shopMoney { amount currencyCode } }
+            customAttributes { key value }
+            risk {
+              recommendation
+              assessments {
+                riskLevel
+                provider { title }
+                facts { description sentiment }
+              }
+            }
+            clientIp
+            test
+            sourceName
+            app { name }
+            currentTotalPriceSet { shopMoney { amount currencyCode } }
+            edited
+            paymentGatewayNames
+            poNumber
+            confirmationNumber
+            statusPageUrl
+            customerLocale
+            customerJourneySummary {
+              daysToConversion
+              firstVisit { landingPage referrerUrl source utmParameters { source medium campaign } }
+              lastVisit { landingPage referrerUrl source }
+            }
             shippingAddress {
               firstName
               lastName
@@ -155,6 +180,62 @@ class OrderDirectLookup
                 title
                 code
                 originalPriceSet { shopMoney { amount currencyCode } }
+              }
+            }
+            fulfillments(first: 250) {
+              id
+              legacyResourceId
+              createdAt
+              status
+              displayStatus
+              trackingInfo(first: 10) {
+                company
+                number
+                url
+              }
+              fulfillmentLineItems(first: 250) {
+                edges {
+                  node {
+                    quantity
+                    lineItem {
+                      id
+                      title
+                      name
+                      sku
+                      quantity
+                      variantTitle
+                      originalUnitPriceSet { shopMoney { amount currencyCode } }
+                    }
+                  }
+                }
+              }
+            }
+            refunds {
+              id
+              legacyResourceId
+              createdAt
+              note
+              totalRefundedSet { shopMoney { amount currencyCode } }
+              refundLineItems(first: 250) {
+                nodes {
+                  quantity
+                  subtotalSet { shopMoney { amount currencyCode } }
+                  lineItem {
+                    id
+                    title
+                    name
+                    sku
+                    quantity
+                  }
+                }
+              }
+              transactions(first: 250) {
+                nodes {
+                  id
+                  kind
+                  status
+                  amountSet { shopMoney { amount currencyCode } }
+                }
               }
             }
           }

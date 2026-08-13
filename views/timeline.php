@@ -128,6 +128,200 @@
 </div>
 <?php endif; ?>
 
+<?php
+  $noteAttrs          = $order['note_attributes'] ?? [];
+  $riskScore          = $tlResult['risk_score'] ?? null;
+  $shopifyRiskLevel   = $order['risk_level'] ?? '';
+  $shopifyRiskRec     = $order['risk_recommendation'] ?? '';
+  $shopifyAssessments = $order['risk_assessments'] ?? [];
+
+  $clientIp        = $order['client_ip'] ?? '';
+  $isTest          = $order['test'] ?? false;
+  $journey         = $order['customer_journey'] ?? null;
+  $firstVisit      = $journey['first_visit'] ?? null;
+  $lastVisit       = $journey['last_visit'] ?? null;
+  $daysToConvert   = $journey['days_to_conversion'] ?? null;
+  $hasFraud = $clientIp !== '' || $isTest || $firstVisit !== null || $lastVisit !== null;
+
+  $sourceName = $order['source_name'] ?? '';
+  $appName    = $order['app_name'] ?? '';
+  $hasChannel = $sourceName !== '' || $appName !== '';
+
+  $currentTotal = $order['current_total_price'] ?? null;
+  $isEdited     = $order['edited'] ?? false;
+  $gateways     = $order['payment_gateway_names'] ?? [];
+  $poNumber     = $order['po_number'] ?? '';
+  $hasFinance = $isEdited || !empty($gateways) || $poNumber !== '';
+
+  $confirmationNum = $order['confirmation_number'] ?? '';
+  $statusPageUrl    = $order['status_page_url'] ?? '';
+  $customerLocale   = $order['customer_locale'] ?? '';
+  $hasSupport = $confirmationNum !== '' || $statusPageUrl !== '' || $customerLocale !== '';
+
+  $hasHiddenInfo = !empty($order['note']) || !empty($noteAttrs)
+    || $riskScore !== null || $shopifyRiskLevel !== '' || !empty($shopifyAssessments)
+    || $hasFraud || $hasChannel || $hasFinance || $hasSupport;
+?>
+<?php if ($hasHiddenInfo): ?>
+<div class="table-wrap mb-4">
+  <div class="table-header">
+    <h2>Hidden / Internal Info</h2>
+  </div>
+  <div class="hi-panel" style="padding:1rem 1.25rem">
+
+    <?php if ($isTest): ?>
+      <div class="hi-banner hi-banner-danger">&#9888; TEST ORDER &mdash; do not fulfil</div>
+    <?php endif; ?>
+
+    <?php if (!empty($order['note'])): ?>
+      <div class="hi-card">
+        <div class="hi-card-title">Notes</div>
+        <div class="hi-note-text"><?= nl2br(esc($order['note'])) ?></div>
+      </div>
+    <?php endif; ?>
+
+    <?php if (!empty($noteAttrs)): ?>
+      <div class="hi-card">
+        <div class="hi-card-title">Additional details</div>
+        <ul class="hi-list">
+          <?php foreach ($noteAttrs as $attr): ?>
+            <li class="hi-fact">
+              <span class="hi-fact-label"><?= esc($attr['key']) ?></span>
+              <span class="hi-fact-value"><?= esc($attr['value']) ?></span>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+    <?php endif; ?>
+
+    <div class="hi-grid">
+      <?php if ($shopifyRiskLevel !== '' || ($shopifyRiskRec !== '' && $shopifyRiskRec !== 'NONE') || !empty($shopifyAssessments)): ?>
+        <div class="hi-card hi-card-full">
+          <div class="hi-card-title">Shopify risk</div>
+          <?php if ($shopifyRiskLevel !== ''): ?>
+            <span class="chip <?= match ($shopifyRiskLevel) {
+              'HIGH'   => 'chip-unpaid',
+              'MEDIUM' => 'chip-partial',
+              default  => 'chip-unknown',
+            } ?>"><?= esc($shopifyRiskLevel) ?></span>
+          <?php endif; ?>
+          <?php if ($shopifyRiskRec !== '' && $shopifyRiskRec !== 'NONE'): ?>
+            <span class="chip chip-unknown"><?= esc(ucfirst(strtolower($shopifyRiskRec))) ?></span>
+          <?php endif; ?>
+          <?php if (!empty($shopifyAssessments)): ?>
+            <ul class="hi-list hi-list-cols mt-2">
+              <?php foreach ($shopifyAssessments as $a): ?>
+                <?php foreach (($a['facts'] ?? []) as $fact): ?>
+                  <?php if (!empty($fact['description'])): ?>
+                    <li><?= esc($fact['description']) ?><?= !empty($a['provider']['title']) ? ' (' . esc($a['provider']['title']) . ')' : '' ?></li>
+                  <?php endif; ?>
+                <?php endforeach; ?>
+              <?php endforeach; ?>
+            </ul>
+          <?php endif; ?>
+        </div>
+      <?php endif; ?>
+
+      <?php if ($hasFraud && ($clientIp !== '' || $daysToConvert !== null || $firstVisit !== null || $lastVisit !== null)): ?>
+        <div class="hi-card">
+          <div class="hi-card-title">Fraud / attribution</div>
+          <ul class="hi-list">
+            <?php if ($clientIp !== ''): ?>
+              <li class="hi-fact"><span class="hi-fact-label">IP address</span><span class="hi-fact-value"><?= esc($clientIp) ?></span></li>
+            <?php endif; ?>
+            <?php if ($daysToConvert !== null): ?>
+              <li class="hi-fact"><span class="hi-fact-label">Days to conversion</span><span class="hi-fact-value"><?= (int)$daysToConvert ?></span></li>
+            <?php endif; ?>
+            <?php if ($firstVisit !== null && ($firstVisit['landing_page'] !== '' || $firstVisit['source'] !== '')): ?>
+              <li>First visit: <?= esc($firstVisit['landing_page'] ?: '-') ?>
+                <?php if ($firstVisit['source'] !== ''): ?> via <?= esc($firstVisit['source']) ?><?php endif; ?>
+                <?php if (!empty($firstVisit['utm']['campaign'])): ?> (campaign: <?= esc($firstVisit['utm']['campaign']) ?>)<?php endif; ?>
+              </li>
+            <?php endif; ?>
+            <?php if ($lastVisit !== null && ($lastVisit['landing_page'] !== '' || $lastVisit['source'] !== '')): ?>
+              <li>Last visit: <?= esc($lastVisit['landing_page'] ?: '-') ?>
+                <?php if ($lastVisit['source'] !== ''): ?> via <?= esc($lastVisit['source']) ?><?php endif; ?>
+              </li>
+            <?php endif; ?>
+          </ul>
+        </div>
+      <?php endif; ?>
+
+      <?php if ($hasChannel): ?>
+        <div class="hi-card">
+          <div class="hi-card-title">Channel / origin</div>
+          <ul class="hi-list">
+            <?php if ($sourceName !== ''): ?>
+              <li class="hi-fact"><span class="hi-fact-label">Source</span><span class="hi-fact-value"><?= esc($sourceName) ?></span></li>
+            <?php endif; ?>
+            <?php if ($appName !== ''): ?>
+              <li class="hi-fact"><span class="hi-fact-label">Created via</span><span class="hi-fact-value"><?= esc($appName) ?></span></li>
+            <?php endif; ?>
+          </ul>
+        </div>
+      <?php endif; ?>
+
+      <?php if ($hasFinance): ?>
+        <div class="hi-card">
+          <div class="hi-card-title">Finance / edits</div>
+          <?php if ($isEdited): ?>
+            <div class="mb-2">
+              <span class="chip chip-partial">Edited</span>
+              <?php if ($currentTotal !== null): ?>
+                <div class="hi-fact-value" style="text-align:left;margin-top:.3rem">$<?= number_format((float)$currentTotal, 2) ?> current &middot; $<?= number_format($total, 2) ?> original</div>
+              <?php endif; ?>
+            </div>
+          <?php endif; ?>
+          <ul class="hi-list">
+            <?php if (!empty($gateways)): ?>
+              <li class="hi-fact"><span class="hi-fact-label">Payment gateway<?= count($gateways) !== 1 ? 's' : '' ?></span><span class="hi-fact-value"><?= esc(implode(', ', $gateways)) ?></span></li>
+            <?php endif; ?>
+            <?php if ($poNumber !== ''): ?>
+              <li class="hi-fact"><span class="hi-fact-label">PO number</span><span class="hi-fact-value"><?= esc($poNumber) ?></span></li>
+            <?php endif; ?>
+          </ul>
+        </div>
+      <?php endif; ?>
+
+      <?php if ($riskScore !== null): ?>
+        <div class="hi-card">
+          <div class="hi-card-title">Our risk score</div>
+          <span class="chip <?= match ($riskScore['level']) {
+            'high'   => 'chip-unpaid',
+            'medium' => 'chip-partial',
+            default  => 'chip-unknown',
+          } ?>"><?= esc(ucfirst($riskScore['level'])) ?> <?= (int)$riskScore['score'] ?></span>
+          <?php if (!empty($riskScore['signals'])): ?>
+            <ul class="hi-list mt-2">
+              <?php foreach ($riskScore['signals'] as $s): ?>
+                <li><?= esc($s['label']) ?> <span class="risk-pts">+<?= (int)$s['points'] ?></span></li>
+              <?php endforeach; ?>
+            </ul>
+          <?php endif; ?>
+        </div>
+      <?php endif; ?>
+
+      <?php if ($hasSupport): ?>
+        <div class="hi-card">
+          <div class="hi-card-title">Support</div>
+          <ul class="hi-list">
+            <?php if ($confirmationNum !== ''): ?>
+              <li class="hi-fact"><span class="hi-fact-label">Confirmation #</span><span class="hi-fact-value"><?= esc($confirmationNum) ?></span></li>
+            <?php endif; ?>
+            <?php if ($customerLocale !== ''): ?>
+              <li class="hi-fact"><span class="hi-fact-label">Checkout locale</span><span class="hi-fact-value"><?= esc($customerLocale) ?></span></li>
+            <?php endif; ?>
+            <?php if ($statusPageUrl !== ''): ?>
+              <li><a href="<?= esc($statusPageUrl) ?>" target="_blank" rel="noopener">Order status page &rarr;</a></li>
+            <?php endif; ?>
+          </ul>
+        </div>
+      <?php endif; ?>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
 <?php if (empty($timeline)): ?>
   <div class="table-wrap">
     <div class="empty">

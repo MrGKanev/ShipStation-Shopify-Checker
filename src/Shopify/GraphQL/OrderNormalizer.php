@@ -96,6 +96,55 @@ class OrderNormalizer
                 $node['discountApplications']['nodes']
             )));
         }
+        if (array_key_exists('customAttributes', $node)) {
+            $order['note_attributes'] = array_map(
+                fn($attr) => ['key' => $attr['key'] ?? '', 'value' => $attr['value'] ?? ''],
+                (array)($node['customAttributes'] ?? [])
+            );
+        }
+        if (array_key_exists('risk', $node)) {
+            $risk        = (array)($node['risk'] ?? []);
+            $assessments = (array)($risk['assessments'] ?? []);
+            $order['risk_level']          = self::highestRiskLevel($assessments);
+            $order['risk_recommendation'] = $risk['recommendation'] ?? '';
+            $order['risk_assessments']    = $assessments;
+        }
+        if (array_key_exists('clientIp', $node)) {
+            $order['client_ip'] = $node['clientIp'] ?? '';
+        }
+        if (array_key_exists('test', $node)) {
+            $order['test'] = (bool)($node['test'] ?? false);
+        }
+        if (array_key_exists('customerJourneySummary', $node)) {
+            $order['customer_journey'] = self::normalizeCustomerJourney((array)($node['customerJourneySummary'] ?? []));
+        }
+        if (array_key_exists('sourceName', $node)) {
+            $order['source_name'] = $node['sourceName'] ?? '';
+        }
+        if (array_key_exists('app', $node)) {
+            $order['app_name'] = $node['app']['name'] ?? '';
+        }
+        if (array_key_exists('currentTotalPriceSet', $node)) {
+            $order['current_total_price'] = $node['currentTotalPriceSet']['shopMoney']['amount'] ?? '0.00';
+        }
+        if (array_key_exists('edited', $node)) {
+            $order['edited'] = (bool)($node['edited'] ?? false);
+        }
+        if (array_key_exists('paymentGatewayNames', $node)) {
+            $order['payment_gateway_names'] = (array)($node['paymentGatewayNames'] ?? []);
+        }
+        if (array_key_exists('poNumber', $node)) {
+            $order['po_number'] = $node['poNumber'] ?? '';
+        }
+        if (array_key_exists('confirmationNumber', $node)) {
+            $order['confirmation_number'] = $node['confirmationNumber'] ?? '';
+        }
+        if (array_key_exists('statusPageUrl', $node)) {
+            $order['status_page_url'] = $node['statusPageUrl'] ?? '';
+        }
+        if (array_key_exists('customerLocale', $node)) {
+            $order['customer_locale'] = $node['customerLocale'] ?? '';
+        }
 
         return $order;
     }
@@ -113,5 +162,62 @@ class OrderNormalizer
             'partially_fulfilled' => 'partial',
             default => $normalized,
         };
+    }
+
+    /**
+     * @param array<string, mixed> $visit
+     * @return array<string, mixed>|null
+     */
+    private static function normalizeVisit(mixed $visit): ?array
+    {
+        if (!is_array($visit)) {
+            return null;
+        }
+        $utm = (array)($visit['utmParameters'] ?? []);
+        return [
+            'landing_page' => $visit['landingPage'] ?? '',
+            'referrer_url' => $visit['referrerUrl'] ?? '',
+            'source'       => $visit['source'] ?? '',
+            'utm'          => [
+                'source'   => $utm['source'] ?? '',
+                'medium'   => $utm['medium'] ?? '',
+                'campaign' => $utm['campaign'] ?? '',
+            ],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $journey
+     * @return array<string, mixed>
+     */
+    private static function normalizeCustomerJourney(array $journey): array
+    {
+        return [
+            'days_to_conversion' => $journey['daysToConversion'] ?? null,
+            'first_visit'        => self::normalizeVisit($journey['firstVisit'] ?? null),
+            'last_visit'         => self::normalizeVisit($journey['lastVisit'] ?? null),
+        ];
+    }
+
+    /**
+     * Picks the most severe risk level across an order's assessments, since
+     * RiskScorer only cares whether *any* provider flagged HIGH.
+     *
+     * @param array<int, array<string, mixed>> $assessments
+     */
+    private static function highestRiskLevel(array $assessments): string
+    {
+        $order = ['HIGH' => 3, 'MEDIUM' => 2, 'LOW' => 1, 'PENDING' => 0, 'NONE' => 0];
+        $best = '';
+        $bestRank = -1;
+        foreach ($assessments as $assessment) {
+            $level = strtoupper((string)($assessment['riskLevel'] ?? ''));
+            $rank = $order[$level] ?? -1;
+            if ($rank > $bestRank) {
+                $bestRank = $rank;
+                $best = $level;
+            }
+        }
+        return $best;
     }
 }

@@ -1224,6 +1224,61 @@ input[type="checkbox"] { @apply cursor-pointer; accent-color: var(--accent); wid
   .tl-order-stats { gap: 1rem; }
 }
 
+/* ── Hidden / Internal Info panel ── */
+.hi-panel { display: flex; flex-direction: column; gap: .85rem; }
+
+.hi-banner {
+  display: flex; align-items: center; gap: .6rem;
+  border-radius: var(--radius); padding: .6rem .9rem;
+  font-size: .85rem; font-weight: 600;
+}
+.hi-banner-danger { background: #fff1f2; color: #9f1239; border: 1px solid #fecdd3; }
+[data-theme="dark"] .hi-banner-danger { background: #3f0f16; color: #fda4af; border-color: #881337; }
+
+.hi-card {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: .9rem 1.05rem;
+}
+.hi-card-full { grid-column: 1 / -1; }
+.hi-card-title {
+  display: flex; align-items: center; gap: .4rem;
+  font-size: .7rem; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em;
+  margin-bottom: .6rem;
+}
+.hi-card-title .hi-icon { font-size: .9rem; }
+
+.hi-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: .85rem;
+}
+
+.hi-fact {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: .75rem; font-size: .82rem; padding: .32rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.hi-fact:last-child { border-bottom: none; }
+.hi-fact-label { color: var(--muted); flex-shrink: 0; }
+.hi-fact-value { color: var(--text); font-weight: 500; text-align: right; overflow-wrap: anywhere; }
+
+.hi-list { list-style: none; margin: 0; padding: 0; }
+.hi-list li {
+  font-size: .82rem; color: var(--text); padding: .28rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.hi-list li:last-child { border-bottom: none; }
+
+.hi-list-cols {
+  columns: 2; column-gap: 1.5rem;
+}
+.hi-list-cols li { break-inside: avoid; }
+@media (max-width: 700px) {
+  .hi-list-cols { columns: 1; }
+}
+
+.hi-note-text { font-size: .875rem; color: var(--text); line-height: 1.55; }
+
 /* ── Tracking Feed ── */
 .tracking-detail { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 

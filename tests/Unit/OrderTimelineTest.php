@@ -231,6 +231,36 @@ class OrderTimelineTest extends TestCase
         $this->assertSame('$10.00', $refund['detail']);
     }
 
+    public function testRefundDetailIncludesNoteWhenPresent(): void
+    {
+        $order = $this->order(['refunds' => [[
+            'created_at' => '2026-06-03T10:00:00Z',
+            'note' => 'Wrong size',
+            'transactions' => [
+                ['kind' => 'refund', 'status' => 'success', 'amount' => '10.00'],
+            ],
+        ]]]);
+
+        $items = $this->timeline($order);
+        $refund = current(array_filter($items, fn($i) => $i['type'] === 'refund'));
+
+        $this->assertSame('$10.00 · Wrong size', $refund['detail']);
+    }
+
+    public function testRefundDetailIsJustNoteWhenNoAmount(): void
+    {
+        $order = $this->order(['refunds' => [[
+            'created_at' => '2026-06-03T10:00:00Z',
+            'note' => 'Customer requested cancellation',
+            'transactions' => [],
+        ]]]);
+
+        $items = $this->timeline($order);
+        $refund = current(array_filter($items, fn($i) => $i['type'] === 'refund'));
+
+        $this->assertSame('Customer requested cancellation', $refund['detail']);
+    }
+
     public function testIncludesCancelledItemWithFormattedReason(): void
     {
         $order = $this->order(['cancelled_at' => '2026-06-04T10:00:00Z', 'cancel_reason' => 'customer_request']);
@@ -274,6 +304,21 @@ class OrderTimelineTest extends TestCase
 
         $this->assertCount(1, $ssItems);
         $this->assertSame('ShipStation: On hold', $ssItems[0]['title']);
+        $this->assertStringContainsString('555', $ssItems[0]['url']);
+    }
+
+    public function testSsOrderItemHandlesIntegerOrderId(): void
+    {
+        // ShipStation's API returns orderId as an int; urlencode() requires a
+        // string under strict_types, so this must not throw a TypeError.
+        $ssOrders = [
+            ['orderId' => 555, 'orderStatus' => 'on_hold', 'createDate' => '2026-06-02T10:00:00Z'],
+        ];
+
+        $items = $this->timeline($this->order(), [], $ssOrders);
+        $ssItems = array_values(array_filter($items, fn($i) => $i['type'] === 'ss_order'));
+
+        $this->assertCount(1, $ssItems);
         $this->assertStringContainsString('555', $ssItems[0]['url']);
     }
 

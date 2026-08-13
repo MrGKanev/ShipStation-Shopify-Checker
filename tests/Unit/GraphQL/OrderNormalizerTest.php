@@ -118,6 +118,22 @@ class OrderNormalizerTest extends TestCase
         $this->assertArrayNotHasKey('discount_codes', $result);
         $this->assertArrayNotHasKey('total_tax', $result);
         $this->assertArrayNotHasKey('cancel_reason', $result);
+        $this->assertArrayNotHasKey('note_attributes', $result);
+        $this->assertArrayNotHasKey('risk_level', $result);
+        $this->assertArrayNotHasKey('risk_recommendation', $result);
+        $this->assertArrayNotHasKey('risk_assessments', $result);
+        $this->assertArrayNotHasKey('client_ip', $result);
+        $this->assertArrayNotHasKey('test', $result);
+        $this->assertArrayNotHasKey('customer_journey', $result);
+        $this->assertArrayNotHasKey('source_name', $result);
+        $this->assertArrayNotHasKey('app_name', $result);
+        $this->assertArrayNotHasKey('current_total_price', $result);
+        $this->assertArrayNotHasKey('edited', $result);
+        $this->assertArrayNotHasKey('payment_gateway_names', $result);
+        $this->assertArrayNotHasKey('po_number', $result);
+        $this->assertArrayNotHasKey('confirmation_number', $result);
+        $this->assertArrayNotHasKey('status_page_url', $result);
+        $this->assertArrayNotHasKey('customer_locale', $result);
     }
 
     public function testNormalizeOrderIncludesTagsWhenPresent(): void
@@ -343,5 +359,154 @@ class OrderNormalizerTest extends TestCase
 
         $this->assertArrayHasKey('discount_codes', $result);
         $this->assertSame([], $result['discount_codes']);
+    }
+
+    // ── customAttributes / risk ───────────────────────────────────────────────
+
+    public function testNormalizeOrderIncludesNoteAttributesWhenPresent(): void
+    {
+        $node = $this->makeMinimalNode([
+            'customAttributes' => [
+                ['key' => 'checkout_session_id', 'value' => '87823702-7746-4191'],
+                ['key' => 'bsure-attribute', 'value' => 'Plug Type: Type B (US)'],
+            ],
+        ]);
+
+        $result = \Shopify\GraphQL\OrderNormalizer::normalizeOrder($node);
+
+        $this->assertArrayHasKey('note_attributes', $result);
+        $this->assertCount(2, $result['note_attributes']);
+        $this->assertSame('checkout_session_id', $result['note_attributes'][0]['key']);
+        $this->assertSame('87823702-7746-4191', $result['note_attributes'][0]['value']);
+    }
+
+    public function testNormalizeOrderNoteAttributesEmptyArrayWhenNoCustomAttributes(): void
+    {
+        $node   = $this->makeMinimalNode(['customAttributes' => []]);
+        $result = \Shopify\GraphQL\OrderNormalizer::normalizeOrder($node);
+
+        $this->assertSame([], $result['note_attributes']);
+    }
+
+    public function testNormalizeOrderRiskLevelPicksHighestSeverityAcrossAssessments(): void
+    {
+        $node = $this->makeMinimalNode([
+            'risk' => [
+                'recommendation' => 'INVESTIGATE',
+                'assessments' => [
+                    ['riskLevel' => 'LOW', 'provider' => ['title' => 'Shopify'], 'facts' => []],
+                    ['riskLevel' => 'HIGH', 'provider' => null, 'facts' => []],
+                    ['riskLevel' => 'MEDIUM', 'provider' => ['title' => 'App X'], 'facts' => []],
+                ],
+            ],
+        ]);
+
+        $result = \Shopify\GraphQL\OrderNormalizer::normalizeOrder($node);
+
+        $this->assertSame('HIGH', $result['risk_level']);
+        $this->assertSame('INVESTIGATE', $result['risk_recommendation']);
+        $this->assertCount(3, $result['risk_assessments']);
+    }
+
+    public function testNormalizeOrderRiskLevelEmptyWhenNoAssessments(): void
+    {
+        $node = $this->makeMinimalNode([
+            'risk' => ['recommendation' => 'NONE', 'assessments' => []],
+        ]);
+
+        $result = \Shopify\GraphQL\OrderNormalizer::normalizeOrder($node);
+
+        $this->assertSame('', $result['risk_level']);
+        $this->assertSame('NONE', $result['risk_recommendation']);
+        $this->assertSame([], $result['risk_assessments']);
+    }
+
+    public function testNormalizeOrderRiskAbsentWhenKeyNotPresent(): void
+    {
+        $node   = $this->makeMinimalNode();
+        $result = \Shopify\GraphQL\OrderNormalizer::normalizeOrder($node);
+
+        $this->assertArrayNotHasKey('risk_level', $result);
+        $this->assertArrayNotHasKey('risk_recommendation', $result);
+        $this->assertArrayNotHasKey('risk_assessments', $result);
+    }
+
+    // ── fraud / attribution / channel / finance / support fields ─────────────
+
+    public function testNormalizeOrderIncludesClientIpWhenPresent(): void
+    {
+        $node   = $this->makeMinimalNode(['clientIp' => '203.0.113.7']);
+        $result = \Shopify\GraphQL\OrderNormalizer::normalizeOrder($node);
+
+        $this->assertSame('203.0.113.7', $result['client_ip']);
+    }
+
+    public function testNormalizeOrderIncludesTestFlagWhenPresent(): void
+    {
+        $node   = $this->makeMinimalNode(['test' => true]);
+        $result = \Shopify\GraphQL\OrderNormalizer::normalizeOrder($node);
+
+        $this->assertTrue($result['test']);
+    }
+
+    public function testNormalizeOrderIncludesCustomerJourneyWhenPresent(): void
+    {
+        $node = $this->makeMinimalNode([
+            'customerJourneySummary' => [
+                'daysToConversion' => 3,
+                'firstVisit' => [
+                    'landingPage'    => '/products/widget',
+                    'referrerUrl'    => 'https://google.com',
+                    'source'         => 'google',
+                    'utmParameters'  => ['source' => 'google', 'medium' => 'cpc', 'campaign' => 'summer'],
+                ],
+                'lastVisit' => ['landingPage' => '/cart', 'referrerUrl' => null, 'source' => 'direct'],
+            ],
+        ]);
+        $result = \Shopify\GraphQL\OrderNormalizer::normalizeOrder($node);
+
+        $this->assertSame(3, $result['customer_journey']['days_to_conversion']);
+        $this->assertSame('/products/widget', $result['customer_journey']['first_visit']['landing_page']);
+        $this->assertSame('google', $result['customer_journey']['first_visit']['utm']['source']);
+        $this->assertSame('direct', $result['customer_journey']['last_visit']['source']);
+    }
+
+    public function testNormalizeOrderIncludesSourceNameAndAppWhenPresent(): void
+    {
+        $node   = $this->makeMinimalNode(['sourceName' => 'web', 'app' => ['name' => 'Online Store']]);
+        $result = \Shopify\GraphQL\OrderNormalizer::normalizeOrder($node);
+
+        $this->assertSame('web', $result['source_name']);
+        $this->assertSame('Online Store', $result['app_name']);
+    }
+
+    public function testNormalizeOrderIncludesFinanceFieldsWhenPresent(): void
+    {
+        $node = $this->makeMinimalNode([
+            'currentTotalPriceSet' => ['shopMoney' => ['amount' => '89.00']],
+            'edited'               => true,
+            'paymentGatewayNames'  => ['shopify_payments', 'manual'],
+            'poNumber'             => 'PO-42',
+        ]);
+        $result = \Shopify\GraphQL\OrderNormalizer::normalizeOrder($node);
+
+        $this->assertSame('89.00', $result['current_total_price']);
+        $this->assertTrue($result['edited']);
+        $this->assertSame(['shopify_payments', 'manual'], $result['payment_gateway_names']);
+        $this->assertSame('PO-42', $result['po_number']);
+    }
+
+    public function testNormalizeOrderIncludesSupportFieldsWhenPresent(): void
+    {
+        $node = $this->makeMinimalNode([
+            'confirmationNumber' => 'ABC123XYZ',
+            'statusPageUrl'      => 'https://shop.example/orders/abc/status',
+            'customerLocale'     => 'en-US',
+        ]);
+        $result = \Shopify\GraphQL\OrderNormalizer::normalizeOrder($node);
+
+        $this->assertSame('ABC123XYZ', $result['confirmation_number']);
+        $this->assertSame('https://shop.example/orders/abc/status', $result['status_page_url']);
+        $this->assertSame('en-US', $result['customer_locale']);
     }
 }
