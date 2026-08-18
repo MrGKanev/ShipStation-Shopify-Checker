@@ -1918,6 +1918,35 @@ class ShopifyClientTest extends TestCase
         }
     }
 
+    // ── updateOrderNote ──────────────────────────────────────────────────────
+
+    public function testUpdateOrderNoteSendsGraphQLMutationOnSuccess(): void
+    {
+        $history = [];
+        $shopify = $this->shopify([
+            $this->json(['data' => ['orderUpdate' => ['order' => ['id' => 'gid://shopify/Order/77', 'note' => 'Handle with care'], 'userErrors' => []]]]),
+        ], $history);
+
+        $shopify->updateOrderNote('77', 'Handle with care');
+
+        $body = json_decode((string) $history[0]['request']->getBody(), true);
+        $this->assertStringContainsString('orderUpdate', $body['query']);
+        $this->assertSame('gid://shopify/Order/77', $body['variables']['id']);
+        $this->assertSame('Handle with care', $body['variables']['note']);
+    }
+
+    public function testUpdateOrderNoteThrowsOnUserErrors(): void
+    {
+        $shopify = $this->shopify([
+            $this->json(['data' => ['orderUpdate' => ['order' => null, 'userErrors' => [['field' => ['note'], 'message' => 'Note is too long']]]]]),
+        ]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Note is too long');
+
+        $shopify->updateOrderNote('77', str_repeat('x', 10000));
+    }
+
     private function removeDir(string $dir): void
     {
         if (!is_dir($dir)) {

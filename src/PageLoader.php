@@ -256,8 +256,8 @@ class PageLoader
                         'ss'      => $ctx['cacheObj']->isFresh('ss',      "{$auditStart}|{$ssAuditEnd}"),
                     ];
 
-                    $ss      = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], $ctx['cacheObj']);
-                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
+                    $ss      = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], $ctx['cacheObj'], $ctx['httpStack'] ?? null);
+                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'], $ctx['httpStack'] ?? null);
 
                     [$shopifyOrders, $ssOrders] = self::suppressOutput(function () use ($ss, $shopify, $auditStart, $auditEnd, $ssAuditEnd) {
                         return [
@@ -286,7 +286,7 @@ class PageLoader
                         'mentions'       => SlackRules::mentionText(),
                     ];
 
-                    if (SlackRules::shouldNotifyAudit(count($comparison['missing'])) && ($notifier = SlackNotifier::fromEnvironment())) {
+                    if (SlackRules::shouldNotifyAudit(count($comparison['missing'])) && ($notifier = $ctx['slackNotifier'] ?? SlackNotifier::fromEnvironment())) {
                         try {
                             $notifier->notifyAudit($auditSummary);
                             $auditSlack['sent'] = true;
@@ -299,7 +299,7 @@ class PageLoader
                         }
                     }
 
-                    if (EmailRules::shouldNotify('run_audit', count($comparison['missing'])) && ($emailNotifier = EmailNotifier::fromEnvironment())) {
+                    if (EmailRules::shouldNotify('run_audit', count($comparison['missing'])) && ($emailNotifier = $ctx['emailNotifier'] ?? EmailNotifier::fromEnvironment())) {
                         try {
                             $emailNotifier->notifyAudit($auditSummary, EmailRules::recipientFor('run_audit'));
                             $auditEmail['sent'] = true;

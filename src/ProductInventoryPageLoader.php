@@ -30,7 +30,7 @@ class ProductInventoryPageLoader
         ['result' => $bcResult, 'error' => $bcError, 'start' => $bcStart, 'end' => $bcEnd] =
             ScanRunner::run($action, 'scan_bundle', $ctx, 'bc', function ($ctx, $start, $end) {
                 self::setLimits(300);
-                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
+                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'], $ctx['httpStack'] ?? null);
                 $orders  = self::suppressOutput(fn() => $shopify->fetchAllOrders($start, $end));
 
                 $rows = self::buildBundleCheckRows($orders);
@@ -101,7 +101,7 @@ class ProductInventoryPageLoader
             } else {
                 try {
                     self::setLimits(120);
-                    $shopify  = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
+                    $shopify  = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'], $ctx['httpStack'] ?? null);
                     $products = self::suppressOutput(fn() => $shopify->fetchAllProducts());
                     $scanned  = count($products);
                     $rows     = self::buildProductCheckRows($products);
@@ -197,7 +197,7 @@ class ProductInventoryPageLoader
             } else {
                 try {
                     self::setLimits(120);
-                    $shopify  = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
+                    $shopify  = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'], $ctx['httpStack'] ?? null);
                     $products = self::suppressOutput(fn() => $shopify->fetchAllProducts('any'));
 
                     [$rows, $totalVariants] = self::buildSkuDupeRows($products);
@@ -287,8 +287,8 @@ class ProductInventoryPageLoader
             } else {
                 try {
                     self::setLimits(300);
-                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
-                    $ss      = new ShipStation($ctx['ssKey'], $ctx['ssSecret']);
+                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'], $ctx['httpStack'] ?? null);
+                    $ss      = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], null, $ctx['httpStack'] ?? null);
 
                     $products = self::suppressOutput(fn() => $shopify->fetchAllProducts('active'));
                     $ssOrders = self::suppressOutput(fn() => $ss->fetchAwaitingOrders());
@@ -403,7 +403,7 @@ class ProductInventoryPageLoader
             } else {
                 try {
                     self::setLimits(120);
-                    $shopify  = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
+                    $shopify  = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'], $ctx['httpStack'] ?? null);
                     $products = self::suppressOutput(fn() => $shopify->fetchAllProducts('active'));
 
                     $rows = self::buildZombieProductRows($products);
@@ -487,7 +487,7 @@ class ProductInventoryPageLoader
             ScanRunner::run($action, 'scan_inventoryaging', $ctx, 'ia', function ($ctx, $start, $end) {
                 self::setLimits(240);
                 [$products, $orders] = self::suppressOutput(function () use ($ctx, $start, $end) {
-                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
+                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'], $ctx['httpStack'] ?? null);
                     return [
                         $shopify->fetchAllProducts('active'),
                         $shopify->fetchAllOrders($start, $end),
@@ -576,7 +576,7 @@ class ProductInventoryPageLoader
                     $end   = date('Y-m-d');
                     $start = date('Y-m-d', strtotime('-30 days'));
 
-                    $shopify  = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
+                    $shopify  = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'], $ctx['httpStack'] ?? null);
                     [$products, $orders] = self::suppressOutput(function () use ($shopify, $start, $end) {
                         return [
                             $shopify->fetchAllProducts('active'),
@@ -701,7 +701,7 @@ class ProductInventoryPageLoader
             } else {
                 try {
                     self::setLimits(120);
-                    $shopify  = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
+                    $shopify  = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'], $ctx['httpStack'] ?? null);
                     $products = self::suppressOutput(fn() => $shopify->fetchAllProducts('active'));
                     $scanned  = count($products);
                     $rows     = self::buildCatalogQualityRows($products);

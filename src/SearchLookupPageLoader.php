@@ -89,8 +89,8 @@ class SearchLookupPageLoader
                     $spotError = $err;
                 } else {
                     try {
-                        $ss      = $checkSS ? new ShipStation($ctx['ssKey'], $ctx['ssSecret'], $ctx['cacheObj'] ?? null) : null;
-                        $shopify = $checkSh ? new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'] ?? null) : null;
+                        $ss      = $checkSS ? new ShipStation($ctx['ssKey'], $ctx['ssSecret'], $ctx['cacheObj'] ?? null, $ctx['httpStack'] ?? null) : null;
+                        $shopify = $checkSh ? new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'] ?? null, $ctx['httpStack'] ?? null) : null;
                         $shopifyMatches = $shopify ? $shopify->findByOrderNumbers($numbers) : [];
 
                         $spotResults = [];
@@ -147,7 +147,7 @@ class SearchLookupPageLoader
                            'metafieldFilter', 'metafieldSearch', 'metafieldSearchError');
         }
 
-        $shopifyMeta = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'] ?? null);
+        $shopifyMeta = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'] ?? null, $ctx['httpStack'] ?? null);
 
         try {
             $metafieldDefs = $shopifyMeta->fetchMetafieldDefinitions('ORDER');
@@ -273,7 +273,7 @@ class SearchLookupPageLoader
             } else {
                 try {
                     self::setLimits(120);
-                    $shopifyTag = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+                    $shopifyTag = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
                     $tagResult  = $shopifyTag->searchOrdersByTag($tagInput, $tagStart, $tagEnd);
                     $tagSearch  = array_merge($tagResult, [
                         'tag'   => $tagInput,
@@ -305,7 +305,7 @@ class SearchLookupPageLoader
             } else {
                 try {
                     self::setLimits(120);
-                    $shopify        = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+                    $shopify        = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
                     $customerResult = $shopify->lookupCustomer($customerEmail);
                     $customerResult['email'] = $customerEmail;
 
@@ -345,7 +345,7 @@ class SearchLookupPageLoader
                 $trackingError = $err;
             } else {
                 try {
-                    $ss = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], $ctx['cacheObj'] ?? null);
+                    $ss = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], $ctx['cacheObj'] ?? null, $ctx['httpStack'] ?? null);
                     $trackingResults = [];
 
                     foreach ($numbers as $num) {

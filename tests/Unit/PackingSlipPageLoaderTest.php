@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../src/PackingSlipPageLoader.php';
 
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 
 class PackingSlipPageLoaderTest extends TestCase
@@ -56,6 +59,45 @@ class PackingSlipPageLoaderTest extends TestCase
         $this->assertNull($data['slipOrder']);
         $this->assertSame('#', $data['slipInput']);
         $this->assertSame('Enter an order number.', $data['slipError']);
+    }
+
+    public function testSurfacesErrorWhenShipStationThrows(): void
+    {
+        $_POST['order_number'] = '#1001';
+        $stack = HandlerStack::create(new MockHandler([new Response(500, [], 'Internal Server Error')]));
+
+        $data = PackingSlipPageLoader::load('packingslip', $this->ctx(['ssKey' => 'key', 'ssSecret' => 'secret', 'httpStack' => $stack]));
+
+        $this->assertNull($data['slipOrder']);
+        $this->assertStringContainsString('Error:', $data['slipError']);
+    }
+
+    public function testSuccessReturnsFirstMatchingOrder(): void
+    {
+        $_POST['order_number'] = '#1001';
+        $stack = HandlerStack::create(new MockHandler([
+            new Response(200, ['Content-Type' => 'application/json'], json_encode([
+                'orders' => [['orderId' => 5, 'orderNumber' => '1001']],
+            ])),
+        ]));
+
+        $data = PackingSlipPageLoader::load('packingslip', $this->ctx(['ssKey' => 'key', 'ssSecret' => 'secret', 'httpStack' => $stack]));
+
+        $this->assertSame('', $data['slipError']);
+        $this->assertSame(5, $data['slipOrder']['orderId']);
+    }
+
+    public function testSurfacesErrorWhenOrderNotFoundInShipStation(): void
+    {
+        $_POST['order_number'] = '#9999';
+        $stack = HandlerStack::create(new MockHandler([
+            new Response(200, ['Content-Type' => 'application/json'], json_encode(['orders' => []])),
+        ]));
+
+        $data = PackingSlipPageLoader::load('packingslip', $this->ctx(['ssKey' => 'key', 'ssSecret' => 'secret', 'httpStack' => $stack]));
+
+        $this->assertNull($data['slipOrder']);
+        $this->assertSame('Order #9999 not found in ShipStation.', $data['slipError']);
     }
 
     private function ctx(array $overrides = []): array

@@ -6,6 +6,9 @@ require_once __DIR__ . '/../../src/Shopify.php';
 require_once __DIR__ . '/../../src/GiftCardPageLoader.php';
 require_once __DIR__ . '/support/TmpDir.php';
 
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 
 class GiftCardPageLoaderTest extends TestCase
@@ -52,6 +55,17 @@ class GiftCardPageLoaderTest extends TestCase
         $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $data['gcError']);
         $this->assertSame(14, $data['gcDays']);
         $this->assertSame('config_error', RunLog::all()[0]['status']);
+    }
+
+    public function testSurfacesErrorAndLogsFailureWhenShopifyThrows(): void
+    {
+        $stack = HandlerStack::create(new MockHandler([new Response(500, [], 'Internal Server Error')]));
+
+        $data = GiftCardPageLoader::load('giftcards', 'scan_giftcards', $this->ctx(['httpStack' => $stack]));
+
+        $this->assertNull($data['gcResult']);
+        $this->assertNotSame('', $data['gcError']);
+        $this->assertSame('error', RunLog::all()[0]['status']);
     }
 
     public function testUnknownPageReturnsEmptyData(): void

@@ -14,6 +14,7 @@ require_once __DIR__ . '/../../src/ConfigValidator.php';
 require_once __DIR__ . '/../../src/ToolRegistry.php';
 require_once __DIR__ . '/../../src/EmailRules.php';
 require_once __DIR__ . '/../../src/EmailNotifier.php';
+require_once __DIR__ . '/../../src/PrintQueue.php';
 require_once __DIR__ . '/../../src/ManageSettingsPageLoader.php';
 
 use PHPUnit\Framework\TestCase;
@@ -176,6 +177,72 @@ class ManageSettingsPageLoaderTest extends TestCase
         $this->assertTrue($slack['slackConfigured']);
         $this->assertSame('ignore_order', $actions['actionLog'][0]['action']);
         $this->assertSame('1001', $actions['actionLog'][0]['details']['order_number']);
+    }
+
+    public function testConfigCheckReturnsResultForEachValidatedFile(): void
+    {
+        $data = ManageSettingsPageLoader::load('configcheck', '', $this->ctx());
+
+        $this->assertCount(4, $data['configResults']);
+        $this->assertSame(
+            ['order_types.json', 'tag_policy.json', 'stores.json', 'environment'],
+            array_column($data['configResults'], 'file')
+        );
+    }
+
+    public function testWebhookHealthReportsMissingCredentials(): void
+    {
+        $data = ManageSettingsPageLoader::load('webhookhealth', '', $this->ctx());
+
+        $this->assertSame([], $data['whWebhooks']);
+        $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $data['whError']);
+    }
+
+    public function testWebhookHealthReportsMissingCredentialsWithPlaceholderStore(): void
+    {
+        $data = ManageSettingsPageLoader::load('webhookhealth', '', $this->ctx(['shopifyToken' => 'tok']));
+
+        $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $data['whError']);
+    }
+
+    public function testWebhookHealthSurfacesErrorWhenFetchThrowsUnexpectedly(): void
+    {
+        $data = ManageSettingsPageLoader::load('webhookhealth', '', $this->ctx([
+            'shopifyStore'   => 'test.myshopify.com',
+            'shopifyToken'   => 'tok',
+            'shopifyRequest' => function (): array {
+                throw new RuntimeException('unexpected transport failure');
+            },
+        ]));
+
+        $this->assertSame([], $data['whWebhooks']);
+        $this->assertSame('unexpected transport failure', $data['whError']);
+    }
+
+    public function testPrintQueueListsItemsAndFlashMessages(): void
+    {
+        PrintQueue::setDataDir($this->tmpDir);
+        PrintQueue::add('1001', 'fragile');
+
+        $data = ManageSettingsPageLoader::load('printqueue', '', $this->ctx([
+            'flash' => ['pq_message' => 'Added.', 'pq_error' => ''],
+        ]));
+
+        $this->assertCount(1, $data['pqItems']);
+        $this->assertSame('1001', $data['pqItems'][0]['order_number']);
+        $this->assertSame('Added.', $data['pqMessage']);
+        $this->assertSame('', $data['pqError']);
+    }
+
+    public function testPrintQueueDefaultsToEmptyFlashMessages(): void
+    {
+        PrintQueue::setDataDir($this->tmpDir);
+
+        $data = ManageSettingsPageLoader::load('printqueue', '', $this->ctx());
+
+        $this->assertSame([], $data['pqItems']);
+        $this->assertSame('', $data['pqMessage']);
+        $this->assertSame('', $data['pqError']);
     }
 
     public function testUnknownPageReturnsEmptyData(): void

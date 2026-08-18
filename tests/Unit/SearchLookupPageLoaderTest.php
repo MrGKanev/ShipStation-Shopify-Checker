@@ -4,6 +4,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../src/Comparator.php';
 require_once __DIR__ . '/../../src/SearchLookupPageLoader.php';
 
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 
 class SearchLookupPageLoaderTest extends TestCase
@@ -85,6 +88,20 @@ class SearchLookupPageLoaderTest extends TestCase
         $this->assertSame('vip', $data['tagInput']);
     }
 
+    public function testTagSearchSurfacesErrorWhenShopifyThrows(): void
+    {
+        $_POST = ['tag_input' => 'vip'];
+
+        $data = SearchLookupPageLoader::load('tagsearch', 'tag_search', $this->ctx([
+            'shopifyStore' => 'test.myshopify.com',
+            'shopifyToken' => 'tok_test',
+            'httpStack'    => $this->errorStack(),
+        ]));
+
+        $this->assertNull($data['tagSearch']);
+        $this->assertNotSame('', $data['tagSearchError']);
+    }
+
     public function testSpotCheckPrefillAndValidationErrors(): void
     {
         $_GET['prefill'] = '#1001';
@@ -109,6 +126,20 @@ class SearchLookupPageLoaderTest extends TestCase
         $missingCredentials = SearchLookupPageLoader::load('spotcheck', 'spotcheck', $this->ctx());
 
         $this->assertSame('SS_API_KEY / SS_API_SECRET not set in .env.', $missingCredentials['spotError']);
+    }
+
+    public function testSpotCheckSurfacesErrorWhenShipStationThrows(): void
+    {
+        $_POST = ['orders' => '1001', 'spotcheck_mode' => 'ss'];
+
+        $data = SearchLookupPageLoader::load('spotcheck', 'spotcheck', $this->ctx([
+            'ssKey'     => 'ss_key',
+            'ssSecret'  => 'ss_secret',
+            'httpStack' => $this->errorStack(),
+        ]));
+
+        $this->assertSame([], $data['spotResults'], 'spotResults is initialised before the per-order loop that throws');
+        $this->assertStringContainsString('Error:', $data['spotError']);
     }
 
     public function testSpotCheckShopifyOnlyWithoutCredentialsPreservesNullLookupResult(): void
@@ -138,6 +169,38 @@ class SearchLookupPageLoaderTest extends TestCase
         $this->assertSame('', $data['metafieldSearchError']);
     }
 
+    public function testMetafieldsSurfacesErrorWhenFetchingDefinitionsThrows(): void
+    {
+        $data = SearchLookupPageLoader::load('metafields', '', $this->ctx([
+            'shopifyStore' => 'test.myshopify.com',
+            'shopifyToken' => 'tok_test',
+            'httpStack'    => $this->errorStack(),
+        ]));
+
+        $this->assertNull($data['metafieldDefs']);
+        $this->assertStringContainsString('Could not load metafield definitions:', $data['metafieldError']);
+    }
+
+    public function testMetafieldsSearchSurfacesErrorWhenShopifyThrows(): void
+    {
+        $_POST = ['mf_ns' => 'custom', 'mf_key' => 'gift_message'];
+
+        $stack = HandlerStack::create(new MockHandler([
+            $this->json(['data' => ['metafieldDefinitions' => ['edges' => []]]]),
+            new Response(500, [], 'Internal Server Error'),
+        ]));
+
+        $data = SearchLookupPageLoader::load('metafields', 'metafield_search', $this->ctx([
+            'shopifyStore' => 'test.myshopify.com',
+            'shopifyToken' => 'tok_test',
+            'httpStack'    => $stack,
+        ]));
+
+        $this->assertSame('', $data['metafieldError'], 'definitions fetch succeeded, only the search call should fail');
+        $this->assertNull($data['metafieldSearch']);
+        $this->assertNotSame('', $data['metafieldSearchError']);
+    }
+
     public function testCustomerLookupPrefillAndValidationErrors(): void
     {
         $_GET['email'] = 'customer@example.com';
@@ -158,6 +221,20 @@ class SearchLookupPageLoaderTest extends TestCase
         $missingCredentials = SearchLookupPageLoader::load('customer', 'customer_lookup', $this->ctx());
 
         $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $missingCredentials['customerError']);
+    }
+
+    public function testCustomerLookupSurfacesErrorWhenShopifyThrows(): void
+    {
+        $_POST = ['customer_email' => 'customer@example.com'];
+
+        $data = SearchLookupPageLoader::load('customer', 'customer_lookup', $this->ctx([
+            'shopifyStore' => 'test.myshopify.com',
+            'shopifyToken' => 'tok_test',
+            'httpStack'    => $this->errorStack(),
+        ]));
+
+        $this->assertNull($data['customerResult']);
+        $this->assertNotSame('', $data['customerError']);
     }
 
     public function testTrackingPrefillAndValidationErrors(): void
@@ -184,6 +261,20 @@ class SearchLookupPageLoaderTest extends TestCase
         $missingCredentials = SearchLookupPageLoader::load('tracking', 'lookup_tracking', $this->ctx());
 
         $this->assertSame('SS_API_KEY / SS_API_SECRET not set in .env.', $missingCredentials['trackingError']);
+    }
+
+    public function testTrackingSurfacesErrorWhenShipStationThrows(): void
+    {
+        $_POST = ['tracking_orders' => '1001'];
+
+        $data = SearchLookupPageLoader::load('tracking', 'lookup_tracking', $this->ctx([
+            'ssKey'     => 'ss_key',
+            'ssSecret'  => 'ss_secret',
+            'httpStack' => $this->errorStack(),
+        ]));
+
+        $this->assertSame([], $data['trackingResults'], 'trackingResults is initialised before the per-order loop that throws');
+        $this->assertNotSame('', $data['trackingError']);
     }
 
     public function testUnknownPageReturnsEmptyData(): void
@@ -239,5 +330,21 @@ class SearchLookupPageLoaderTest extends TestCase
             'ssSecret'      => '',
             'ignoredOrders' => [],
         ];
+    }
+
+    /**
+     * A handler stack whose first request blows up with a server error,
+     * simulating a Shopify/ShipStation API outage mid-lookup.
+     */
+    private function errorStack(): HandlerStack
+    {
+        return HandlerStack::create(new MockHandler([
+            new Response(500, [], 'Internal Server Error'),
+        ]));
+    }
+
+    private function json(mixed $data): Response
+    {
+        return new Response(200, ['Content-Type' => 'application/json'], json_encode($data));
     }
 }

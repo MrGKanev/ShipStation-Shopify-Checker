@@ -244,6 +244,17 @@ class FulfillmentIssuePageLoaderTest extends TestCase
         $this->assertSame('config_error', RunLog::all()[0]['status']);
     }
 
+    public function testShipmentAgingSurfacesErrorAndLogsFailureWhenShipStationThrows(): void
+    {
+        $_POST = ['sa_threshold' => '10'];
+
+        $data = FulfillmentIssuePageLoader::load('shipmentaging', 'scan_shipmentaging', $this->ctx(['httpStack' => $this->errorStack()]));
+
+        $this->assertNull($data['saResult']);
+        $this->assertNotSame('', $data['saError']);
+        $this->assertSame('error', RunLog::all()[0]['status']);
+    }
+
     public function testUnknownPageReturnsEmptyData(): void
     {
         $this->assertSame([], FulfillmentIssuePageLoader::load('unknown', '', $this->ctx()));
@@ -569,6 +580,38 @@ class FulfillmentIssuePageLoaderTest extends TestCase
         ], $summary);
     }
 
+    // ── carrierperf ───────────────────────────────────────────────────────────
+
+    public function testCarrierPerfInitialStateUsesRequestRange(): void
+    {
+        $data = FulfillmentIssuePageLoader::load('carrierperf', '', $this->ctx());
+
+        $this->assertNull($data['cpResult']);
+        $this->assertSame('', $data['cpError']);
+    }
+
+    public function testCarrierPerfRequiresShipStationCredentialsFirst(): void
+    {
+        $_POST = ['cp_start' => '2026-06-01', 'cp_end' => '2026-06-20'];
+
+        $data = FulfillmentIssuePageLoader::load('carrierperf', 'scan_carrierperf', $this->ctx(['ssKey' => '', 'ssSecret' => '']));
+
+        $this->assertNull($data['cpResult']);
+        $this->assertSame('SS_API_KEY / SS_API_SECRET not set in .env.', $data['cpError']);
+        $this->assertSame('2026-06-01', $data['cpStart']);
+        $this->assertSame('2026-06-20', $data['cpEnd']);
+    }
+
+    public function testCarrierPerfValidatesDateRange(): void
+    {
+        $_POST = ['cp_start' => '2026-06-20', 'cp_end' => '2026-06-01'];
+
+        $data = FulfillmentIssuePageLoader::load('carrierperf', 'scan_carrierperf', $this->ctx());
+
+        $this->assertNull($data['cpResult']);
+        $this->assertNotSame('', $data['cpError']);
+    }
+
     // ── fulfilleditems ──────────────────────────────────────────────────────
 
     public function testFulfilledItemsInitialStateUsesRequestRange(): void
@@ -755,6 +798,17 @@ class FulfillmentIssuePageLoaderTest extends TestCase
         ]);
 
         return HandlerStack::create($mock);
+    }
+
+    /**
+     * A handler stack whose first request blows up with a server error,
+     * simulating a Shopify/ShipStation API outage mid-scan.
+     */
+    private function errorStack(): HandlerStack
+    {
+        return HandlerStack::create(new MockHandler([
+            new Response(500, [], 'Internal Server Error'),
+        ]));
     }
 
     private function ctx(array $overrides = []): array

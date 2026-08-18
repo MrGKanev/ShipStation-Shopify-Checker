@@ -25,7 +25,7 @@ class PackingSlipPageLoader
                 $slipError = 'Enter an order number.';
             } else {
                 try {
-                    $ss     = new ShipStation($ctx['ssKey'], $ctx['ssSecret']);
+                    $ss     = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], null, $ctx['httpStack'] ?? null);
                     $orders = $ss->findByOrderNumber($clean);
                     if (empty($orders)) {
                         $slipError = "Order #{$clean} not found in ShipStation.";

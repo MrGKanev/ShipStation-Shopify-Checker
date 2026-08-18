@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/AtomicFile.php';
 
+use League\Csv\EscapeFormula;
 use League\Csv\Writer;
 
 /**
@@ -97,6 +98,7 @@ class Reporter
 
         try {
             $writer = Writer::from($csvTmp, 'w+');
+            $writer->addFormatter((new EscapeFormula())->escapeRecord(...));
             $writer->insertOne(['order_number', 'shopify_name', 'shopify_id', 'created_at', 'total_price', 'financial_status', 'fulfillment_status', 'email', 'order_type']);
             foreach ($missing as $o) {
                 $writer->insertOne([

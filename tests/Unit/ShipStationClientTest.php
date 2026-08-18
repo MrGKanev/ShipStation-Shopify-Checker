@@ -195,6 +195,80 @@ class ShipStationClientTest extends TestCase
         $this->assertStringContainsString('orderStatus=on_hold', $uris[2]);
     }
 
+    // ── fetchAwaitingOrders ──────────────────────────────────────────────────
+
+    public function testFetchAwaitingOrdersRequestsAwaitingShipmentStatus(): void
+    {
+        $history = [];
+        $ss = $this->ss([
+            $this->json(['orders' => [['orderId' => 1]], 'pages' => 1]),
+        ], $history);
+
+        $orders = $ss->fetchAwaitingOrders();
+
+        $this->assertCount(1, $orders);
+        $uri = urldecode((string) $history[0]['request']->getUri());
+        $this->assertStringContainsString('orderStatus=awaiting_shipment', $uri);
+    }
+
+    public function testFetchAwaitingOrdersPaginatesAcrossMultiplePages(): void
+    {
+        $history = [];
+        $ss = $this->ss([
+            $this->json(['orders' => [['orderId' => 1]], 'pages' => 2]),
+            $this->json(['orders' => [['orderId' => 2]], 'pages' => 2]),
+        ], $history);
+
+        $orders = $ss->fetchAwaitingOrders();
+
+        $this->assertCount(2, $orders);
+        $this->assertCount(2, $history);
+    }
+
+    public function testFetchAwaitingOrdersIsCached(): void
+    {
+        $tmpDir = sys_get_temp_dir() . '/ss_cache_' . uniqid();
+        $cache  = new Cache($tmpDir, ttl: 3600);
+        $history = [];
+        $ss = $this->ss([
+            $this->json(['orders' => [['orderId' => 1]], 'pages' => 1]),
+        ], $history, $cache);
+
+        try {
+            $ss->fetchAwaitingOrders();
+            $ss->fetchAwaitingOrders();
+
+            $this->assertCount(1, $history);
+        } finally {
+            $this->removeDir($tmpDir);
+        }
+    }
+
+    // ── getOrderShipments ────────────────────────────────────────────────────
+
+    public function testGetOrderShipmentsPassesOrderNumberParam(): void
+    {
+        $history = [];
+        $shipments = [['shipmentId' => 1, 'trackingNumber' => '1Z999']];
+        $ss = $this->ss([$this->json(['shipments' => $shipments])], $history);
+
+        $result = $ss->getOrderShipments('1001');
+
+        $this->assertSame($shipments, $result);
+        $uri = urldecode((string) $history[0]['request']->getUri());
+        $this->assertStringContainsString('orderNumber=1001', $uri);
+        $this->assertStringContainsString('pageSize=100', $uri);
+    }
+
+    public function testGetOrderShipmentsReturnsEmptyArrayWhenNoShipmentsKey(): void
+    {
+        $ss = $this->ss([$this->json([])]);
+
+        $result = $ss->getOrderShipments('1001');
+
+        $this->assertSame([], $result);
+    }
+
     // ── fetchVoidedShipments ─────────────────────────────────────────────────
 
     public function testFetchVoidedShipmentsPassesVoidDateRangeParams(): void

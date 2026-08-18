@@ -150,7 +150,7 @@ class ManageSettingsPageLoader
         } else {
             try {
                 $shopify    = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
-                $result     = $shopify->fetchWebhooks();
+                $result     = $shopify->fetchWebhooks($ctx['shopifyRequest'] ?? null);
                 $whWebhooks = $result['webhooks'];
                 $whError    = $result['error'];
             } catch (Throwable $e) {

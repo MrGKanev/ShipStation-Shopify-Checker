@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/AtomicFile.php';
 
+use League\Csv\EscapeFormula;
 use League\Csv\Writer;
 
 /**
@@ -131,6 +132,7 @@ final class ReturnedItemsReport
      */
     private static function writeCsv(Writer $writer, array $totals): Writer
     {
+        $writer->addFormatter((new EscapeFormula())->escapeRecord(...));
         $writer->insertOne(['product', 'quantity']);
         foreach ($totals as $label => $qty) {
             $writer->insertOne([$label, $qty]);

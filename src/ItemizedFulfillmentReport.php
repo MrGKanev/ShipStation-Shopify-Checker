@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/AtomicFile.php';
 
+use League\Csv\EscapeFormula;
 use League\Csv\Writer;
 
 /**
@@ -165,6 +166,7 @@ final class ItemizedFulfillmentReport
     public static function toDetailedCsvString(array $rows): string
     {
         $writer = Writer::fromString();
+        $writer->addFormatter((new EscapeFormula())->escapeRecord(...));
         $writer->insertOne(['order', 'product', 'quantity']);
         foreach ($rows as $row) {
             $writer->insertOne([$row['order'], $row['product'], $row['quantity']]);
@@ -178,6 +180,7 @@ final class ItemizedFulfillmentReport
     public static function toGroupedCsvString(array $rows): string
     {
         $writer = Writer::fromString();
+        $writer->addFormatter((new EscapeFormula())->escapeRecord(...));
         $writer->insertOne(['product', 'quantity', 'orders']);
         foreach ($rows as $row) {
             $writer->insertOne([$row['product'], $row['quantity'], $row['orders']]);
@@ -236,6 +239,7 @@ final class ItemizedFulfillmentReport
      */
     private static function writeCsv(Writer $writer, array $totals): Writer
     {
+        $writer->addFormatter((new EscapeFormula())->escapeRecord(...));
         $writer->insertOne(['product', 'quantity']);
         foreach ($totals as $label => $qty) {
             $writer->insertOne([$label, $qty]);

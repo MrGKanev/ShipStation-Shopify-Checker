@@ -14,6 +14,9 @@ require_once __DIR__ . '/../../src/ShipStation.php';
 require_once __DIR__ . '/../../src/ScanRunner.php';
 require_once __DIR__ . '/../../src/ProductInventoryPageLoader.php';
 
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 
 class ProductInventoryPageLoaderTest extends TestCase
@@ -100,6 +103,15 @@ class ProductInventoryPageLoaderTest extends TestCase
         $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $submitted['pcError']);
     }
 
+    public function testProductCheckSurfacesErrorAndLogsFailureWhenShopifyThrows(): void
+    {
+        $data = ProductInventoryPageLoader::load('productcheck', 'scan_products', $this->ctx(['httpStack' => $this->errorStack()]));
+
+        $this->assertNull($data['pcResult']);
+        $this->assertNotSame('', $data['pcError']);
+        $this->assertSame('error', RunLog::all()[0]['status']);
+    }
+
     public function testSkuDupesInitialAndMissingShopifyCredentials(): void
     {
         $initial = ProductInventoryPageLoader::load('skudupes', '', $this->ctx());
@@ -111,6 +123,15 @@ class ProductInventoryPageLoaderTest extends TestCase
 
         $this->assertNull($submitted['sdResult']);
         $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $submitted['sdError']);
+    }
+
+    public function testSkuDupesSurfacesErrorAndLogsFailureWhenShopifyThrows(): void
+    {
+        $data = ProductInventoryPageLoader::load('skudupes', 'scan_skudupes', $this->ctx(['httpStack' => $this->errorStack()]));
+
+        $this->assertNull($data['sdResult']);
+        $this->assertNotSame('', $data['sdError']);
+        $this->assertSame('error', RunLog::all()[0]['status']);
     }
 
     public function testInventoryOversellChecksShopifyBeforeShipStationCredentials(): void
@@ -132,6 +153,15 @@ class ProductInventoryPageLoaderTest extends TestCase
 
         $this->assertNull($missingShipStation['ioResult']);
         $this->assertSame('SS_API_KEY / SS_API_SECRET not set in .env.', $missingShipStation['ioError']);
+    }
+
+    public function testInventoryOversellSurfacesErrorAndLogsFailureWhenShopifyThrows(): void
+    {
+        $data = ProductInventoryPageLoader::load('inventoryoversell', 'scan_inventory', $this->ctx(['httpStack' => $this->errorStack()]));
+
+        $this->assertNull($data['ioResult']);
+        $this->assertNotSame('', $data['ioError']);
+        $this->assertSame('error', RunLog::all()[0]['status']);
     }
 
     public function testBuildOversellRowsFlagsShortfallWhenAwaitingExceedsStock(): void
@@ -264,6 +294,15 @@ class ProductInventoryPageLoaderTest extends TestCase
         $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $submitted['zpError']);
     }
 
+    public function testZombieProductsSurfacesErrorAndLogsFailureWhenShopifyThrows(): void
+    {
+        $data = ProductInventoryPageLoader::load('zombieproducts', 'scan_zombieproducts', $this->ctx(['httpStack' => $this->errorStack()]));
+
+        $this->assertNull($data['zpResult']);
+        $this->assertNotSame('', $data['zpError']);
+        $this->assertSame('error', RunLog::all()[0]['status']);
+    }
+
     public function testInventoryAgingInitialRangeAndMissingShopifyCredentials(): void
     {
         $_GET = ['ia_start' => '2026-05-01', 'ia_end' => '2026-06-20'];
@@ -297,9 +336,273 @@ class ProductInventoryPageLoaderTest extends TestCase
         $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $submitted['cqError']);
     }
 
+    public function testInventoryForecastInitialAndMissingShopifyCredentials(): void
+    {
+        $initial = ProductInventoryPageLoader::load('inventoryforecast', '', $this->ctx());
+
+        $this->assertNull($initial['ifResult']);
+        $this->assertSame('', $initial['ifError']);
+
+        $submitted = ProductInventoryPageLoader::load('inventoryforecast', 'scan_inventoryforecast', $this->ctx(['shopifyToken' => '', 'shopifyStore' => 'N/A']));
+
+        $this->assertNull($submitted['ifResult']);
+        $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $submitted['ifError']);
+    }
+
+    public function testInventoryForecastSurfacesErrorAndLogsFailureWhenShopifyThrows(): void
+    {
+        $data = ProductInventoryPageLoader::load('inventoryforecast', 'scan_inventoryforecast', $this->ctx(['httpStack' => $this->errorStack()]));
+
+        $this->assertNull($data['ifResult']);
+        $this->assertNotSame('', $data['ifError']);
+        $this->assertSame('error', RunLog::all()[0]['status']);
+    }
+
     public function testUnknownPageReturnsEmptyData(): void
     {
         $this->assertSame([], ProductInventoryPageLoader::load('unknown', '', $this->ctx()));
+    }
+
+    // ── Success paths (full scan through the mocked HTTP transport) ───────────
+
+    public function testProductCheckSuccessFlagsMissingSku(): void
+    {
+        $stack = $this->shopifyStack([$this->graphQLProducts([
+            $this->productNode(['variants' => ['edges' => [['node' => $this->variantNode(['sku' => ''])]]]]),
+        ])]);
+
+        $data = ProductInventoryPageLoader::load('productcheck', 'scan_products', $this->ctx(['httpStack' => $stack]));
+
+        $this->assertSame('', $data['pcError']);
+        $this->assertCount(1, $data['pcResult']['rows']);
+        $this->assertSame('critical', $data['pcResult']['rows'][0]['severity']);
+    }
+
+    public function testSkuDupesSuccessFlagsSkuSharedAcrossVariants(): void
+    {
+        $stack = $this->shopifyStack([$this->graphQLProducts([
+            $this->productNode(['id' => 'gid://shopify/Product/1', 'legacyResourceId' => '1', 'variants' => [
+                'edges' => [['node' => $this->variantNode(['sku' => 'SKU-A'])]],
+            ]]),
+            $this->productNode(['id' => 'gid://shopify/Product/2', 'legacyResourceId' => '2', 'variants' => [
+                'edges' => [['node' => $this->variantNode(['sku' => 'SKU-A'])]],
+            ]]),
+        ])]);
+
+        $data = ProductInventoryPageLoader::load('skudupes', 'scan_skudupes', $this->ctx(['httpStack' => $stack]));
+
+        $this->assertSame('', $data['sdError']);
+        $this->assertCount(1, $data['sdResult']['rows']);
+        $this->assertSame('SKU-A', $data['sdResult']['rows'][0]['sku']);
+        $this->assertSame(2, $data['sdResult']['rows'][0]['count']);
+    }
+
+    public function testInventoryOversellSuccessFlagsShortfall(): void
+    {
+        $stack = $this->shopifyStack([
+            $this->graphQLProducts([$this->productNode(['variants' => [
+                'edges' => [['node' => $this->variantNode(['sku' => 'SKU-A', 'inventoryQuantity' => 2])]],
+            ]])]),
+            $this->shipStationOrders([['items' => [['sku' => 'SKU-A', 'quantity' => 5]]]]),
+        ]);
+
+        $data = ProductInventoryPageLoader::load('inventoryoversell', 'scan_inventory', $this->ctx(['httpStack' => $stack]));
+
+        $this->assertSame('', $data['ioError']);
+        $this->assertCount(1, $data['ioResult']['rows']);
+        $this->assertSame(3, $data['ioResult']['rows'][0]['shortfall']);
+    }
+
+    public function testZombieProductsSuccessFlagsAllTrackedVariantsAtZeroStock(): void
+    {
+        $stack = $this->shopifyStack([$this->graphQLProducts([
+            $this->productNode(['variants' => ['edges' => [['node' => $this->variantNode(['sku' => 'SKU-A', 'inventoryQuantity' => 0])]]]]),
+        ])]);
+
+        $data = ProductInventoryPageLoader::load('zombieproducts', 'scan_zombieproducts', $this->ctx(['httpStack' => $stack]));
+
+        $this->assertSame('', $data['zpError']);
+        $this->assertCount(1, $data['zpResult']['rows']);
+        $this->assertSame('zero_stock', $data['zpResult']['rows'][0]['reason']);
+    }
+
+    public function testInventoryAgingSuccessFlagsZeroStockVariantWithRecentSales(): void
+    {
+        $_POST = ['ia_start' => '2026-06-01', 'ia_end' => '2026-06-20'];
+
+        $stack = $this->shopifyStack([
+            $this->graphQLProducts([$this->productNode(['variants' => [
+                'edges' => [['node' => $this->variantNode(['sku' => 'SKU-A', 'inventoryQuantity' => 0])]],
+            ]])]),
+            $this->graphQLOrders([$this->orderNodeWithLineItems([['sku' => 'SKU-A', 'quantity' => 4]])]),
+        ]);
+
+        $data = ProductInventoryPageLoader::load('inventoryaging', 'scan_inventoryaging', $this->ctx(['httpStack' => $stack]));
+
+        $this->assertSame('', $data['iaError']);
+        $this->assertCount(1, $data['iaResult']['rows']);
+        $this->assertSame('SKU-A', $data['iaResult']['rows'][0]['sku']);
+        $this->assertSame(4, $data['iaResult']['rows'][0]['recent_qty']);
+    }
+
+    public function testCatalogQualitySurfacesErrorAndLogsFailureWhenShopifyThrows(): void
+    {
+        $data = ProductInventoryPageLoader::load('catalogquality', 'scan_catalogquality', $this->ctx(['httpStack' => $this->errorStack()]));
+
+        $this->assertNull($data['cqResult']);
+        $this->assertNotSame('', $data['cqError']);
+        $this->assertSame('error', RunLog::all()[0]['status']);
+    }
+
+    public function testInventoryForecastSuccessProjectsDaysToZero(): void
+    {
+        $stack = $this->shopifyStack([
+            $this->graphQLProducts([$this->productNode(['variants' => [
+                'edges' => [['node' => $this->variantNode(['sku' => 'SKU-A', 'inventoryQuantity' => 30])]],
+            ]])]),
+            $this->graphQLOrders([$this->orderNodeWithLineItems([['sku' => 'SKU-A', 'quantity' => 30]])]),
+        ]);
+
+        $data = ProductInventoryPageLoader::load('inventoryforecast', 'scan_inventoryforecast', $this->ctx(['httpStack' => $stack]));
+
+        $this->assertSame('', $data['ifError']);
+        $this->assertCount(1, $data['ifResult']['rows']);
+        $this->assertSame('SKU-A', $data['ifResult']['rows'][0]['sku']);
+        $this->assertSame(30, $data['ifResult']['rows'][0]['days_to_zero']);
+    }
+
+    public function testCatalogQualitySuccessFlagsUnpublishedProduct(): void
+    {
+        $stack = $this->shopifyStack([$this->graphQLProducts([
+            $this->productNode(['onlineStoreUrl' => null]),
+        ])]);
+
+        $data = ProductInventoryPageLoader::load('catalogquality', 'scan_catalogquality', $this->ctx(['httpStack' => $stack]));
+
+        $this->assertSame('', $data['cqError']);
+        $this->assertCount(1, $data['cqResult']['rows']);
+        $this->assertContains('Not published to Online Store', $data['cqResult']['rows'][0]['issues']);
+    }
+
+    public function testBundleCheckSuccessFlagsOrderMissingRequiredComponent(): void
+    {
+        $_POST = ['bc_start' => '2026-06-01', 'bc_end' => '2026-06-20'];
+
+        $stack = $this->shopifyStack([$this->graphQLOrders([$this->orderNodeWithShippingLine()])]);
+
+        $data = ProductInventoryPageLoader::load('bundlecheck', 'scan_bundle', $this->ctx(['httpStack' => $stack]));
+
+        $this->assertSame('', $data['bcError']);
+        $this->assertIsArray($data['bcResult']['rows']);
+    }
+
+    // ── Mock HTTP helpers ───────────────────────────────────────────────────
+
+    private function shopifyStack(array $responses): HandlerStack
+    {
+        return HandlerStack::create(new MockHandler($responses));
+    }
+
+    private function json(mixed $data, int $status = 200): Response
+    {
+        return new Response($status, ['Content-Type' => 'application/json'], json_encode($data));
+    }
+
+    private function graphQLOrders(array $nodes): Response
+    {
+        return $this->json([
+            'data' => [
+                'orders' => [
+                    'pageInfo' => ['hasNextPage' => false, 'endCursor' => null],
+                    'edges'    => array_map(fn($node) => ['node' => $node], $nodes),
+                ],
+            ],
+        ]);
+    }
+
+    private function graphQLProducts(array $nodes): Response
+    {
+        return $this->json([
+            'data' => [
+                'products' => [
+                    'pageInfo' => ['hasNextPage' => false, 'endCursor' => null],
+                    'edges'    => array_map(fn($node) => ['node' => $node], $nodes),
+                ],
+            ],
+        ]);
+    }
+
+    private function shipStationOrders(array $orders): Response
+    {
+        return $this->json(['orders' => $orders, 'pages' => 1]);
+    }
+
+    private function orderNode(array $overrides = []): array
+    {
+        return array_replace_recursive([
+            'id'                       => 'gid://shopify/Order/1001',
+            'legacyResourceId'         => '1001',
+            'name'                     => '#1001',
+            'createdAt'                => '2026-06-15T10:00:00Z',
+            'cancelledAt'              => null,
+            'email'                    => 'buyer@example.com',
+            'displayFinancialStatus'   => 'PAID',
+            'displayFulfillmentStatus' => 'UNFULFILLED',
+            'totalPriceSet'            => ['shopMoney' => ['amount' => '99.00', 'currencyCode' => 'USD']],
+        ], $overrides);
+    }
+
+    private function orderNodeWithLineItems(array $lineItems): array
+    {
+        return $this->orderNode([
+            'lineItems' => ['nodes' => array_map(fn($li) => array_merge([
+                'id' => 'gid://shopify/LineItem/1', 'title' => 'Widget', 'name' => 'Widget', 'variantTitle' => null,
+                'originalUnitPriceSet' => ['shopMoney' => ['amount' => '10.00', 'currencyCode' => 'USD']],
+            ], $li), $lineItems)],
+        ]);
+    }
+
+    private function orderNodeWithShippingLine(): array
+    {
+        return $this->orderNode([
+            'totalPriceSet'  => ['shopMoney' => ['amount' => '50.00', 'currencyCode' => 'USD']],
+            'shippingLines'  => ['nodes' => [[
+                'id' => 'gid://shopify/ShippingLine/1', 'title' => 'Standard', 'code' => 'STANDARD',
+                'originalPriceSet' => ['shopMoney' => ['amount' => '5.00', 'currencyCode' => 'USD']],
+            ]]],
+        ]);
+    }
+
+    private function productNode(array $overrides = []): array
+    {
+        return array_replace_recursive([
+            'id'                 => 'gid://shopify/Product/1',
+            'legacyResourceId'   => '1',
+            'title'              => 'Widget',
+            'status'             => 'ACTIVE',
+            'descriptionHtml'    => '<p>A widget</p>',
+            'vendor'             => 'Acme',
+            'productType'        => 'Widgets',
+            'onlineStoreUrl'     => 'https://example.com/products/widget',
+            'seo'                => ['title' => 'Widget', 'description' => 'A widget'],
+            'collections'        => ['edges' => [['node' => ['id' => 'gid://shopify/Collection/1']]]],
+            'mediaCount'         => ['count' => 1],
+            'variants'           => ['edges' => [['node' => $this->variantNode()]]],
+        ], $overrides);
+    }
+
+    private function variantNode(array $overrides = []): array
+    {
+        return array_replace_recursive([
+            'id'                   => 'gid://shopify/ProductVariant/1',
+            'legacyResourceId'     => '1',
+            'title'                => 'Default Title',
+            'sku'                  => 'SKU-A',
+            'barcode'              => null,
+            'inventoryQuantity'    => 10,
+            'inventoryPolicy'      => 'DENY',
+            'inventoryItem'        => ['tracked' => true],
+        ], $overrides);
     }
 
     private function ctx(array $overrides = []): array
@@ -311,5 +614,16 @@ class ProductInventoryPageLoaderTest extends TestCase
             'ssSecret'     => 'ss_secret',
             'cacheObj'     => null,
         ];
+    }
+
+    /**
+     * A handler stack whose first request blows up with a server error,
+     * simulating a Shopify/ShipStation API outage mid-scan.
+     */
+    private function errorStack(): HandlerStack
+    {
+        return HandlerStack::create(new MockHandler([
+            new Response(500, [], 'Internal Server Error'),
+        ]));
     }
 }

@@ -29,7 +29,7 @@ class CustomerLTVPageLoader
             } else {
                 try {
                     if (function_exists('set_time_limit')) set_time_limit(300);
-                    $shopify     = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+                    $shopify     = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
                     $orders      = $shopify->fetchAllOrders($ltvStart, $ltvEnd);
                     $ltvResult   = self::build($orders, $ltvStart, $ltvEnd);
                 } catch (Throwable $e) {

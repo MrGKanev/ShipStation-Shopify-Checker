@@ -32,9 +32,9 @@ class OrderInsightPageLoader
                 $compareError = $err;
             } else {
                 try {
-                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
                     $ss = ($ctx['ssKey'] && $ctx['ssSecret'])
-                        ? new ShipStation($ctx['ssKey'], $ctx['ssSecret']) : null;
+                        ? new ShipStation($ctx['ssKey'], $ctx['ssSecret'], null, $ctx['httpStack'] ?? null) : null;
 
                     $fetchOrder = function (string $num) use ($shopify, $ss): array {
                         $shOrders = $shopify->findByOrderNumber($num);
@@ -69,7 +69,7 @@ class OrderInsightPageLoader
             } else {
                 try {
                     self::setLimits(60);
-                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
                     $matches = $shopify->findByOrderNumber($num);
 
                     if (empty($matches)) {
@@ -82,7 +82,7 @@ class OrderInsightPageLoader
                         $ssOrders = [];
                         $ssShipments = [];
                         if ($ctx['ssKey'] && $ctx['ssSecret']) {
-                            $ss = new ShipStation($ctx['ssKey'], $ctx['ssSecret']);
+                            $ss = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], null, $ctx['httpStack'] ?? null);
                             $ssOrders = $ss->findByOrderNumber($num);
                             $ssShipments = $ss->getOrderShipments($num);
                         }

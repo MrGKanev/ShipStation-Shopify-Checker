@@ -37,7 +37,7 @@ class OrderPolicyPageLoader
             } else {
                 try {
                     self::setLimits(240);
-                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
                     $rows = self::suppressOutput(fn() => $shopify->fetchEditedOrders($oeStart, $oeEnd));
                     $oeResult = ['rows' => $rows, 'start' => $oeStart, 'end' => $oeEnd];
                 } catch (Throwable $e) {
@@ -62,7 +62,7 @@ class OrderPolicyPageLoader
                     throw new \InvalidArgumentException('Enter at least one keyword.');
                 }
                 self::setLimits(180);
-                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
                 $orders = self::suppressOutput(fn() => $shopify->fetchOrdersWithNotes($start, $end));
 
                 $rows = [];
@@ -104,7 +104,7 @@ class OrderPolicyPageLoader
         ['result' => $adResult, 'error' => $adError, 'start' => $adStart, 'end' => $adEnd] =
             ScanRunner::run($action, 'scan_addrdupes', $ctx, 'ad', function ($ctx, $start, $end) {
                 self::setLimits(180);
-                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
                 $orders = self::suppressOutput(fn() => $shopify->fetchOrdersForAddrDupes($start, $end));
 
                 $groups = [];
@@ -165,8 +165,8 @@ class OrderPolicyPageLoader
             ScanRunner::run($action, 'scan_activess', $ctx, 'as', function ($ctx, $start, $end) {
                 self::setLimits(300);
                 [$refunded, $cancelled, $activeSs] = self::suppressOutput(function () use ($ctx, $start, $end) {
-                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
-                    $ss = new ShipStation($ctx['ssKey'], $ctx['ssSecret']);
+                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
+                    $ss = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], null, $ctx['ssStack'] ?? null);
                     return [
                         $shopify->fetchRefundedOrders($start, $end),
                         $shopify->fetchCancelledOrders($start, $end),
@@ -257,7 +257,7 @@ class OrderPolicyPageLoader
             ScanRunner::run($action, 'scan_discountabuse', $ctx, 'da', function ($ctx, $start, $end) use (&$daMinEmails) {
                 $daMinEmails = max(2, (int)($_POST['da_min_emails'] ?? 3));
                 self::setLimits(180);
-                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
                 $orders = self::suppressOutput(fn() => $shopify->fetchOrdersForDiscountAudit($start, $end));
 
                 $rows = self::buildDiscountAbuseRows($orders, $daMinEmails);
@@ -339,7 +339,7 @@ class OrderPolicyPageLoader
                 }
 
                 self::setLimits(180);
-                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
                 $orders = self::suppressOutput(fn() => $shopify->fetchOrdersForTagPolicy($start, $end));
 
                 $rows = self::buildTagPolicyRows($orders, $tpConfig);
@@ -425,7 +425,7 @@ class OrderPolicyPageLoader
         ['result' => $caResult, 'error' => $caError, 'start' => $caStart, 'end' => $caEnd] =
             ScanRunner::run($action, 'scan_consentaudit', $ctx, 'ca', function ($ctx, $start, $end) {
                 self::setLimits(180);
-                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
                 $orders = self::suppressOutput(fn() => $shopify->fetchOrdersForConsentAudit($start, $end));
 
                 $rows = self::buildConsentAuditRows($orders);

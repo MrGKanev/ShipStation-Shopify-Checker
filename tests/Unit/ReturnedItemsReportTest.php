@@ -126,6 +126,17 @@ class ReturnedItemsReportTest extends TestCase
         $this->assertSame(['product' => 'Gadget', 'quantity' => '5'], $rows[1]);
     }
 
+    public function testToCsvStringEscapesFormulaLeadingProductLabels(): void
+    {
+        $csv = ReturnedItemsReport::toCsvString(['=cmd|\'/c calc\'!A0' => 3]);
+
+        $reader = Reader::fromString($csv);
+        $reader->setHeaderOffset(0);
+        $rows = [...$reader->getRecords()];
+
+        $this->assertStringStartsNotWith('=', $rows[0]['product']);
+    }
+
     public function testEmailHtmlEscapesProductLabelsAndIncludesDateRange(): void
     {
         $html = ReturnedItemsReport::emailHtml(['<script>x</script>' => 3], '2026-07-01', '2026-07-31');

@@ -71,7 +71,7 @@ final class ScanRunner
                         'rows_found' => $rowsFound,
                         'meta'       => ['api_version' => Shopify::API_VERSION],
                     ]);
-                    self::notifyScan($trigger, $result, $rowsFound, $start, $end);
+                    self::notifyScan($trigger, $result, $rowsFound, $start, $end, $ctx);
                     if (is_array($result)) {
                         AuditSnapshot::save($trigger, substr($runStartedAt, 0, 10), $result, $start, $end, $rowsFound);
                     }
@@ -109,12 +109,16 @@ final class ScanRunner
         return compact('result', 'error', 'start', 'end');
     }
 
+    /**
+     * @param array<string, mixed> $ctx
+     */
     private static function notifyScan(
         string $trigger,
         mixed $result,
         ?int $rowsFound,
         string $start,
-        string $end
+        string $end,
+        array $ctx = []
     ): void {
         if ($rowsFound === null) {
             return;
@@ -122,7 +126,7 @@ final class ScanRunner
 
         $scanned = is_array($result) ? ($result['scanned'] ?? $result['total_orders'] ?? null) : null;
 
-        if (SlackRules::shouldNotifyScan($rowsFound) && ($notifier = SlackNotifier::fromEnvironment())) {
+        if (SlackRules::shouldNotifyScan($rowsFound) && ($notifier = $ctx['slackNotifier'] ?? SlackNotifier::fromEnvironment())) {
             try {
                 $notifier->notifyScan([
                     'tool'       => $trigger,
@@ -140,7 +144,7 @@ final class ScanRunner
             }
         }
 
-        if (EmailRules::shouldNotify($trigger, $rowsFound) && ($emailNotifier = EmailNotifier::fromEnvironment())) {
+        if (EmailRules::shouldNotify($trigger, $rowsFound) && ($emailNotifier = $ctx['emailNotifier'] ?? EmailNotifier::fromEnvironment())) {
             try {
                 $emailNotifier->notifyScan([
                     'tool'       => $trigger,

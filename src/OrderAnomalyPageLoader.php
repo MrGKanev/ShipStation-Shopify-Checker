@@ -30,7 +30,7 @@ class OrderAnomalyPageLoader
                 $unfulfilledOnly = (bool)($_POST['unfulfilled_only'] ?? false);
                 $poBoxOnly = (bool)($_POST['po_box_only'] ?? false);
                 self::setLimits(180);
-                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
                 $orders = self::suppressOutput(fn() => $shopify->fetchOrdersForAddressScan($start, $end, $unfulfilledOnly));
 
                 $rows = self::buildAddrCheckRows($orders, $poBoxOnly);
@@ -154,14 +154,14 @@ class OrderAnomalyPageLoader
         ['result' => $refundsResult, 'error' => $refundsError, 'start' => $refundsStart, 'end' => $refundsEnd] =
             ScanRunner::run($action, 'find_refunds', $ctx, 'refunds', function ($ctx, $start, $end) {
                 self::setLimits(300);
-                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
+                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'], $ctx['httpStack'] ?? null);
                 $refundedOrders = self::suppressOutput(fn() => $shopify->fetchRefundedOrders($start, $end));
 
                 $ssEnd = date('Y-m-d', strtotime($end . ' +7 days'));
                 $ssRows = [];
                 if ($ctx['ssKey'] && $ctx['ssSecret']) {
                     $ssRows = self::suppressOutput(function () use ($ctx, $start, $ssEnd) {
-                        $ss = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], $ctx['cacheObj']);
+                        $ss = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], $ctx['cacheObj'], $ctx['httpStack'] ?? null);
                         return $ss->fetchAllOrders($start, $ssEnd);
                     });
                 }
@@ -260,7 +260,7 @@ class OrderAnomalyPageLoader
             } else {
                 try {
                     self::setLimits(300);
-                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
                     $dupesResult = $shopify->findDuplicateOrders($dupesStart, $dupesEnd);
                     $dupesResult['start'] = $dupesStart;
                     $dupesResult['end'] = $dupesEnd;
@@ -283,8 +283,8 @@ class OrderAnomalyPageLoader
             ScanRunner::run($action, 'find_orphans', $ctx, 'orphan', function ($ctx, $start, $end) {
                 self::setLimits(300);
                 [$ssOrders, $shOrders] = self::suppressOutput(function () use ($ctx, $start, $end) {
-                    $ss = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], $ctx['cacheObj']);
-                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
+                    $ss = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], $ctx['cacheObj'], $ctx['httpStack'] ?? null);
+                    $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'], $ctx['httpStack'] ?? null);
                     return [$ss->fetchAllOrders($start, $end), $shopify->fetchAllOrders($start, $end)];
                 });
 
@@ -338,7 +338,7 @@ class OrderAnomalyPageLoader
                 'customer'     => trim(($o['shipTo']['name'] ?? '')),
                 'email'        => $o['customerEmail'] ?? '',
                 'total'        => $o['orderTotal']   ?? 0,
-                'ss_url'       => $o['orderId'] ? 'https://app.shipstation.com/#!/orders/order-details/' . urlencode($o['orderId']) : null,
+                'ss_url'       => $o['orderId'] ? 'https://app.shipstation.com/#!/orders/order-details/' . urlencode((string)$o['orderId']) : null,
             ];
         }
         usort($rows, fn($a, $b) => strcmp($b['order_date'], $a['order_date']));
@@ -353,7 +353,7 @@ class OrderAnomalyPageLoader
             ScanRunner::run($action, 'scan_repeat_refunds', $ctx, 'rr', function ($ctx, $start, $end) use (&$rrMinCount) {
                 $rrMinCount = max(2, (int)($_POST['rr_min_count'] ?? 2));
                 self::setLimits(300);
-                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
+                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'], $ctx['httpStack'] ?? null);
                 $refundedOrders = self::suppressOutput(fn() => $shopify->fetchRefundedOrders($start, $end));
 
                 $rows = self::buildRepeatRefundRows($refundedOrders, $rrMinCount);
@@ -426,7 +426,7 @@ class OrderAnomalyPageLoader
             } else {
                 try {
                     self::setLimits(180);
-                    $ss = new ShipStation($ctx['ssKey'], $ctx['ssSecret']);
+                    $ss = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], null, $ctx['httpStack'] ?? null);
                     $shipments = self::suppressOutput(fn() => $ss->fetchVoidedShipments($fsStart, $fsEnd));
 
                     $fsResult = ['rows' => self::buildFailedShipmentRows($shipments), 'start' => $fsStart, 'end' => $fsEnd];
@@ -479,7 +479,7 @@ class OrderAnomalyPageLoader
         ['result' => $acResult, 'error' => $acError, 'start' => $acStart, 'end' => $acEnd] =
             ScanRunner::run($action, 'scan_addr_changes', $ctx, 'ac', function ($ctx, $start, $end) {
                 self::setLimits(240);
-                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken']);
+                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
                 $entries = self::suppressOutput(fn() => $shopify->fetchOrdersWithAddressChanges($start, $end));
 
                 $rows = self::buildAddrChangeRows($entries);

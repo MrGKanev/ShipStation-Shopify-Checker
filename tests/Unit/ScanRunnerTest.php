@@ -4,6 +4,7 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/support/TmpDir.php';
+require_once __DIR__ . '/support/ThrowingNotifiers.php';
 
 final class ScanRunnerTest extends TestCase
 {
@@ -242,6 +243,43 @@ final class ScanRunnerTest extends TestCase
         $row = RunLog::all()[0];
         $this->assertSame('error', $row['status']);
         $this->assertSame('boom', $row['error']);
+    }
+
+    public function testSlackNotificationFailureDoesNotFailTheScan(): void
+    {
+        $_POST = ['scan_start' => '2026-06-01', 'scan_end' => '2026-06-10'];
+        SlackRules::save(['scan_enabled' => true, 'scan_min_rows' => 1]);
+
+        $result = ScanRunner::run(
+            'scan_test',
+            'scan_test',
+            $this->ctx(['slackNotifier' => new ThrowingSlackNotifier('https://hooks.slack.test/x')]),
+            'scan',
+            fn() => ['rows' => [['id' => 1]]]
+        );
+
+        $this->assertSame('', $result['error']);
+        $this->assertSame(1, $result['result']['rows'][0]['id']);
+        $this->assertSame('issues_found', RunLog::all()[0]['status'], 'the scan itself must still be logged as successful');
+    }
+
+    public function testEmailNotificationFailureDoesNotFailTheScan(): void
+    {
+        EmailRules::save(['scan_addresses' => ['mode' => 'immediate', 'threshold' => 1]]);
+        $_POST = ['scan_start' => '2026-06-01', 'scan_end' => '2026-06-10'];
+        $notifier = new ThrowingEmailNotifier('smtp.test', 587, 'user@test.com', 'pw', 'from@test.com', 'ops@test.com', 'tls');
+
+        $result = ScanRunner::run(
+            'scan_addresses',
+            'scan_addresses',
+            $this->ctx(['emailNotifier' => $notifier]),
+            'scan',
+            fn() => ['rows' => [['id' => 1]]]
+        );
+
+        $this->assertSame('', $result['error']);
+        $this->assertSame(1, $result['result']['rows'][0]['id']);
+        $this->assertSame('issues_found', RunLog::all()[0]['status'], 'the scan itself must still be logged as successful');
     }
 
     private function ctx(array $overrides = []): array

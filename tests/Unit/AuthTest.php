@@ -22,6 +22,7 @@ class AuthTest extends TestCase
         foreach ([
             $this->tmpDir . '/login_attempts.json',
             $this->tmpDir . '/login_attempts.json.lock',
+            $this->tmpDir . '/users.json',
         ] as $file) {
             if (file_exists($file)) {
                 unlink($file);
@@ -176,6 +177,124 @@ class AuthTest extends TestCase
     {
         Auth::unban('1.2.3.4');
         $this->assertSame([], Auth::bannedIps());
+    }
+
+    // ── loadUsers / saveUsers ────────────────────────────────────────────────
+
+    public function testLoadUsersReturnsEmptyArrayWhenFileDoesNotExist(): void
+    {
+        $this->assertSame([], Auth::loadUsers());
+    }
+
+    public function testSaveUsersThenLoadUsersRoundTrips(): void
+    {
+        $users = [
+            ['name' => 'alice', 'password_hash' => password_hash('secret', PASSWORD_DEFAULT), 'role' => 'admin'],
+            ['name' => 'bob', 'password_hash' => password_hash('secret2', PASSWORD_DEFAULT), 'role' => 'viewer'],
+        ];
+
+        Auth::saveUsers($users);
+        $loaded = Auth::loadUsers();
+
+        $this->assertCount(2, $loaded);
+        $this->assertSame('alice', $loaded[0]['name']);
+        $this->assertSame('bob', $loaded[1]['name']);
+        $this->assertFileExists($this->tmpDir . '/users.json');
+    }
+
+    public function testSaveUsersReindexesKeys(): void
+    {
+        $users = [
+            5 => ['name' => 'alice', 'password_hash' => 'x', 'role' => 'admin'],
+            9 => ['name' => 'bob', 'password_hash' => 'y', 'role' => 'viewer'],
+        ];
+
+        Auth::saveUsers($users);
+        $loaded = Auth::loadUsers();
+
+        $this->assertSame([0, 1], array_keys($loaded));
+    }
+
+    public function testLoadUsersReturnsEmptyArrayForMalformedJson(): void
+    {
+        file_put_contents($this->tmpDir . '/users.json', '{not valid json');
+
+        $this->assertSame([], Auth::loadUsers());
+    }
+
+    // ── attemptMultiUser ─────────────────────────────────────────────────────
+
+    public function testAttemptMultiUserReturnsRoleOnSuccess(): void
+    {
+        Auth::saveUsers([
+            ['name' => 'alice', 'password_hash' => password_hash('secret', PASSWORD_DEFAULT), 'role' => 'operator'],
+        ]);
+
+        $role = Auth::attemptMultiUser('alice', 'secret', '10.0.0.1');
+
+        $this->assertSame('operator', $role);
+    }
+
+    public function testAttemptMultiUserReturnsEmptyStringOnWrongPassword(): void
+    {
+        Auth::saveUsers([
+            ['name' => 'alice', 'password_hash' => password_hash('secret', PASSWORD_DEFAULT), 'role' => 'operator'],
+        ]);
+
+        $role = Auth::attemptMultiUser('alice', 'wrong', '10.0.0.2');
+
+        $this->assertSame('', $role);
+    }
+
+    public function testAttemptMultiUserReturnsEmptyStringForUnknownUsername(): void
+    {
+        Auth::saveUsers([
+            ['name' => 'alice', 'password_hash' => password_hash('secret', PASSWORD_DEFAULT), 'role' => 'operator'],
+        ]);
+
+        $role = Auth::attemptMultiUser('nobody', 'secret', '10.0.0.3');
+
+        $this->assertSame('', $role);
+    }
+
+    public function testAttemptMultiUserSuccessClearsFailedAttemptsForIp(): void
+    {
+        Auth::saveUsers([
+            ['name' => 'alice', 'password_hash' => password_hash('secret', PASSWORD_DEFAULT), 'role' => 'admin'],
+        ]);
+        $ip = '10.0.0.4';
+        Auth::attemptMultiUser('alice', 'wrong', $ip);
+
+        Auth::attemptMultiUser('alice', 'secret', $ip);
+
+        $this->assertArrayNotHasKey($ip, Auth::bannedIps());
+    }
+
+    public function testAttemptMultiUserLocksOutIpAfterMaxFailedAttempts(): void
+    {
+        Auth::saveUsers([
+            ['name' => 'alice', 'password_hash' => password_hash('secret', PASSWORD_DEFAULT), 'role' => 'admin'],
+        ]);
+        $ip = '10.0.0.5';
+        Auth::attemptMultiUser('alice', 'wrong', $ip);
+        Auth::attemptMultiUser('alice', 'wrong', $ip);
+        Auth::attemptMultiUser('alice', 'wrong', $ip);
+
+        $role = Auth::attemptMultiUser('alice', 'secret', $ip);
+
+        $this->assertSame('', $role);
+        $this->assertArrayHasKey($ip, Auth::bannedIps());
+    }
+
+    public function testAttemptMultiUserIgnoresMalformedUserEntries(): void
+    {
+        Auth::saveUsers([
+            ['name' => 'alice'], // missing password_hash / role
+        ]);
+
+        $role = Auth::attemptMultiUser('alice', 'secret', '10.0.0.6');
+
+        $this->assertSame('', $role);
     }
 
     // ── CSRF ──────────────────────────────────────────────────────────────────

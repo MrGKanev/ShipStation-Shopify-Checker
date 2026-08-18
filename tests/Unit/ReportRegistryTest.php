@@ -15,6 +15,19 @@ final class ReportRegistryTest extends TestCase
         $this->assertSame('fi', ReportRegistry::prefix('scan_fulfilleditems'));
     }
 
+    public function testGetReturnsFullTupleForKnownTool(): void
+    {
+        $this->assertSame(
+            ['Fulfilled Items', '✅', 'fulfilleditems', 'fi'],
+            ReportRegistry::get('scan_fulfilleditems')
+        );
+    }
+
+    public function testGetReturnsNullForUnknownTool(): void
+    {
+        $this->assertNull(ReportRegistry::get('some_unregistered_tool'));
+    }
+
     public function testUnknownToolFallsBackToToolNameAndGenericIcon(): void
     {
         $this->assertSame('some_unregistered_tool', ReportRegistry::label('some_unregistered_tool'));

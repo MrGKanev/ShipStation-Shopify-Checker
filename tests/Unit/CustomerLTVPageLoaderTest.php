@@ -4,6 +4,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../src/DateRange.php';
 require_once __DIR__ . '/../../src/CustomerLTVPageLoader.php';
 
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -12,11 +15,23 @@ use PHPUnit\Framework\TestCase;
 class CustomerLTVPageLoaderTest extends TestCase
 {
     private static \ReflectionMethod $build;
+    private array $previousPost;
 
     public static function setUpBeforeClass(): void
     {
         $ref = new \ReflectionClass(CustomerLTVPageLoader::class);
         self::$build = $ref->getMethod('build');
+    }
+
+    protected function setUp(): void
+    {
+        $this->previousPost = $_POST;
+        $_POST = [];
+    }
+
+    protected function tearDown(): void
+    {
+        $_POST = $this->previousPost;
     }
 
     /**
@@ -25,6 +40,61 @@ class CustomerLTVPageLoaderTest extends TestCase
     private function build(array $orders, string $start = '2024-01-01', string $end = '2024-12-31'): array
     {
         return self::$build->invoke(null, $orders, $start, $end);
+    }
+
+    private function ctx(array $overrides = []): array
+    {
+        return array_merge(['shopifyToken' => 'tok', 'shopifyStore' => 'store.myshopify.com'], $overrides);
+    }
+
+    // ── load() ────────────────────────────────────────────────────────────────
+
+    public function testLoadReturnsDefaultsWhenActionIsNotScanLtv(): void
+    {
+        $data = CustomerLTVPageLoader::load('cohort', '', $this->ctx());
+
+        $this->assertNull($data['ltvResult']);
+        $this->assertSame('', $data['ltvError']);
+    }
+
+    public function testLoadReturnsValidationErrorForInvalidDateRange(): void
+    {
+        $_POST = ['ltv_start' => '2024-12-31', 'ltv_end' => '2024-01-01'];
+
+        $data = CustomerLTVPageLoader::load('cohort', 'scan_ltv', $this->ctx());
+
+        $this->assertNull($data['ltvResult']);
+        $this->assertNotSame('', $data['ltvError']);
+    }
+
+    public function testLoadReturnsErrorForMissingShopifyCredentials(): void
+    {
+        $_POST = ['ltv_start' => '2024-01-01', 'ltv_end' => '2024-01-31'];
+
+        $data = CustomerLTVPageLoader::load('cohort', 'scan_ltv', $this->ctx(['shopifyToken' => '', 'shopifyStore' => 'N/A']));
+
+        $this->assertNull($data['ltvResult']);
+        $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $data['ltvError']);
+    }
+
+    public function testLoadSurfacesErrorWhenShopifyThrows(): void
+    {
+        $_POST = ['ltv_start' => '2024-01-01', 'ltv_end' => '2024-01-31'];
+
+        $stack = HandlerStack::create(new MockHandler([new Response(500, [], 'Internal Server Error')]));
+        $data  = CustomerLTVPageLoader::load('cohort', 'scan_ltv', $this->ctx(['httpStack' => $stack]));
+
+        $this->assertNull($data['ltvResult']);
+        $this->assertNotSame('', $data['ltvError']);
+    }
+
+    public function testLoadReturnsErrorForPlaceholderStoreWithToken(): void
+    {
+        $_POST = ['ltv_start' => '2024-01-01', 'ltv_end' => '2024-01-31'];
+
+        $data = CustomerLTVPageLoader::load('cohort', 'scan_ltv', $this->ctx(['shopifyStore' => 'N/A']));
+
+        $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $data['ltvError']);
     }
 
     // ── Empty input ───────────────────────────────────────────────────────────

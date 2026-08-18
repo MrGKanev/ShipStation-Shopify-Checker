@@ -480,7 +480,7 @@ class FulfillmentIssuePageLoader
             } else {
                 try {
                     self::setLimits(180);
-                    $ss     = new ShipStation($ctx['ssKey'], $ctx['ssSecret']);
+                    $ss     = new ShipStation($ctx['ssKey'], $ctx['ssSecret'], null, $ctx['httpStack'] ?? null);
                     $orders = self::suppressOutput(fn() => $ss->fetchAwaitingOrders());
 
                     [$rows, $bySku, $byType] = self::buildShipmentAgingData($orders, $saThreshold, time());

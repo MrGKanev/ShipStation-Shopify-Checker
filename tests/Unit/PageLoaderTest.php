@@ -1,6 +1,11 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/ThrowingNotifiers.php';
+
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -84,6 +89,53 @@ class PageLoaderTest extends TestCase
         rmdir($dir);
     }
 
+    /**
+     * A handler stack whose first request blows up with a server error,
+     * simulating a Shopify/ShipStation API outage mid-audit.
+     */
+    private function errorStack(): HandlerStack
+    {
+        return HandlerStack::create(new MockHandler([
+            new Response(500, [], 'Internal Server Error'),
+        ]));
+    }
+
+    /**
+     * A handler stack for a successful audit run that finds exactly one
+     * Shopify order missing from ShipStation: one paid/unfulfilled order via
+     * GraphQL, then an empty ShipStation order list.
+     */
+    private function auditStack(): HandlerStack
+    {
+        $mock = new MockHandler([
+            new Response(200, ['Content-Type' => 'application/json'], json_encode([
+                'data' => [
+                    'orders' => [
+                        'pageInfo' => ['hasNextPage' => false, 'endCursor' => null],
+                        'edges'    => [[
+                            'node' => [
+                                'id'                       => 'gid://shopify/Order/1',
+                                'legacyResourceId'         => '1',
+                                'name'                     => '#1001',
+                                'createdAt'                => '2026-06-05T10:00:00Z',
+                                'cancelledAt'              => null,
+                                'email'                    => 'jane@example.com',
+                                'displayFinancialStatus'   => 'PAID',
+                                'displayFulfillmentStatus' => 'UNFULFILLED',
+                                'totalPriceSet'            => ['shopMoney' => ['amount' => '50.00', 'currencyCode' => 'USD']],
+                                'lineItems'                => ['nodes' => []],
+                                'shippingLines'            => ['nodes' => [['id' => 'gid://shopify/ShippingLine/1', 'title' => 'Standard', 'code' => 'STD', 'originalPriceSet' => ['shopMoney' => ['amount' => '5.00', 'currencyCode' => 'USD']]]]],
+                            ],
+                        ]],
+                    ],
+                ],
+            ])),
+            new Response(200, ['Content-Type' => 'application/json'], json_encode(['orders' => [], 'pages' => 1])),
+        ]);
+
+        return HandlerStack::create($mock);
+    }
+
     private function ctx(array $overrides = []): array
     {
         return $overrides + [
@@ -120,6 +172,52 @@ class PageLoaderTest extends TestCase
         $this->assertNull($data['auditResult']);
         $this->assertSame('API credentials missing in .env.', $data['auditError']);
         $this->assertSame('config_error', RunLog::all()[0]['status']);
+    }
+
+    public function testRunAuditSurfacesErrorAndLogsFailureWhenShopifyThrows(): void
+    {
+        $_POST = ['audit_start' => '2026-06-01', 'audit_end' => '2026-06-20'];
+
+        $data = PageLoader::load('run', 'run_audit', $this->ctx([
+            'ssKey' => 'k', 'ssSecret' => 's', 'shopifyToken' => 't', 'shopifyStore' => 'test.myshopify.com',
+            'httpStack' => $this->errorStack(),
+        ]));
+
+        $this->assertNull($data['auditResult']);
+        $this->assertNotSame('', $data['auditError']);
+        $this->assertSame('error', RunLog::all()[0]['status']);
+    }
+
+    public function testRunAuditSlackNotificationFailureDoesNotFailTheAudit(): void
+    {
+        SlackRules::save(['audit_enabled' => true, 'audit_min_missing' => 1]);
+        $_POST = ['audit_start' => '2026-06-01', 'audit_end' => '2026-06-20'];
+
+        $data = PageLoader::load('run', 'run_audit', $this->ctx([
+            'ssKey' => 'k', 'ssSecret' => 's', 'shopifyToken' => 't', 'shopifyStore' => 'test.myshopify.com',
+            'httpStack'     => $this->auditStack(),
+            'slackNotifier' => new ThrowingSlackNotifier('https://hooks.slack.test/x'),
+        ]));
+
+        $this->assertSame('', $data['auditError']);
+        $this->assertCount(1, $data['auditResult']['missing']);
+        $this->assertSame('issues_found', RunLog::all()[0]['status'], 'the audit itself must still be logged as successful');
+    }
+
+    public function testRunAuditEmailNotificationFailureDoesNotFailTheAudit(): void
+    {
+        EmailRules::save(['run_audit' => ['mode' => 'immediate', 'threshold' => 1]]);
+        $_POST = ['audit_start' => '2026-06-01', 'audit_end' => '2026-06-20'];
+
+        $data = PageLoader::load('run', 'run_audit', $this->ctx([
+            'ssKey' => 'k', 'ssSecret' => 's', 'shopifyToken' => 't', 'shopifyStore' => 'test.myshopify.com',
+            'httpStack'     => $this->auditStack(),
+            'emailNotifier' => new ThrowingEmailNotifier('smtp.test', 587, 'user@test.com', 'pw', 'from@test.com', 'ops@test.com', 'tls'),
+        ]));
+
+        $this->assertSame('', $data['auditError']);
+        $this->assertCount(1, $data['auditResult']['missing']);
+        $this->assertSame('issues_found', RunLog::all()[0]['status'], 'the audit itself must still be logged as successful');
     }
 
     public function testInitialStateNoActionReturnsNullResult(): void

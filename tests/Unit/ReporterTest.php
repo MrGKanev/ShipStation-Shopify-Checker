@@ -95,6 +95,28 @@ class ReporterTest extends TestCase
         $this->assertSame('Widget',               $rows[0]['order_type']);
     }
 
+    public function testCsvEscapesFormulaLeadingCharactersInUserSuppliedFields(): void
+    {
+        $order = [
+            'order_number' => 65002,
+            'name'         => '#165002',
+            'id'           => 100,
+            'created_at'   => '2024-01-15T10:00:00Z',
+            'total_price'  => '10.00',
+            'email'        => '=cmd|\'/c calc\'!A0@example.com',
+            '_order_type'  => '+SUM(A1:A9)',
+        ];
+
+        $this->save([$order]);
+        $rows = $this->readCsv();
+
+        // A field opened in Excel/Sheets must never start with a formula
+        // trigger character (=, +, -, @, tab, CR) - League\Csv\EscapeFormula
+        // prefixes it with a leading ' to neutralise it as plain text.
+        $this->assertStringStartsNotWith('=', $rows[0]['email']);
+        $this->assertStringStartsNotWith('+', $rows[0]['order_type']);
+    }
+
     public function testCsvHandlesMissingFields(): void
     {
         $this->save([['order_number' => 12345]]);
@@ -158,5 +180,111 @@ class ReporterTest extends TestCase
         $this->assertStringContainsString('2024-01-15', $content);
         $this->assertStringContainsString('$99.00', $content);
         $this->assertStringContainsString('test@example.com', $content);
+    }
+
+    public function testSaveReportsCreatesMissingDirectory(): void
+    {
+        $nested = $this->tmpDir . '/nested/sub';
+        Reporter::saveReports([], '2024-01-01', '2024-01-31', $nested);
+
+        $this->assertDirectoryExists($nested);
+        $this->assertFileExists($nested . '/missing_' . date('Y-m-d') . '.csv');
+
+        foreach (glob($nested . '/*') ?: [] as $f) {
+            unlink($f);
+        }
+        rmdir($nested);
+        rmdir($this->tmpDir . '/nested');
+    }
+
+    // ── printSummary ─────────────────────────────────────────────────────────
+
+    private function summary(
+        array $missing = [],
+        array $found = [],
+        array $skipped = [],
+        string $start = '2024-01-01',
+        string $end = '2024-01-31',
+        array $spotChecks = [],
+        array $ignored = []
+    ): string {
+        ob_start();
+        Reporter::printSummary($missing, $found, $skipped, $start, $end, $spotChecks, $ignored);
+        return ob_get_clean();
+    }
+
+    public function testPrintSummaryShowsPeriodAndCounts(): void
+    {
+        $output = $this->summary(
+            missing: [['order_number' => 1]],
+            found: [['id' => 1], ['id' => 2]],
+            skipped: [['id' => 3]],
+            start: '2024-01-01',
+            end: '2024-01-31',
+            ignored: [['id' => 4]]
+        );
+
+        $this->assertStringContainsString('AUDIT SUMMARY  2024-01-01 -> 2024-01-31', $output);
+        $this->assertStringContainsString('Shopify orders in window : 5', $output);
+        $this->assertStringContainsString('Matched in ShipStation   : 2', $output);
+        $this->assertStringContainsString('Skipped (cancelled/etc)  : 1', $output);
+        $this->assertStringContainsString('Ignored (manual)         : 1', $output);
+        $this->assertStringContainsString('MISSING from ShipStation : 1', $output);
+    }
+
+    public function testPrintSummaryShowsOkWhenNothingMissing(): void
+    {
+        $output = $this->summary();
+        $this->assertStringContainsString('[OK] All paid orders are present in ShipStation.', $output);
+    }
+
+    public function testPrintSummaryListsMissingOrderDetails(): void
+    {
+        $order = [
+            'order_number'     => 65001,
+            'created_at'       => '2024-01-15T10:00:00Z',
+            'total_price'      => '99.5',
+            'financial_status' => 'paid',
+            'email'            => 'test@example.com',
+        ];
+
+        $output = $this->summary(missing: [$order]);
+
+        $this->assertStringContainsString('[!!] Missing orders:', $output);
+        $this->assertStringContainsString('#65001', $output);
+        $this->assertStringContainsString('2024-01-15', $output);
+        $this->assertStringContainsString('$99.50', $output);
+        $this->assertStringContainsString('paid', $output);
+        $this->assertStringContainsString('test@example.com', $output);
+    }
+
+    public function testPrintSummaryFallsBackToNameWhenOrderNumberMissing(): void
+    {
+        $output = $this->summary(missing: [['name' => '#165002']]);
+        $this->assertStringContainsString('#165002', $output);
+    }
+
+    public function testPrintSummaryOmitsSpotCheckSectionWhenEmpty(): void
+    {
+        $output = $this->summary();
+        $this->assertStringNotContainsString('SPOT-CHECK RESULTS', $output);
+    }
+
+    public function testPrintSummaryShowsSpotCheckNotFound(): void
+    {
+        $output = $this->summary(spotChecks: [['orderNumber' => 42, 'ssOrders' => []]]);
+
+        $this->assertStringContainsString('SPOT-CHECK RESULTS', $output);
+        $this->assertStringContainsString('#42 => NOT FOUND in ShipStation', $output);
+    }
+
+    public function testPrintSummaryShowsSpotCheckMatches(): void
+    {
+        $output = $this->summary(spotChecks: [[
+            'orderNumber' => 42,
+            'ssOrders'    => [['orderNumber' => 'SS-42', 'orderStatus' => 'shipped', 'orderId' => 7]],
+        ]]);
+
+        $this->assertStringContainsString('#42 => found as SS #SS-42 (id=7, status=shipped)', $output);
     }
 }

@@ -31,7 +31,7 @@ class GiftCardPageLoader
             } else {
                 try {
                     self::setLimits(120);
-                    $shopify   = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj']);
+                    $shopify   = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], $ctx['cacheObj'], $ctx['httpStack'] ?? null);
                     $giftCards = self::suppressOutput(fn() => $shopify->fetchGiftCards());
                     $scanned   = count($giftCards);
                     $rows      = self::buildGiftCardRows($giftCards, $gcDays, time());

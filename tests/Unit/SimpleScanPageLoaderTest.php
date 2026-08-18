@@ -11,6 +11,7 @@ require_once __DIR__ . '/../../src/Logger.php';
 require_once __DIR__ . '/../../src/Shopify.php';
 require_once __DIR__ . '/../../src/ScanRunner.php';
 require_once __DIR__ . '/../../src/SimpleScanPageLoader.php';
+require_once __DIR__ . '/support/ThrowingNotifiers.php';
 
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
@@ -149,6 +150,58 @@ class SimpleScanPageLoaderTest extends TestCase
         $this->assertNull($submitted['pfResult']);
         $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $submitted['pfError']);
         $this->assertSame(9, $submitted['pfThreshold']);
+    }
+
+    public function testReturnsInitialStateUsesRequestRange(): void
+    {
+        $data = SimpleScanPageLoader::load('returns', '', $this->ctx());
+
+        $this->assertNull($data['rtResult']);
+        $this->assertSame('', $data['rtError']);
+    }
+
+    public function testReturnsMissingShopifyCredentials(): void
+    {
+        $_POST = ['rt_start' => '2026-06-01', 'rt_end' => '2026-06-20'];
+
+        $data = SimpleScanPageLoader::load('returns', 'scan_returns', $this->ctx(['shopifyToken' => '', 'shopifyStore' => 'N/A']));
+
+        $this->assertNull($data['rtResult']);
+        $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $data['rtError']);
+        $this->assertSame('2026-06-01', $data['rtStart']);
+        $this->assertSame('2026-06-20', $data['rtEnd']);
+    }
+
+    public function testReturnsValidatesDateRange(): void
+    {
+        $_POST = ['rt_start' => '2026-06-20', 'rt_end' => '2026-06-01'];
+
+        $data = SimpleScanPageLoader::load('returns', 'scan_returns', $this->ctx());
+
+        $this->assertNull($data['rtResult']);
+        $this->assertNotSame('', $data['rtError']);
+    }
+
+    public function testEmailReturnedItemsSurfacesErrorWhenNotifierThrows(): void
+    {
+        $previousAlertEmail = getenv('ALERT_EMAIL');
+        putenv('ALERT_EMAIL=ops@test.com');
+
+        try {
+            $_POST    = ['ri_start' => '2026-07-01', 'ri_end' => '2026-07-31'];
+            $notifier = new ThrowingEmailNotifier('smtp.test', 587, 'user@test.com', 'pw', 'from@test.com', 'ops@test.com', 'tls');
+
+            $data = SimpleScanPageLoader::load(
+                'returneditems',
+                'email_returneditems',
+                $this->ctx(['httpStack' => $this->refundedOrdersStack(), 'emailNotifier' => $notifier])
+            );
+
+            $this->assertSame('', $data['riEmailMessage']);
+            $this->assertNotSame('', $data['riEmailError']);
+        } finally {
+            $previousAlertEmail === false ? putenv('ALERT_EMAIL') : putenv("ALERT_EMAIL={$previousAlertEmail}");
+        }
     }
 
     public function testUnknownPageReturnsEmptyData(): void

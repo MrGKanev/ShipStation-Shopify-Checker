@@ -391,7 +391,9 @@ class Auth
 
     private static function usersFile(): string
     {
-        return __DIR__ . '/../data/users.json';
+        return self::$customFile
+            ? dirname(self::$customFile) . '/users.json'
+            : (__DIR__ . '/../data/users.json');
     }
 
     /**
