@@ -162,6 +162,13 @@ class AllViewsSmokeTest extends TestCase
             'storeLabel'    => 'Test Store',
             'userRole'      => 'admin',
             'flash'         => [],
+            // ManageSettingsPageLoader::loadWebhookHealth() calls
+            // Shopify::fetchWebhooks() unconditionally on every load (no
+            // action guard, unlike every scan page) - inject a stub so
+            // this stays a hermetic unit test instead of making a real
+            // network call.
+            'shopifyRequest' => fn(string $url, array $headers): array =>
+                ['ok' => true, 'code' => 200, 'error' => '', 'json' => ['webhooks' => []]],
         ];
     }
 }
