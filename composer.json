@@ -14,7 +14,11 @@
         "phpunit/phpunit": "^13"
     },
     "autoload": {
+        "psr-4": {
+            "Shopify\\": "src/Shopify/"
+        },
         "classmap": ["src/"],
+        "exclude-from-classmap": ["src/Shopify/"],
         "files": ["src/ViewHelpers.php"]
     },
     "scripts": {

@@ -3,9 +3,6 @@ declare(strict_types=1);
 
 namespace Shopify\GraphQL;
 
-require_once __DIR__ . '/Ids.php';
-require_once __DIR__ . '/OrderComponentNormalizer.php';
-
 /**
  * Maps Shopify Admin GraphQL Order payloads into the legacy REST-shaped arrays
  * consumed by the rest of the app.

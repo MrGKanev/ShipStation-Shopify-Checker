@@ -3,10 +3,6 @@ declare(strict_types=1);
 
 namespace Shopify\GraphQL;
 
-require_once __DIR__ . '/OrderTagInsights.php';
-require_once __DIR__ . '/CustomerOrderInsights.php';
-require_once __DIR__ . '/DuplicateOrderInsights.php';
-
 /**
  * Backward-compatible facade for Shopify order insight workflows.
  */

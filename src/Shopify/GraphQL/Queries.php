@@ -3,9 +3,6 @@ declare(strict_types=1);
 
 namespace Shopify\GraphQL;
 
-require_once __DIR__ . '/QueryStrings.php';
-require_once __DIR__ . '/FieldFragments.php';
-
 /**
  * Backward-compatible facade for Shopify Admin GraphQL query helpers.
  */

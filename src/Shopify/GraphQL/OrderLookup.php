@@ -3,10 +3,6 @@ declare(strict_types=1);
 
 namespace Shopify\GraphQL;
 
-require_once __DIR__ . '/OrderDirectLookup.php';
-require_once __DIR__ . '/OrderHoldLookup.php';
-require_once __DIR__ . '/OrderEventLookup.php';
-
 /**
  * Backward-compatible facade for Shopify order lookup operations.
  */

@@ -3,12 +3,6 @@ declare(strict_types=1);
 
 namespace Shopify\GraphQL;
 
-require_once __DIR__ . '/Ids.php';
-require_once __DIR__ . '/OrderNormalizer.php';
-require_once __DIR__ . '/EventNormalizer.php';
-require_once __DIR__ . '/MetafieldNormalizer.php';
-require_once __DIR__ . '/ProductNormalizer.php';
-
 /**
  * Backward-compatible facade for Shopify Admin GraphQL normalizers.
  */

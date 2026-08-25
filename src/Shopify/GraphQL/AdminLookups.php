@@ -3,10 +3,6 @@ declare(strict_types=1);
 
 namespace Shopify\GraphQL;
 
-require_once __DIR__ . '/OrderLookup.php';
-require_once __DIR__ . '/CustomDataLookups.php';
-require_once __DIR__ . '/OrderInsights.php';
-
 /**
  * Facade for non-audit Shopify Admin lookups and order searches.
  */

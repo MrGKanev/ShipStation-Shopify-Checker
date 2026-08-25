@@ -3,9 +3,6 @@ declare(strict_types=1);
 
 namespace Shopify\GraphQL;
 
-require_once __DIR__ . '/OrderQueryAudits.php';
-require_once __DIR__ . '/OrderEventAudits.php';
-
 /**
  * Backward-compatible facade for Shopify order audit workflows.
  */

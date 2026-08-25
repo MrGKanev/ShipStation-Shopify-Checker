@@ -10,8 +10,6 @@ use Shopify\GraphQL\OrderArchive;
 use Shopify\GraphQL\OrderAudits;
 use Shopify\GraphQL\OrderFetcher;
 
-require_once __DIR__ . '/Shopify/GraphQL/bootstrap.php';
-
 /**
  * Shopify Admin API client.
  *

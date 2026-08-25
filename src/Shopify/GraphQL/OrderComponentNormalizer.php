@@ -3,8 +3,6 @@ declare(strict_types=1);
 
 namespace Shopify\GraphQL;
 
-require_once __DIR__ . '/Ids.php';
-
 /**
  * Normalizes nested Order component payloads from Shopify Admin GraphQL.
  */
