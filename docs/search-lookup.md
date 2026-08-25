@@ -68,6 +68,13 @@ Shows the complete order history for a customer, looked up by email address.
 - Export to CSV (`customer-[email].csv`)
 - Truncation warning shown for stores with 250+ orders per customer
 
+### Customer LTV
+Groups all non-cancelled orders in the selected date range by customer email.
+
+- **Top Customers**: top 100 by total revenue in the period, with order count and average order value
+- **Monthly Cohort**: customers grouped by the month of their first order in the period, showing repeat rate and average orders per customer
+- Cancelled orders are excluded from all revenue figures
+
 ---
 
 ## Catalogue

@@ -44,6 +44,61 @@ Uses Shopify order events via GraphQL to detect post-placement edits to line ite
 - Time gap color-coded: red ≥ 1 day, yellow ≥ 1 hour
 - In-table search/filter by order#, email
 
+### Post-Ship Address Change
+Finds orders where the shipping address was updated *after* the first fulfillment was created - the package is already in transit and the new address cannot be applied.
+
+- Different from Address Changes, which flags any post-placement edit regardless of fulfillment state
+- Shows the change timestamp, the first-fulfillment timestamp, and the gap between them
+
+### SS Shipped / Shopify Unfulfilled
+The reverse of the standard audit: finds orders ShipStation has marked *shipped* that Shopify still shows as unfulfilled or partially fulfilled - a sync failure.
+
+- Common causes: webhook delivery failure, API timeout during fulfillment sync, or a manually shipped ShipStation order without a Shopify fulfillment hook
+- Orders fulfilled in both systems are excluded; only the discrepancy is shown
+- True orphans (no matching Shopify order at all) are excluded - use Orphan Detector for those
+
+### On-Hold Stall
+Finds Shopify orders currently in on-hold fulfillment status, placed within the scanned date range.
+
+- Uses the GraphQL `fulfillmentOrders` API - requires the `read_merchant_managed_fulfillment_orders` or `read_assigned_fulfillment_orders` scope
+- "Waiting" counts days since the order was placed
+- Hold Reason is reported by Shopify (e.g. `MANUAL`, `HIGH_RISK_OF_FRAUD`, `AWAITING_PAYMENT`)
+
+### Fulfilled Without Tracking
+Finds fulfilled (or partially fulfilled) orders where one or more fulfillments have no tracking number after a configurable grace period (default 24h).
+
+- Grace period avoids flagging fulfillments where tracking is added within minutes
+- Fulfillments with a `tracking_company` set but no `tracking_number` are also included
+
+### Shipped Item Mismatch
+Checks what ShipStation actually shipped against what the customer ordered in Shopify, at the SKU and quantity level - the standard audit only confirms an order exists in both systems, never that the contents match.
+
+- Especially valuable for multi-part bundles, where a picker can grab the wrong variant or omit an accessory undetected
+- Only ShipStation orders marked shipped are checked; cancelled, refunded/voided, or zero-value orders are excluded
+- "Missing Required" rows are the most urgent: a bundle accessory the customer ordered was left out of the shipment
+
+### Carrier Performance
+Groups ShipStation shipment records for a date range by carrier code.
+
+- Avg Delivery Days: calculated from `shipDate` to `deliveryDate` where both are present
+- Late %: percentage of shipments taking more than 5 days to deliver
+- Shipments without a delivery date are counted but excluded from the averages; availability of `deliveryDate` varies by carrier/service level
+
+### Shipping Margin Erosion
+Compares what ShipStation actually charged to ship a package against what the customer paid for shipping at checkout.
+
+- Ship Cost = ShipStation `shipmentCost + insuranceCost`; Shipping Charged = sum of the order's Shopify shipping line prices
+- Only rows where Loss (Ship Cost − Shipping Charged) exceeds a configurable threshold appear
+- Common causes: free-shipping promos on heavy/bulky items, underpriced flat-rate options, unpriced carrier zone surcharges
+- Voided shipments are excluded; only shipments matching a Shopify order by order number are checked
+
+### Fulfilled Items Report
+Itemized quantity totals for orders fulfilled in a date range, filtered by order creation date (Shopify's search API doesn't support filtering by fulfillment date).
+
+- Partially fulfilled and unfulfilled orders are excluded
+- "Show order #" breaks totals out per order instead of summing across the range
+- "Group by product" totals each product and lists the orders containing it
+
 ---
 
 ## Fraud & Compliance
@@ -77,6 +132,31 @@ Scans paid/partially paid orders for email issues before they ship.
 ### Repeat Refunds
 Identifies customers with 2+ refunded orders in the selected date range. Configurable minimum refund count (default ≥ 2). Groups by email, sorted by refund count descending. Each customer links to their full Customer Lookup page.
 
+### Duplicate Shipping Addresses
+Finds paid orders where two or more *different* customer emails ship to the exact same address - a signal for multi-account abuse, reseller networks, or dropshipping schemes.
+
+- Matching key: `address1 + city + ZIP + country`, normalized to lowercase (province and name excluded so minor variations don't hide matches)
+- Multiple orders from the *same* email to the same address are excluded - only cross-email duplicates are flagged
+- Sort by Emails descending to find the most suspicious clusters first
+
+### Note Flags
+Scans paid, unfulfilled orders for configurable keywords in the order note - surfacing orders that need attention before shipment.
+
+- Only paid/partially-paid, unfulfilled/partial orders are scanned; already-fulfilled orders are excluded
+- Keyword matching is case-insensitive substring matching (e.g. `cancel` matches "please cancel this order")
+
+### Tax Audit
+Finds paid orders above a minimum amount where no tax was charged and the customer is not marked tax-exempt in Shopify.
+
+- No jurisdiction logic is applied - this is a review signal (likely tax-setting or rate misconfiguration), not a definitive compliance verdict
+- Orders below the minimum amount are skipped to avoid noise from free or heavily-discounted orders
+
+### Marketing Consent Audit
+Finds paid orders placed by customers whose Shopify email marketing consent state is not `subscribed`.
+
+- Useful before running a marketing/win-back campaign off an order list - these customers should be excluded or handled separately
+- SMS consent is shown as an informational column but doesn't affect the flag
+
 ---
 
 ## Order Quality
@@ -94,6 +174,18 @@ Finds Shopify orders that are refunded or cancelled but still active in ShipStat
 
 ### Bundle Check
 Scans for orders missing required companion items as defined in `order_types.json` under `required_items`. Covers fulfilled orders too - catching shipped bundles missing a component is the most urgent case. See [order-types.md](order-types.md) for configuration.
+
+### Return / RMA Tracker
+Fetches refunded and partially-refunded orders in a date range and shows the returned items from each refund.
+
+- Each row is one refund event, with the items returned and the refund amount
+- Reason column shows the note attached to the refund, if any
+- SKU Return Summary totals units returned and revenue refunded per SKU across all refunds in the range
+
+### Returned Items Report
+Pulls orders refunded in a date range and sums refund line-item quantities per product/variant, filtered by order creation date.
+
+- Useful for spotting which SKUs come back most - a signal for quality issues or restock decisions
 
 ---
 
@@ -121,6 +213,34 @@ Compares current Shopify inventory levels against ShipStation orders awaiting sh
 Finds active tracked variants at zero or negative inventory that still sold in the selected recent window.
 
 - Helps identify stale stock settings, inventory sync issues, or demand that needs replenishment
+
+### Inventory Forecast
+Calculates the projected days until each tracked variant runs out of stock, based on the last 30 days of actual sales.
+
+- Only variants with inventory tracking enabled and a `deny` oversell policy are included
+- Daily Rate = units sold in last 30 days ÷ 30; Days to Zero = current stock ÷ daily rate (blank means no sales or already zero)
+- Color-coded: red < 7 days remaining, yellow 7-13 days
+
+### Zombie Products
+Finds active (published) products that cannot be purchased - either no variants defined, or every tracked variant permanently out of stock with a `deny` oversell policy.
+
+- "No variants": the product exists but has no purchasable options at all
+- "All at 0": every tracked, deny-policy variant is at zero or negative stock, showing "Sold Out" indefinitely
+- Variants set to continue selling when out of stock, or with untracked inventory, are excluded from the zero-stock check
+
+### Catalog Quality
+Finds active products with gaps that hurt storefront visibility or SEO.
+
+- Not published: not published to the Online Store sales channel, invisible to customers
+- Missing SEO title/description: no custom search-engine listing preview set
+- Not in any collection: customers can't discover the product by browsing
+
+### Gift Cards
+Finds enabled gift cards with a remaining balance that are either expiring soon or have never been redeemed.
+
+- Expiring soon: balance > 0 and expiry date falls within a configured window
+- Never redeemed: balance still equals the full initial value
+- Disabled or fully-redeemed cards are excluded
 
 ### Discount Abuse
 Groups paid orders by discount code and shipping address, then flags clusters where multiple distinct customer emails used the same code at the same destination.
