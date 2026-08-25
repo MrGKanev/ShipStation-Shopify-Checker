@@ -57,54 +57,13 @@ class Auth
         'pq_remove'           => 'manage_queue',
         'pq_clear'            => 'manage_queue',
 
-        // Batch scans and reports
-        'tag_audit'             => 'run_audit',
-        'scan_addresses'        => 'run_audit',
-        'scan_emails'           => 'run_audit',
-        'scan_hvorders'         => 'run_audit',
-        'find_refunds'          => 'run_audit',
-        'find_dupes'            => 'run_audit',
-        'find_orphans'          => 'run_audit',
-        'scan_repeat_refunds'   => 'run_audit',
-        'scan_failed_shipments' => 'run_audit',
-        'scan_addr_changes'     => 'run_audit',
-        'scan_order_edits'      => 'run_audit',
-        'scan_noteflags'        => 'run_audit',
-        'scan_addrdupes'        => 'run_audit',
-        'scan_riskreport'       => 'run_audit',
-        'scan_sameip'           => 'run_audit',
-        'scan_disputes'         => 'run_audit',
-        'scan_discountabuse'    => 'run_audit',
-        'scan_tagpolicy'        => 'run_audit',
-        'scan_country_mismatch' => 'run_audit',
-        'scan_partial_fulfill'  => 'run_audit',
-        'scan_onhold'           => 'run_audit',
-        'scan_notracking'       => 'run_audit',
-        'scan_postshipaddr'     => 'run_audit',
-        'scan_ssshipped'        => 'run_audit',
-        'scan_sla'              => 'run_audit',
-        'scan_shipmentaging'    => 'run_audit',
-        'scan_carrierperf'      => 'run_audit',
-        'scan_shipmargin'       => 'run_audit',
-        'scan_fulfilleditems'   => 'run_audit',
+        // Batch scans and reports: every action registered as a scan
+        // trigger in ToolRegistry::triggerCatalog() requires 'run_audit'
+        // unconditionally - see permissionForAction() below. These two
+        // aren't scan triggers themselves (they email an existing
+        // report), so they still need an explicit entry.
         'email_fulfilleditems'  => 'run_audit',
-        'scan_returneditems'    => 'run_audit',
         'email_returneditems'   => 'run_audit',
-        'scan_itemmismatch'     => 'run_audit',
-        'scan_activess'         => 'run_audit',
-        'scan_bundle'           => 'run_audit',
-        'scan_products'         => 'run_audit',
-        'scan_skudupes'         => 'run_audit',
-        'scan_inventory'        => 'run_audit',
-        'scan_zombieproducts'   => 'run_audit',
-        'scan_inventoryaging'   => 'run_audit',
-        'scan_inventoryforecast'=> 'run_audit',
-        'scan_returns'          => 'run_audit',
-        'scan_ltv'              => 'run_audit',
-        'scan_catalogquality'   => 'run_audit',
-        'scan_giftcards'        => 'run_audit',
-        'scan_taxaudit'         => 'run_audit',
-        'scan_consentaudit'     => 'run_audit',
 
         // Admin-only checks and settings
         'test_connection'    => 'manage_settings',
@@ -278,12 +237,20 @@ class Auth
     /**
      * Returns null for authenticated-only actions, a permission name for
      * restricted actions, and false for unknown actions.
+     *
+     * Every batch scan/report action requires 'run_audit', with no
+     * exceptions - rather than hand-duplicating one 'run_audit' line per
+     * action in ACTION_PERMISSIONS, anything already registered as a
+     * scan trigger in ToolRegistry::triggerCatalog() is trusted for that
+     * permission. Actions outside that catalog (session/nav, mutations,
+     * admin settings) still resolve from the explicit map above.
      */
     public static function permissionForAction(string $action): string|false|null
     {
-        return array_key_exists($action, self::ACTION_PERMISSIONS)
-            ? self::ACTION_PERMISSIONS[$action]
-            : false;
+        if (array_key_exists($action, self::ACTION_PERMISSIONS)) {
+            return self::ACTION_PERMISSIONS[$action];
+        }
+        return array_key_exists($action, ToolRegistry::triggerCatalog()) ? 'run_audit' : false;
     }
 
     #[\NoDiscard]

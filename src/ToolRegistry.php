@@ -173,6 +173,16 @@ class ToolRegistry
         'scan_riskreport'       => ['label' => 'Fraud risk report', 'page' => 'riskreport', 'area' => 'Risk', 'dependency' => 'Shopify'],
         'scan_sameip'           => ['label' => 'Same IP, different emails', 'page' => 'sameip', 'area' => 'Risk', 'dependency' => 'Shopify'],
         'scan_disputes'         => ['label' => 'Chargeback / dispute tracker', 'page' => 'disputes', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'scan_returns'          => ['label' => 'Return / RMA tracker', 'page' => 'returns', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'scan_returneditems'    => ['label' => 'Returned items report', 'page' => 'returneditems', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'scan_ltv'              => ['label' => 'Customer LTV & cohorts', 'page' => 'cohort', 'area' => 'Audit', 'dependency' => 'Shopify'],
+        'scan_failed_shipments' => ['label' => 'Voided shipments', 'page' => 'failedship', 'area' => 'Fulfillment', 'dependency' => 'ShipStation'],
+        'scan_fulfilleditems'   => ['label' => 'Fulfilled items report', 'page' => 'fulfilleditems', 'area' => 'Fulfillment', 'dependency' => 'Shopify'],
+        'scan_itemmismatch'     => ['label' => 'Shipped item mismatch', 'page' => 'itemmismatch', 'area' => 'Fulfillment', 'dependency' => 'Shopify + ShipStation'],
+        'scan_shipmentaging'    => ['label' => 'Shipment aging', 'page' => 'shipmentaging', 'area' => 'Fulfillment', 'dependency' => 'ShipStation'],
+        'scan_carrierperf'      => ['label' => 'Carrier performance', 'page' => 'carrierperf', 'area' => 'Fulfillment', 'dependency' => 'ShipStation'],
+        'scan_shipmargin'       => ['label' => 'Shipping margin erosion', 'page' => 'shipmargin', 'area' => 'Fulfillment', 'dependency' => 'Shopify + ShipStation'],
+        'scan_inventoryforecast'=> ['label' => 'Inventory forecast', 'page' => 'inventoryforecast', 'area' => 'Inventory', 'dependency' => 'Shopify'],
     ];
 
     /**
