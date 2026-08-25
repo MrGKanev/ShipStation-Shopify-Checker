@@ -206,6 +206,7 @@ class Auth
         session_destroy();
     }
 
+    #[\NoDiscard]
     public static function verifyPassword(string $inputPass, string $correctPass): bool
     {
         $info = password_get_info($correctPass);
@@ -229,6 +230,7 @@ class Auth
         return $_SESSION['_csrf'];
     }
 
+    #[\NoDiscard]
     public static function validateCsrf(string $token): bool
     {
         return isset($_SESSION['_csrf']) && hash_equals((string)$_SESSION['_csrf'], $token);
@@ -257,6 +259,7 @@ class Auth
      *   'manage_settings' – change settings, ban/unban IPs, Slack rules (admin only)
      *   'manage_users'    – add/delete users (admin only)
      */
+    #[\NoDiscard]
     public static function can(string $action): bool
     {
         $role = self::role();
@@ -283,6 +286,7 @@ class Auth
             : false;
     }
 
+    #[\NoDiscard]
     public static function canPerformAction(string $action): bool
     {
         $permission = self::permissionForAction($action);
