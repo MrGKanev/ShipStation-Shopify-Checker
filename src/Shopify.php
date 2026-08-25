@@ -19,7 +19,7 @@ require_once __DIR__ . '/Shopify/GraphQL/bootstrap.php';
  */
 class Shopify
 {
-    public const string API_VERSION = '2026-04';
+    public const string API_VERSION = '2026-07';
 
     private readonly GraphQLClient $graphqlClient;
     private readonly OrderArchive $orderArchive;
