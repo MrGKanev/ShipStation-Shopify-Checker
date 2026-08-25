@@ -498,4 +498,119 @@ class ViewHelpersTest extends TestCase
     {
         $this->assertSame('', severityColor(1, 30, 14, false, ''));
     }
+
+    // ── esc ───────────────────────────────────────────────────────────────────
+
+    public function testEscEscapesHtmlSpecialChars(): void
+    {
+        $this->assertSame('&lt;script&gt;alert(1)&lt;/script&gt;', esc('<script>alert(1)</script>'));
+    }
+
+    public function testEscEscapesQuotes(): void
+    {
+        $this->assertSame('&quot;&#039;', esc('"\''));
+    }
+
+    public function testEscCastsNonStringValues(): void
+    {
+        $this->assertSame('42', esc(42));
+    }
+
+    // ── badge ─────────────────────────────────────────────────────────────────
+
+    public function testBadgeShowsAllClearForZero(): void
+    {
+        $this->assertStringContainsString('All clear', badge(0));
+    }
+
+    public function testBadgeShowsCountWhenNonZero(): void
+    {
+        $this->assertStringContainsString('3 missing', badge(3));
+    }
+
+    // ── gqlOrderRow ───────────────────────────────────────────────────────────
+
+    public function testGqlOrderRowMapsFieldsAndBuildsAdminUrl(): void
+    {
+        $row = gqlOrderRow([
+            'legacyResourceId' => '1001', 'name' => '#1001', 'email' => 'jane@example.com',
+            'createdAt' => '2026-06-01T10:00:00Z', 'displayFinancialStatus' => 'PAID',
+            'displayFulfillmentStatus' => 'UNFULFILLED',
+            'totalPriceSet' => ['shopMoney' => ['amount' => '50.00', 'currencyCode' => 'USD']],
+        ], 'https://admin.shopify.com/store/x/orders');
+
+        $this->assertSame('https://admin.shopify.com/store/x/orders/1001', $row['url']);
+        $this->assertSame('2026-06-01', $row['date']);
+        $this->assertSame('chip-paid', $row['finChip']);
+        $this->assertSame('50.00', $row['amount']);
+    }
+
+    public function testGqlOrderRowUrlIsNullWithoutLegacyId(): void
+    {
+        $row = gqlOrderRow([], 'https://admin.shopify.com/store/x/orders');
+
+        $this->assertNull($row['url']);
+        $this->assertSame('-', $row['name']);
+        $this->assertSame('-', $row['date']);
+    }
+
+    // ── renderMetafieldValue ─────────────────────────────────────────────────
+
+    public function testRenderMetafieldValuePrettyPrintsJson(): void
+    {
+        $result = renderMetafieldValue('{"a":1}');
+
+        $this->assertStringContainsString('<pre', $result);
+        $this->assertStringContainsString('&quot;a&quot;: 1', $result);
+    }
+
+    public function testRenderMetafieldValueEscapesPlainText(): void
+    {
+        $result = renderMetafieldValue('<b>hi</b>');
+
+        $this->assertSame('&lt;b&gt;hi&lt;/b&gt;', $result);
+    }
+
+    // ── riskBadge ─────────────────────────────────────────────────────────────
+
+    public function testRiskBadgeMapsLevelToClass(): void
+    {
+        $this->assertStringContainsString('badge-danger', riskBadge(['level' => 'high', 'score' => 90, 'signals' => []]));
+        $this->assertStringContainsString('badge-warn', riskBadge(['level' => 'medium', 'score' => 40, 'signals' => []]));
+        $this->assertStringContainsString('badge-ok', riskBadge(['level' => 'low', 'score' => 5, 'signals' => []]));
+    }
+
+    public function testRiskBadgeShowsSignalDetailsWhenRequested(): void
+    {
+        $result = riskBadge(['level' => 'high', 'score' => 90, 'signals' => [['label' => 'New customer', 'points' => 20]]]);
+
+        $this->assertStringContainsString('<details', $result);
+        $this->assertStringContainsString('New customer', $result);
+    }
+
+    public function testRiskBadgeHidesDetailsWhenDisabled(): void
+    {
+        $result = riskBadge(['level' => 'high', 'score' => 90, 'signals' => [['label' => 'New customer', 'points' => 20]]], false);
+
+        $this->assertStringNotContainsString('<details', $result);
+    }
+
+    // ── classifyOrder ─────────────────────────────────────────────────────────
+
+    public function testClassifyOrderUsesExplicitOrderTypeWithoutConsultingComparator(): void
+    {
+        $this->assertSame('Gift', classifyOrder(['order_type' => 'Gift']));
+    }
+
+    // ── datePresets ───────────────────────────────────────────────────────────
+
+    public function testDatePresetsRendersAllButtonsWithDayCounts(): void
+    {
+        $html = datePresets();
+
+        $this->assertStringContainsString('data-days="7"', $html);
+        $this->assertStringContainsString('1 week', $html);
+        $this->assertStringContainsString('data-days="365"', $html);
+        $this->assertStringContainsString('1 year', $html);
+    }
 }
