@@ -171,4 +171,20 @@ class OrderAudits
     {
         return $this->queryAudits->fetchOrdersForConsentAudit($startDate, $endDate);
     }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersForFraudRisk(string $startDate, string $endDate): array
+    {
+        return $this->queryAudits->fetchOrdersForFraudRisk($startDate, $endDate);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersForSameIp(string $startDate, string $endDate): array
+    {
+        return $this->queryAudits->fetchOrdersForSameIp($startDate, $endDate);
+    }
 }

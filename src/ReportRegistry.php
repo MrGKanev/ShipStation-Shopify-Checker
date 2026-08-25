@@ -28,6 +28,8 @@ final class ReportRegistry
         'scan_addresses'       => ['Address Check',            '📍', 'addrcheck',       'addr'],
         'scan_addr_changes'    => ['Address Changes',          '✏️', 'addrchanges',     'ac'],
         'scan_addrdupes'       => ['Address Duplicates',       '👥', 'addrdupes',       'ad'],
+        'scan_riskreport'      => ['Fraud Risk Report',        '🚨', 'riskreport',      'fr'],
+        'scan_sameip'          => ['Same IP, Diff. Emails',    '🖥️', 'sameip',          'si'],
         'find_refunds'         => ['Refunds',                  '💰', 'refunds',         'refunds'],
         'scan_repeat_refunds'  => ['Repeat Refunds',           '🔁', 'repeatrefunds',   'rr'],
         'find_orphans'         => ['Orphan Orders',            '👻', 'orphans',         'orphan'],

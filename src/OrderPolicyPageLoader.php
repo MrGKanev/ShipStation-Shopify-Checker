@@ -16,6 +16,8 @@ class OrderPolicyPageLoader
             'discountabuse' => self::loadDiscountAbuse($action, $ctx),
             'tagpolicy'     => self::loadTagPolicy($action, $ctx),
             'consentaudit'  => self::loadConsentAudit($action, $ctx),
+            'riskreport'    => self::loadFraudRisk($action, $ctx),
+            'sameip'        => self::loadSameIp($action, $ctx),
             default         => [],
         };
     }
@@ -464,6 +466,111 @@ class OrderPolicyPageLoader
             ];
         }
         usort($rows, fn($a, $b) => strcmp($b['created_at'], $a['created_at']));
+        return $rows;
+    }
+
+    private static function loadFraudRisk(string $action, array $ctx): array
+    {
+        ['result' => $frResult, 'error' => $frError, 'start' => $frStart, 'end' => $frEnd] =
+            ScanRunner::run($action, 'scan_riskreport', $ctx, 'fr', function ($ctx, $start, $end) {
+                self::setLimits(180);
+                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
+                $orders = self::suppressOutput(fn() => $shopify->fetchOrdersForFraudRisk($start, $end));
+
+                $rows = self::buildFraudRiskRows($orders);
+                return ['rows' => $rows, 'scanned' => count($orders), 'start' => $start, 'end' => $end];
+            }, 30);
+
+        return compact('frResult', 'frError', 'frStart', 'frEnd');
+    }
+
+    /**
+     * Fraud Risk Report rows: paid orders scored by RiskScorer::score(),
+     * keeping only 'medium' and 'high' levels (score >= 21) - 'low' is too
+     * noisy to review at scale. Sorted by score descending.
+     *
+     * @param  array<int, array<string, mixed>> $orders
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildFraudRiskRows(array $orders): array
+    {
+        $rows = [];
+        foreach ($orders as $o) {
+            $risk = RiskScorer::score($o);
+            if ($risk['level'] === 'low') continue;
+
+            $rows[] = [
+                'shopify_id'   => $o['id'] ?? '',
+                'order_number' => $o['name'] ?? '',
+                'created_at'   => self::dateOnly($o['created_at'] ?? ''),
+                'email'        => $o['email'] ?? '',
+                'total'        => $o['total_price'] ?? '',
+                'financial'    => $o['financial_status'] ?? '',
+                'risk'         => $risk,
+            ];
+        }
+        usort($rows, fn($a, $b) => $b['risk']['score'] <=> $a['risk']['score']);
+        return $rows;
+    }
+
+    private static function loadSameIp(string $action, array $ctx): array
+    {
+        ['result' => $siResult, 'error' => $siError, 'start' => $siStart, 'end' => $siEnd] =
+            ScanRunner::run($action, 'scan_sameip', $ctx, 'si', function ($ctx, $start, $end) {
+                self::setLimits(180);
+                $shopify = new Shopify($ctx['shopifyStore'], $ctx['shopifyToken'], null, $ctx['httpStack'] ?? null);
+                $orders = self::suppressOutput(fn() => $shopify->fetchOrdersForSameIp($start, $end));
+
+                $rows = self::buildSameIpRows($orders);
+                return ['rows' => $rows, 'scanned' => count($orders), 'start' => $start, 'end' => $end];
+            }, 30);
+
+        return compact('siResult', 'siError', 'siStart', 'siEnd');
+    }
+
+    /**
+     * Same IP, Different Emails rows: client IPs used by 2+ distinct
+     * customer emails on paid orders in the range - a signal for
+     * multi-account abuse or fraud rings sharing a device/network. Sorted
+     * by email_count descending (order_count as tiebreaker).
+     *
+     * @param  array<int, array<string, mixed>> $orders
+     * @return array<int, array<string, mixed>>
+     */
+    private static function buildSameIpRows(array $orders): array
+    {
+        $groups = [];
+        foreach ($orders as $o) {
+            $ip = trim((string)($o['client_ip'] ?? ''));
+            $email = strtolower(trim($o['email'] ?? ''));
+            if ($ip === '' || $email === '') continue;
+
+            if (!isset($groups[$ip])) {
+                $groups[$ip] = ['emails' => [], 'orders' => []];
+            }
+            $groups[$ip]['emails'][$email] = true;
+            $groups[$ip]['orders'][] = [
+                'shopify_id'   => $o['id']          ?? '',
+                'order_number' => $o['name']        ?? '',
+                'created_at'   => self::dateOnly($o['created_at'] ?? ''),
+                'email'        => $o['email']       ?? '',
+                'total'        => $o['total_price'] ?? '',
+                'fulfillment'  => $o['fulfillment_status'] ?? '',
+            ];
+        }
+
+        $rows = [];
+        foreach ($groups as $ip => $g) {
+            if (count($g['emails']) < 2) continue;
+            $rows[] = [
+                'ip'          => $ip,
+                'email_count' => count($g['emails']),
+                'order_count' => count($g['orders']),
+                'emails'      => array_keys($g['emails']),
+                'orders'      => $g['orders'],
+            ];
+        }
+        usort($rows, fn($a, $b) => $b['email_count'] <=> $a['email_count'] ?: $b['order_count'] <=> $a['order_count']);
         return $rows;
     }
 

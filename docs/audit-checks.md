@@ -157,6 +157,20 @@ Finds paid orders placed by customers whose Shopify email marketing consent stat
 - Useful before running a marketing/win-back campaign off an order list - these customers should be excluded or handled separately
 - SMS consent is shown as an informational column but doesn't affect the flag
 
+### Fraud Risk Report
+Scores every paid order in the date range with the same composite risk model used by Spot-check and Metafields search (disposable/invalid email, billing ≠ shipping country, missing phone on a high-value order, PO Box address, partially paid, fraud/high-risk tag, Shopify HIGH risk assessment, no shipping address), then lists everything above *low* risk.
+
+- Only medium (score ≥ 21) and high (score ≥ 51) orders are shown; low is too noisy to review at scale
+- Sorted by score descending; each row expands to show the exact signals that contributed
+- Custom signal weights can be set in `data/risk_weights.json`
+
+### Same IP, Different Emails
+Finds paid orders where two or more *different* customer emails share the same client IP address recorded at checkout - a signal for multi-account abuse or a fraud ring operating from one device/network.
+
+- Multiple orders from the *same* email at the same IP are excluded - only cross-email matches are flagged
+- Shared IPs are common for offices, universities, or carrier-grade NAT - treat clusters as a review signal, not automatic proof of fraud
+- Sort by Emails descending to find the most suspicious clusters first
+
 ---
 
 ## Order Quality

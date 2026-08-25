@@ -111,4 +111,26 @@ class OrderQueryAuditsTest extends TestCase
         $this->assertTrue($filter($this->node(['cancelledAt' => '2026-01-15T00:00:00Z'])));
         $this->assertFalse($filter($this->node(['cancelledAt' => null])));
     }
+
+    public function testFetchOrdersForFraudRiskPassesNoFilterAndIncludesRiskFields(): void
+    {
+        $filter = null;
+        $fields = null;
+        $this->audits(function ($q, $f, $filt) use (&$filter, &$fields) { $filter = $filt; $fields = $f; })
+            ->fetchOrdersForFraudRisk('2026-01-01', '2026-01-31');
+
+        $this->assertNull($filter);
+        $this->assertStringContainsString('risk {', $fields);
+        $this->assertStringContainsString('shippingAddress', $fields);
+        $this->assertStringContainsString('billingAddress', $fields);
+    }
+
+    public function testFetchOrdersForSameIpIncludesClientIpField(): void
+    {
+        $fields = null;
+        $this->audits(function ($q, $f, $filt) use (&$fields) { $fields = $f; })
+            ->fetchOrdersForSameIp('2026-01-01', '2026-01-31');
+
+        $this->assertStringContainsString('clientIp', $fields);
+    }
 }

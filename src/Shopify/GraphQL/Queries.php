@@ -125,4 +125,14 @@ class Queries
     {
         return FieldFragments::customerConsentFields();
     }
+
+    public static function riskFields(): string
+    {
+        return FieldFragments::riskFields();
+    }
+
+    public static function clientIpFields(): string
+    {
+        return FieldFragments::clientIpFields();
+    }
 }

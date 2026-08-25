@@ -269,4 +269,27 @@ GQL;
 
 GQL;
     }
+
+    public static function riskFields(): string
+    {
+        return <<<'GQL'
+                risk {
+                  recommendation
+                  assessments {
+                    riskLevel
+                    provider { title }
+                    facts { description sentiment }
+                  }
+                }
+
+GQL;
+    }
+
+    public static function clientIpFields(): string
+    {
+        return <<<'GQL'
+                clientIp
+
+GQL;
+    }
 }

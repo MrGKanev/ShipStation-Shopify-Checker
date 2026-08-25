@@ -447,6 +447,27 @@ class Shopify
     }
 
     /**
+     * Fetches paid orders with billing/shipping address, tags, and Shopify's
+     * fraud risk assessment for the Fraud Risk Report.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersForFraudRisk(string $startDate, string $endDate): array
+    {
+        return $this->orderAudits->fetchOrdersForFraudRisk($startDate, $endDate);
+    }
+
+    /**
+     * Fetches paid orders with client IP for the Same IP, Different Emails audit.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersForSameIp(string $startDate, string $endDate): array
+    {
+        return $this->orderAudits->fetchOrdersForSameIp($startDate, $endDate);
+    }
+
+    /**
      * Fetches all gift cards from the store.
      *
      * @return array<int, array<string, mixed>>

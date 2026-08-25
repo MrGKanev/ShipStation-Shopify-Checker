@@ -71,6 +71,8 @@ class Auth
         'scan_order_edits'      => 'run_audit',
         'scan_noteflags'        => 'run_audit',
         'scan_addrdupes'        => 'run_audit',
+        'scan_riskreport'       => 'run_audit',
+        'scan_sameip'           => 'run_audit',
         'scan_discountabuse'    => 'run_audit',
         'scan_tagpolicy'        => 'run_audit',
         'scan_country_mismatch' => 'run_audit',

@@ -74,6 +74,8 @@ class ToolRegistry
                     ['page' => 'tagpolicy',       'icon' => '🏷', 'name' => 'Tag Policy Audit',           'desc' => 'Required and forbidden Shopify tag combinations from local policy rules'],
                     ['page' => 'taxaudit',        'icon' => '🧾', 'name' => 'Tax Audit',                  'desc' => 'Paid orders above a minimum amount with $0 tax charged to a non-exempt customer'],
                     ['page' => 'consentaudit',    'icon' => '📢', 'name' => 'Marketing Consent Audit',    'desc' => 'Orders from customers without active email marketing consent - a compliance risk if targeted'],
+                    ['page' => 'riskreport',      'icon' => '🚨', 'name' => 'Fraud Risk Report',          'desc' => 'Paid orders scored by combined fraud signals - disposable email, country mismatch, HIGH risk level, and more'],
+                    ['page' => 'sameip',          'icon' => '🖥',  'name' => 'Same IP, Different Emails',  'desc' => 'Client IP addresses used by two or more distinct customer emails - a fraud ring signal'],
                 ],
             ],
         ],
@@ -167,6 +169,8 @@ class ToolRegistry
         'scan_giftcards'        => ['label' => 'Gift card expiry / unused balance', 'page' => 'giftcards', 'area' => 'Inventory', 'dependency' => 'Shopify'],
         'scan_taxaudit'         => ['label' => 'Zero-tax paid orders', 'page' => 'taxaudit', 'area' => 'Risk', 'dependency' => 'Shopify'],
         'scan_consentaudit'     => ['label' => 'Marketing consent audit', 'page' => 'consentaudit', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'scan_riskreport'       => ['label' => 'Fraud risk report', 'page' => 'riskreport', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'scan_sameip'           => ['label' => 'Same IP, different emails', 'page' => 'sameip', 'area' => 'Risk', 'dependency' => 'Shopify'],
     ];
 
     /**

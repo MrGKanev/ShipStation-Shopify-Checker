@@ -69,6 +69,8 @@ class PageLoader
             'returneditems'     => SimpleScanPageLoader::load($page, $action, $ctx),
             'taxaudit'          => SimpleScanPageLoader::load($page, $action, $ctx),
             'consentaudit'      => OrderPolicyPageLoader::load($page, $action, $ctx),
+            'riskreport'        => OrderPolicyPageLoader::load($page, $action, $ctx),
+            'sameip'            => OrderPolicyPageLoader::load($page, $action, $ctx),
             'catalogquality'    => ProductInventoryPageLoader::load($page, $action, $ctx),
             'giftcards'         => GiftCardPageLoader::load($page, $action, $ctx),
             'jobs',

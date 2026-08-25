@@ -203,6 +203,26 @@ class OrderPolicyPageLoaderTest extends TestCase
         $this->assertSame('validation_error', RunLog::all()[0]['status']);
     }
 
+    public function testFraudRiskReportMissingShopifyCredentials(): void
+    {
+        $_POST = ['fr_start' => '2026-06-01', 'fr_end' => '2026-06-20'];
+
+        $data = OrderPolicyPageLoader::load('riskreport', 'scan_riskreport', $this->ctx(['shopifyToken' => '', 'shopifyStore' => 'N/A']));
+
+        $this->assertNull($data['frResult']);
+        $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $data['frError']);
+    }
+
+    public function testSameIpMissingShopifyCredentials(): void
+    {
+        $_POST = ['si_start' => '2026-06-01', 'si_end' => '2026-06-20'];
+
+        $data = OrderPolicyPageLoader::load('sameip', 'scan_sameip', $this->ctx(['shopifyToken' => '', 'shopifyStore' => 'N/A']));
+
+        $this->assertNull($data['siResult']);
+        $this->assertSame('SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.', $data['siError']);
+    }
+
     public function testUnknownPageReturnsEmptyData(): void
     {
         $this->assertSame([], OrderPolicyPageLoader::load('unknown', '', $this->ctx()));
@@ -249,6 +269,38 @@ class OrderPolicyPageLoaderTest extends TestCase
         $this->assertSame('', $data['adError']);
         $this->assertCount(1, $data['adResult']['rows']);
         $this->assertSame(2, $data['adResult']['rows'][0]['email_count']);
+    }
+
+    public function testFraudRiskReportSuccessFlagsHighRiskOrder(): void
+    {
+        $_POST = ['fr_start' => '2026-06-01', 'fr_end' => '2026-06-20'];
+        $stack = $this->shopifyStack([$this->graphQLOrders([
+            $this->orderNode(['name' => '#3001', 'tags' => ['fraud'], 'risk' => ['recommendation' => 'CANCEL', 'assessments' => [
+                ['riskLevel' => 'HIGH', 'provider' => ['title' => 'Shopify'], 'facts' => []],
+            ]]]),
+        ])]);
+
+        $data = OrderPolicyPageLoader::load('riskreport', 'scan_riskreport', $this->ctx(['httpStack' => $stack]));
+
+        $this->assertSame('', $data['frError']);
+        $this->assertCount(1, $data['frResult']['rows']);
+        $this->assertSame('high', $data['frResult']['rows'][0]['risk']['level']);
+    }
+
+    public function testSameIpSuccessGroupsSameIpAcrossEmails(): void
+    {
+        $_POST = ['si_start' => '2026-06-01', 'si_end' => '2026-06-20'];
+        $stack = $this->shopifyStack([$this->graphQLOrders([
+            $this->orderNode(['name' => '#4001', 'email' => 'a@example.com', 'clientIp' => '203.0.113.5']),
+            $this->orderNode(['name' => '#4002', 'email' => 'b@example.com', 'clientIp' => '203.0.113.5']),
+        ])]);
+
+        $data = OrderPolicyPageLoader::load('sameip', 'scan_sameip', $this->ctx(['httpStack' => $stack]));
+
+        $this->assertSame('', $data['siError']);
+        $this->assertCount(1, $data['siResult']['rows']);
+        $this->assertSame('203.0.113.5', $data['siResult']['rows'][0]['ip']);
+        $this->assertSame(2, $data['siResult']['rows'][0]['email_count']);
     }
 
     public function testActiveSsConflictsSuccessFlagsRefundedOrderStillActiveInSs(): void

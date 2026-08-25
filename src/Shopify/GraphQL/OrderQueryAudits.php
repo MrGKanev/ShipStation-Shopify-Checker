@@ -253,4 +253,37 @@ class OrderQueryAudits
                 . Queries::customerConsentFields()
         );
     }
+
+    /**
+     * Fetches paid orders with billing/shipping address, tags, and Shopify's
+     * fraud risk assessment for a batch RiskScorer::score() pass.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersForFraudRisk(string $startDate, string $endDate): array
+    {
+        return $this->orders->fetchOrdersByQuery(
+            Queries::paidOrdersQuery($startDate, $endDate),
+            Queries::orderCoreFields()
+                . Queries::shippingAddressFields()
+                . Queries::billingAddressFields()
+                . Queries::orderTagFields()
+                . Queries::riskFields()
+        );
+    }
+
+    /**
+     * Fetches paid orders with the placing customer's client IP, for
+     * detecting different customer emails ordering from the same device.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOrdersForSameIp(string $startDate, string $endDate): array
+    {
+        return $this->orders->fetchOrdersByQuery(
+            Queries::paidOrdersQuery($startDate, $endDate),
+            Queries::orderCoreFields()
+                . Queries::clientIpFields()
+        );
+    }
 }
