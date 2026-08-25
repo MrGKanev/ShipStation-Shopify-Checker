@@ -5,6 +5,7 @@ use GuzzleHttp\HandlerStack;
 use Shopify\GraphQL\AdminLookups;
 use Shopify\GraphQL\CatalogAndFulfillment;
 use Shopify\GraphQL\Client as GraphQLClient;
+use Shopify\GraphQL\DisputeLookup;
 use Shopify\GraphQL\OrderArchive;
 use Shopify\GraphQL\OrderAudits;
 use Shopify\GraphQL\OrderFetcher;
@@ -27,6 +28,7 @@ class Shopify
     private readonly OrderAudits $orderAudits;
     private readonly AdminLookups $adminLookups;
     private readonly CatalogAndFulfillment $catalogAndFulfillment;
+    private readonly DisputeLookup $disputeLookup;
     private readonly string $baseUrl;
     private readonly string $accessToken;
 
@@ -47,6 +49,7 @@ class Shopify
         $this->orderAudits           = new OrderAudits($this->orderFetcher);
         $this->adminLookups          = new AdminLookups($this->graphqlClient, $cache);
         $this->catalogAndFulfillment = new CatalogAndFulfillment($this->graphqlClient, $cache);
+        $this->disputeLookup         = new DisputeLookup($this->graphqlClient);
     }
 
     // ── Public ────────────────────────────────────────────────────────
@@ -465,6 +468,19 @@ class Shopify
     public function fetchOrdersForSameIp(string $startDate, string $endDate): array
     {
         return $this->orderAudits->fetchOrdersForSameIp($startDate, $endDate);
+    }
+
+    /**
+     * Fetches open/actionable Shopify Payments disputes (NEEDS_RESPONSE and
+     * UNDER_REVIEW). Requires the read_shopify_payments_disputes scope;
+     * returns an empty array (not an error) on stores without Shopify
+     * Payments or without the scope granted.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchOpenDisputes(): array
+    {
+        return $this->disputeLookup->fetchDisputes();
     }
 
     /**

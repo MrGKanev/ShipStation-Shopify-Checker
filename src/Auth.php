@@ -73,6 +73,7 @@ class Auth
         'scan_addrdupes'        => 'run_audit',
         'scan_riskreport'       => 'run_audit',
         'scan_sameip'           => 'run_audit',
+        'scan_disputes'         => 'run_audit',
         'scan_discountabuse'    => 'run_audit',
         'scan_tagpolicy'        => 'run_audit',
         'scan_country_mismatch' => 'run_audit',

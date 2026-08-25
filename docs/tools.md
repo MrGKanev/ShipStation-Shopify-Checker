@@ -86,6 +86,7 @@
 | **Marketing Consent Audit** | Orders from customers without active email marketing consent - a compliance risk if targeted for campaigns. |
 | **Fraud Risk Report** | Paid orders scored by combined fraud signals - disposable email, country mismatch, HIGH risk level, and more. |
 | **Same IP, Different Emails** | Client IP addresses used by two or more distinct customer emails - a fraud ring signal. |
+| **Chargebacks / Disputes** | Open Shopify Payments disputes needing evidence, sorted by response deadline. |
 
 ## Search & Lookup
 

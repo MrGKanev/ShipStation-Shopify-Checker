@@ -71,6 +71,7 @@ class PageLoader
             'consentaudit'      => OrderPolicyPageLoader::load($page, $action, $ctx),
             'riskreport'        => OrderPolicyPageLoader::load($page, $action, $ctx),
             'sameip'            => OrderPolicyPageLoader::load($page, $action, $ctx),
+            'disputes'          => DisputesPageLoader::load($page, $action, $ctx),
             'catalogquality'    => ProductInventoryPageLoader::load($page, $action, $ctx),
             'giftcards'         => GiftCardPageLoader::load($page, $action, $ctx),
             'jobs',

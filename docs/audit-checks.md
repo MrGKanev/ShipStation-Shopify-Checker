@@ -171,6 +171,13 @@ Finds paid orders where two or more *different* customer emails share the same c
 - Shared IPs are common for offices, universities, or carrier-grade NAT - treat clusters as a review signal, not automatic proof of fraud
 - Sort by Emails descending to find the most suspicious clusters first
 
+### Chargebacks / Disputes
+Lists open Shopify Payments disputes - buyers who questioned a charge with their bank - sorted by how urgent the evidence response deadline is.
+
+- Only Needs Response (has a hard deadline) and Under Review (evidence submitted, awaiting the card network) are shown; resolved disputes (won, lost, accepted, prevented) are excluded
+- Days Until Due goes negative once the deadline has passed - Shopify auto-accepts the dispute at that point
+- Requires the `read_shopify_payments_disputes` access scope and a store on Shopify Payments; stores without either simply return zero disputes, not an error
+
 ---
 
 ## Order Quality

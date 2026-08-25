@@ -28,3 +28,4 @@ require_once __DIR__ . '/DuplicateOrderInsights.php';
 require_once __DIR__ . '/OrderInsights.php';
 require_once __DIR__ . '/AdminLookups.php';
 require_once __DIR__ . '/CatalogAndFulfillment.php';
+require_once __DIR__ . '/DisputeLookup.php';

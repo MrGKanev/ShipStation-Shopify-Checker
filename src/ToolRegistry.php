@@ -76,6 +76,7 @@ class ToolRegistry
                     ['page' => 'consentaudit',    'icon' => '📢', 'name' => 'Marketing Consent Audit',    'desc' => 'Orders from customers without active email marketing consent - a compliance risk if targeted'],
                     ['page' => 'riskreport',      'icon' => '🚨', 'name' => 'Fraud Risk Report',          'desc' => 'Paid orders scored by combined fraud signals - disposable email, country mismatch, HIGH risk level, and more'],
                     ['page' => 'sameip',          'icon' => '🖥',  'name' => 'Same IP, Different Emails',  'desc' => 'Client IP addresses used by two or more distinct customer emails - a fraud ring signal'],
+                    ['page' => 'disputes',        'icon' => '⚖',  'name' => 'Chargebacks / Disputes',     'desc' => 'Open Shopify Payments disputes needing evidence, sorted by response deadline'],
                 ],
             ],
         ],
@@ -171,6 +172,7 @@ class ToolRegistry
         'scan_consentaudit'     => ['label' => 'Marketing consent audit', 'page' => 'consentaudit', 'area' => 'Risk', 'dependency' => 'Shopify'],
         'scan_riskreport'       => ['label' => 'Fraud risk report', 'page' => 'riskreport', 'area' => 'Risk', 'dependency' => 'Shopify'],
         'scan_sameip'           => ['label' => 'Same IP, different emails', 'page' => 'sameip', 'area' => 'Risk', 'dependency' => 'Shopify'],
+        'scan_disputes'         => ['label' => 'Chargeback / dispute tracker', 'page' => 'disputes', 'area' => 'Risk', 'dependency' => 'Shopify'],
     ];
 
     /**
