@@ -6,6 +6,8 @@ declare(strict_types=1);
  */
 class GiftCardPageLoader
 {
+    use RealtimeScanLoader;
+
     public static function load(string $page, string $action, array $ctx): array
     {
         return match ($page) {
@@ -107,49 +109,5 @@ class GiftCardPageLoader
     private static function dateOnly(string $dt): string
     {
         return substr($dt, 0, 10);
-    }
-
-    private static function setLimits(int $secs = 300): void
-    {
-        if (function_exists('set_time_limit')) set_time_limit($secs);
-    }
-
-    private static function requireShopify(array $ctx): ?string
-    {
-        return (!$ctx['shopifyToken'] || $ctx['shopifyStore'] === 'N/A')
-            ? 'SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE not set in .env.'
-            : null;
-    }
-
-    private static function appendRunLog(
-        string $tool,
-        string $status,
-        string $createdAt,
-        float $startedAt,
-        string $error = '',
-        ?int $scanned = null,
-        ?int $rowsFound = null,
-        array $meta = []
-    ): void {
-        RunLog::append([
-            'tool'       => $tool,
-            'status'     => $status,
-            'created_at' => $createdAt,
-            'duration'   => round(microtime(true) - $startedAt, 2),
-            'scanned'    => $scanned,
-            'rows_found' => $rowsFound,
-            'error'      => $error,
-            'meta'       => ['api_version' => Shopify::API_VERSION] + $meta,
-        ]);
-    }
-
-    private static function suppressOutput(callable $fn): mixed
-    {
-        ob_start();
-        try {
-            return $fn();
-        } finally {
-            ob_end_clean();
-        }
     }
 }
