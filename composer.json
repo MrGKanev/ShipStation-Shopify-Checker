@@ -22,7 +22,9 @@
         "files": ["src/ViewHelpers.php"]
     },
     "scripts": {
-        "test": "phpunit"
+        "test": "phpunit",
+        "docs": "php bin/generate-tools-doc.php",
+        "docs:check": "php bin/generate-tools-doc.php --check"
     },
     "extra": {
         "app-version": "2.1.0"
