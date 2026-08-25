@@ -537,7 +537,6 @@ class Shopify
         $raw  = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err  = curl_error($ch);
-        curl_close($ch);
 
         $json = is_string($raw) ? json_decode($raw, true) : null;
         return [

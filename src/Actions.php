@@ -562,7 +562,6 @@ class Actions
             $ms   = (int) round((microtime(true) - $t0) * 1000);
             $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $err  = curl_error($ch);
-            curl_close($ch);
             return ['ok' => ($code >= 200 && $code < 300), 'code' => $code, 'ms' => $ms, 'error' => $err ?: null];
         };
 
