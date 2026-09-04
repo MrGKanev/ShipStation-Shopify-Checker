@@ -29,7 +29,7 @@
         "docs:check": "php bin/generate-tools-doc.php --check"
     },
     "extra": {
-        "app-version": "2.1.0"
+        "app-version": "2.2.0"
     },
     "config": {
         "optimize-autoloader": true
