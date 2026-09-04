@@ -1,25 +1,56 @@
-.env
-stores.json
-order_types.json
-tag_policy.json
-cache/*
-!cache/.htaccess
-logs/*
-!logs/.htaccess
+# Local secrets and deployment configuration
+/.env
+/.env.*
+!/.env.example
+/stores.json
+/order_types.json
+/tag_policy.json
 
-# Keep .htaccess files but ignore generated content
-reports/*
-!reports/.htaccess
+# Installed PHP and frontend dependencies
+/vendor/
+/node_modules/
 
-data/*
-!data/.htaccess
-!data/note_templates.json.example
-/temp
-*.DS_Store
+# Runtime state; keep server-deny rules and distributable examples
+/cache/*
+!/cache/.htaccess
+/logs/*
+!/logs/.htaccess
+/reports/*
+!/reports/.htaccess
+/data/*
+!/data/.htaccess
+!/data/*.example
+!/data/**/*.example
+/temp/
+/tmp/
+
+# SQLite runtime and sidecar files, wherever a store data directory lives
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+*.db
+*.db-shm
+*.db-wal
+
+# Test, coverage and static-analysis output
+/.phpunit.cache/
+/.phpunit.result.cache
+/coverage/
+/coverage.xml
+/var/
+/.phpstan.cache
+/.php-cs-fixer.cache
+
+# Editors, operating systems and local agent worktrees
+/.idea/
+/.vscode/
+/.fleet/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+/.claude/worktrees/
+
+# Local root-level exports
 /*.txt
-
-# Node / pnpm
-node_modules/
-/vendor
-.phpunit.result.cache
-/.claude/worktrees
