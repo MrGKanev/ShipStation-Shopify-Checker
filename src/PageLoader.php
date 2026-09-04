@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/DashboardPageLoader.php';
+
 use League\Csv\Reader;
 
 /**
@@ -18,7 +20,7 @@ class PageLoader
 
         // Page-specific
         $data += match ($page) {
-            'dashboard'   => self::loadDashboard($ctx, $data),
+            'dashboard'   => DashboardPageLoader::load($ctx, $data),
             'run'         => self::loadAudit($action, $ctx, $data),
             'globalsearch'=> SearchLookupPageLoader::load($page, $action, $ctx, $data),
             'spotcheck'   => SearchLookupPageLoader::load($page, $action, $ctx, $data),
@@ -410,150 +412,6 @@ class PageLoader
         } finally {
             ob_end_clean();
         }
-    }
-
-    // ── Dashboard ─────────────────────────────────────────────────────────────
-
-    private static function loadDashboard(array $ctx, array $already): array
-    {
-        $reports       = $already['reports']   ?? [];
-        $pushLog       = $already['pushLog']   ?? [];
-        $ignoredOrders = $ctx['ignoredOrders'] ?? [];
-        $cacheObj      = $ctx['cacheObj'];
-
-        $dbCacheFlushed = max(0, (int) ($_GET['cache_flushed'] ?? 0));
-
-        // Push stats - last 30 days
-        $cutoff30      = date('Y-m-d', strtotime('-30 days'));
-        $dbPushRecent  = array_values(array_filter(
-            $pushLog,
-            fn($e) => substr($e['pushed_at'] ?? '', 0, 10) >= $cutoff30
-        ));
-
-        // Last 10 reports for the history bar chart
-        $dbTrendReports = array_slice($reports, 0, 10);
-        $counts         = array_column($dbTrendReports, 'count');
-        $dbMaxCount     = max(1, ...(count($counts) ? $counts : [1]));
-
-        // Totals across all history
-        $dbTotalReports = count($reports);
-        $dbTotalMissing = (int) array_sum(array_column($reports, 'count'));
-
-        // Trend: compare latest vs previous report (-1 better, 0 same, 1 worse)
-        $dbTrend = null;
-        if (count($reports) >= 2) {
-            $dbTrend = $reports[0]['count'] <=> $reports[1]['count'];
-        }
-
-        // Last push date
-        $dbLastPush = $pushLog[0]['pushed_at'] ?? null;
-
-        // Cache stats
-        $dbCacheCount = $cacheObj ? count($cacheObj->entries()) : 0;
-
-        // Days since last audit
-        $dbDaysSinceAudit = null;
-        if (!empty($reports[0]['date'])) {
-            $dbDaysSinceAudit = (int) round(
-                (strtotime('today') - strtotime($reports[0]['date'])) / 86400
-            );
-        }
-
-        // Oldest unresolved missing order (by created_at) in latest report
-        $dbOldestMissingDays = null;
-        if (!empty($reports[0]['missing'])) {
-            $dates = array_filter(array_column($reports[0]['missing'], 'created_at'));
-            if ($dates) {
-                $dbOldestMissingDays = (int) round(
-                    (strtotime('today') - strtotime(substr(min($dates), 0, 10))) / 86400
-                );
-            }
-        }
-
-        // Stale ignored orders (ignored 60+ days ago)
-        $cutoff60       = date('Y-m-d', strtotime('-60 days'));
-        $dbStaleIgnored = count(array_filter(
-            $ignoredOrders,
-            fn($e) => ($e['ignored_at'] ?? '9999-99-99') <= $cutoff60
-        ));
-
-        // Missing order type breakdown for the latest report
-        $dbMissingByType = [];
-        foreach ($reports[0]['missing'] ?? [] as $o) {
-            $t = $o['order_type'] ?? 'Unknown';
-            $dbMissingByType[$t] = ($dbMissingByType[$t] ?? 0) + 1;
-        }
-        arsort($dbMissingByType);
-
-        // Average days between consecutive audits
-        $dbAvgCadence = null;
-        if (count($reports) >= 2) {
-            $gaps = [];
-            for ($i = 0; $i < count($reports) - 1; $i++) {
-                $gaps[] = (strtotime($reports[$i]['date']) - strtotime($reports[$i + 1]['date'])) / 86400;
-            }
-            $dbAvgCadence = (float) round(array_sum($gaps) / count($gaps), 1);
-        }
-
-        // Pushes today and this week
-        $today     = date('Y-m-d');
-        $weekStart = date('Y-m-d', strtotime('-6 days'));
-        $dbPushesToday = count(array_filter($pushLog, fn($e) => substr($e['pushed_at'] ?? '', 0, 10) === $today));
-        $dbPushesWeek  = count(array_filter($pushLog, fn($e) => substr($e['pushed_at'] ?? '', 0, 10) >= $weekStart));
-
-        // 7-day audit timeline (null = no audit ran that day)
-        $dbLast7DayAudits = [];
-        for ($i = 6; $i >= 0; $i--) {
-            $dbLast7DayAudits[date('Y-m-d', strtotime("-{$i} days"))] = null;
-        }
-        foreach ($reports as $r) {
-            if (array_key_exists($r['date'], $dbLast7DayAudits)) {
-                $dbLast7DayAudits[$r['date']] = $r['count'];
-            }
-        }
-
-        // Cache freshness
-        $dbCacheNewestRefresh  = null;
-        $dbCacheFreshCount     = 0;
-        $dbCacheExpiredCount   = 0;
-        if ($cacheObj) {
-            $entries = $cacheObj->entries();
-            $dbCacheFreshCount   = count(array_filter($entries, fn($e) => !$e['expired']));
-            $dbCacheExpiredCount = count(array_filter($entries, fn($e) => $e['expired']));
-            $ttl = $ctx['cacheTtl'] ?? 0;
-            if ($entries && $ttl > 0) {
-                $maxExpiry = max(array_column($entries, 'expires_at'));
-                $dbCacheNewestRefresh = $maxExpiry - $ttl;
-            }
-        }
-
-        // Average days from first-seen-as-missing to pushed
-        $dbAvgResolutionDays = null;
-        $orderHistory        = $already['orderHistory'] ?? [];
-        $lags = [];
-        foreach ($pushLog as $p) {
-            $norm   = Comparator::normalise($p['order_number'] ?? '');
-            $pushed = substr($p['pushed_at'] ?? '', 0, 10);
-            if ($norm && $pushed && isset($orderHistory[$norm]['first'])) {
-                $first = $orderHistory[$norm]['first'];
-                $lag   = (strtotime($pushed) - strtotime($first)) / 86400;
-                if ($lag >= 0) $lags[] = $lag;
-            }
-        }
-        if ($lags) {
-            $dbAvgResolutionDays = (float) round(array_sum($lags) / count($lags), 1);
-        }
-
-        return compact(
-            'dbPushRecent', 'dbTrendReports', 'dbMaxCount',
-            'dbTotalReports', 'dbTotalMissing', 'dbTrend',
-            'dbLastPush', 'dbCacheCount',
-            'dbDaysSinceAudit', 'dbOldestMissingDays', 'dbStaleIgnored',
-            'dbMissingByType', 'dbAvgCadence', 'dbAvgResolutionDays',
-            'dbPushesToday', 'dbPushesWeek',
-            'dbLast7DayAudits',
-            'dbCacheNewestRefresh', 'dbCacheFreshCount', 'dbCacheExpiredCount', 'dbCacheFlushed'
-        );
     }
 
 }

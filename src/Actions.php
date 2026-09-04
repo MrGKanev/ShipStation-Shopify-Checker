@@ -1,6 +1,9 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/UserManagementActions.php';
+require_once __DIR__ . '/PrintQueueActions.php';
+
 /**
  * Handles all POST actions that terminate with a redirect or direct output.
  * Call Actions::dispatch() early in index.php; it exits if the action was handled.
@@ -29,11 +32,11 @@ class Actions
             'flush_cache'         => self::flushCache($ctx),
             'test_connection'     => self::testConnection($ctx),
             'refresh_api_health'  => self::refreshApiHealth($ctx),
-            'pq_add'              => self::printQueueAdd(),
-            'pq_remove'           => self::printQueueRemove(),
-            'pq_clear'            => self::printQueueClear(),
-            'add_user'            => self::addUser($ctx),
-            'delete_user'         => self::deleteUser($ctx),
+            'pq_add'              => PrintQueueActions::add(),
+            'pq_remove'           => PrintQueueActions::remove(),
+            'pq_clear'            => PrintQueueActions::clear(),
+            'add_user'            => UserManagementActions::add(),
+            'delete_user'         => UserManagementActions::delete(),
             'save_order_note'     => self::saveOrderNote($ctx),
             default               => null,
         };
@@ -371,63 +374,6 @@ class Actions
         exit;
     }
 
-    private static function printQueueAdd(): void
-    {
-        $num = trim($_POST['pq_order_number'] ?? '');
-        if ($num === '') {
-            self::flash('pq_error', 'Order number cannot be empty.');
-            header('Location: ?page=printqueue');
-            exit;
-        }
-
-        PrintQueue::add($num, trim($_POST['pq_note'] ?? ''));
-        UserActionLog::append('pq_add', ['order_number' => $num]);
-        self::flash('pq_message', "Order #{$num} added to the print queue.");
-        header('Location: ?page=printqueue');
-        exit;
-    }
-
-    private static function printQueueRemove(): void
-    {
-        $num = trim($_POST['pq_order_number'] ?? '');
-        PrintQueue::remove($num);
-        UserActionLog::append('pq_remove', ['order_number' => $num]);
-        self::flash('pq_message', "Order #{$num} removed from the queue.");
-        header('Location: ?page=printqueue');
-        exit;
-    }
-
-    private static function printQueueClear(): void
-    {
-        $count = count(PrintQueue::all());
-        PrintQueue::clear();
-        UserActionLog::append('pq_clear', ['count' => $count]);
-        self::flash('pq_message', 'Print queue cleared.');
-        header('Location: ?page=printqueue');
-        exit;
-    }
-
-    private static function addUser(array $ctx): void
-    {
-        $username = trim($_POST['new_username'] ?? '');
-        $password = $_POST['new_password'] ?? '';
-        $role     = $_POST['new_role'] ?? 'viewer';
-
-        $users = Auth::loadUsers();
-        if ($err = self::validateNewUser($users, $username, $password, $role)) {
-            header('Location: ?page=settings&user_error=' . urlencode($err)); exit;
-        }
-
-        $users[] = [
-            'name'          => $username,
-            'password_hash' => password_hash($password, PASSWORD_DEFAULT),
-            'role'          => $role,
-        ];
-        Auth::saveUsers($users);
-        UserActionLog::append('add_user', ['username' => $username, 'role' => $role]);
-        header('Location: ?page=settings&user_added=1'); exit;
-    }
-
     /**
      * Validates a new-user submission against the existing user list.
      * Returns an error message, or null when valid.
@@ -436,32 +382,7 @@ class Actions
      */
     public static function validateNewUser(array $existingUsers, string $username, string $password, string $role): ?string
     {
-        if (!in_array($role, ['viewer', 'operator', 'admin'], true)) {
-            return 'Invalid role.';
-        }
-        if ($username === '' || $password === '') {
-            return 'Username and password are required.';
-        }
-        foreach ($existingUsers as $u) {
-            if (($u['name'] ?? '') === $username) {
-                return 'A user with that username already exists.';
-            }
-        }
-        return null;
-    }
-
-    private static function deleteUser(array $ctx): void
-    {
-        $username = trim($_POST['username'] ?? '');
-        if ($username === '') {
-            header('Location: ?page=settings'); exit;
-        }
-
-        $users = Auth::loadUsers();
-        $users = array_values(array_filter($users, fn($u) => ($u['name'] ?? '') !== $username));
-        Auth::saveUsers($users);
-        UserActionLog::append('delete_user', ['username' => $username]);
-        header('Location: ?page=settings&user_deleted=1'); exit;
+        return UserManagementActions::validateNewUser($existingUsers, $username, $password, $role);
     }
 
     private static function saveOrderNote(array $ctx): void
