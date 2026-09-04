@@ -58,7 +58,9 @@ use PHPUnit\Framework\TestCase;
 class AllViewsSmokeTest extends TestCase
 {
     /** @var array<string, string> page => reason it's skipped */
-    private const EXCLUDED = [];
+    private const EXCLUDED = [
+        'access-denied' => 'Authentication shell rendered directly by index.php, not a PageLoader route.',
+    ];
 
     private string $tmpDir;
     private array $previousGet;

@@ -192,6 +192,36 @@ a:hover { text-decoration: underline; }
   color: var(--accent) !important;
   background: var(--surface) !important;
 }
+.google-login-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.google-login-btn:hover {
+  background: var(--bg);
+  border-color: var(--muted);
+  text-decoration: none;
+}
+.google-mark {
+  @apply inline-flex items-center justify-center rounded-full font-bold;
+  width: 1.35rem;
+  height: 1.35rem;
+  background: #fff;
+  color: #4285f4;
+  border: 1px solid #dadce0;
+}
+.access-denied-icon {
+  @apply inline-flex items-center justify-center rounded-full text-2xl font-semibold mb-5;
+  width: 3rem;
+  height: 3rem;
+  color: var(--c-danger-fg);
+  background: var(--c-danger-bg);
+  border: 1px solid var(--c-danger-bd);
+}
+.access-denied-copy {
+  @apply text-sm mb-6;
+  color: var(--muted);
+}
 .mobile-logo  { @apply object-contain align-middle; max-height: 28px; max-width: 160px; }
 
 /* ── Form fields ── */

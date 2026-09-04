@@ -27,6 +27,20 @@
         <div class="error-msg"><?= esc($error) ?></div>
       <?php endif; ?>
 
+      <?php if ($googleEnabled): ?>
+        <a class="btn btn-full google-login-btn" href="?auth=google">
+          <span class="google-mark" aria-hidden="true">G</span>
+          Continue with Google
+        </a>
+      <?php elseif ($googleLoginOnly): ?>
+        <div class="error-msg">Google sign-in is enabled but its configuration is incomplete.</div>
+      <?php endif; ?>
+
+      <?php if ($googleEnabled && $passwordLoginEnabled): ?>
+        <div class="login-dev-sep">or</div>
+      <?php endif; ?>
+
+      <?php if ($passwordLoginEnabled): ?>
       <form method="post">
         <input type="hidden" name="action" value="login">
         <div class="field">
@@ -39,6 +53,7 @@
         </div>
         <button class="btn btn-full" type="submit">Sign in</button>
       </form>
+      <?php endif; ?>
 
       <?php if ($isLocalhost): ?>
         <div class="login-dev-sep">or</div>

@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/GoogleAuth.php';
+
 /**
  * Validates local JSON configuration files used by operational checks.
  */
@@ -154,12 +156,35 @@ class ConfigValidator
         $notes = [];
         $webPassword = trim((string) (getenv('WEB_PASSWORD') ?: ''));
         $multiUserMode = $usersFile !== '' && file_exists($usersFile);
+        $googleLoginOnly = filter_var(getenv('GOOGLE_LOGIN_ONLY') ?: '', FILTER_VALIDATE_BOOLEAN);
+        $googleValues = [
+            getenv('GOOGLE_CLIENT_ID'),
+            getenv('GOOGLE_CLIENT_SECRET'),
+            getenv('GOOGLE_REDIRECT_URI'),
+            getenv('GOOGLE_ALLOWED_DOMAINS'),
+            getenv('GOOGLE_DEFAULT_ROLE'),
+        ];
+        $googleRequested = $googleLoginOnly || array_filter($googleValues, static fn($value) => trim((string) $value) !== '') !== [];
+        $googleAuth = GoogleAuth::fromEnvironment();
+        $googleConfigured = $googleAuth->isConfigured();
+
+        if ($googleRequested) {
+            foreach ($googleAuth->configurationErrors() as $googleError) {
+                $issues[] = $googleError;
+            }
+            if ($googleConfigured) {
+                $notes[] = 'Google sign-in is enabled for: ' . implode(', ', GoogleAuth::parseDomains((string) getenv('GOOGLE_ALLOWED_DOMAINS')));
+            }
+        }
+        if ($googleLoginOnly && !$googleConfigured) {
+            $issues[] = 'GOOGLE_LOGIN_ONLY is enabled, but Google sign-in is not fully configured.';
+        }
 
         if ($multiUserMode) {
             $notes[] = 'data/users.json is present; multi-user login takes precedence over WEB_PASSWORD.';
-        } elseif ($webPassword === '') {
+        } elseif ($webPassword === '' && !$googleConfigured) {
             $issues[] = 'WEB_PASSWORD is not set; legacy single-user login is disabled outside localhost.';
-        } elseif (in_array($webPassword, ['changeme', 'change_me_now'], true)) {
+        } elseif (in_array($webPassword, ['changeme', 'change_me_now'], true) && !$googleConfigured) {
             $issues[] = 'WEB_PASSWORD uses an unsafe default placeholder.';
         }
 

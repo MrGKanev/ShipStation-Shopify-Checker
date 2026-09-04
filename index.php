@@ -6,6 +6,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/src/Logger.php';
 require_once __DIR__ . '/src/Auth.php';
+require_once __DIR__ . '/src/GoogleAuth.php';
+require_once __DIR__ . '/src/GoogleAuthFlow.php';
 require_once __DIR__ . '/src/Stores.php';
 require_once __DIR__ . '/src/IgnoreList.php';
 require_once __DIR__ . '/src/PushLog.php';
@@ -86,9 +88,68 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 session_start();
 
 $action      = $_POST['action'] ?? '';
-$error       = '';
+$error       = (string) ($_SESSION['_login_error'] ?? '');
+unset($_SESSION['_login_error']);
 $isLocalhost = in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1']);
 $csrfToken   = Auth::csrfToken();
+$loginPath   = (string) (parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
+$authRoute   = (string) ($_GET['auth'] ?? '');
+$googleAuth  = GoogleAuth::fromEnvironment();
+$googleAuthFlow = new GoogleAuthFlow($googleAuth);
+$googleEnabled = $googleAuth->isConfigured();
+$googleLoginOnly = filter_var(getenv('GOOGLE_LOGIN_ONLY') ?: '', FILTER_VALIDATE_BOOLEAN);
+$passwordLoginEnabled = !$googleLoginOnly;
+
+$redirectToLogin = static function (string $message) use ($loginPath): never {
+    $_SESSION['_login_error'] = $message;
+    header('Location: ' . $loginPath);
+    exit;
+};
+
+if ($authRoute === 'google') {
+    if (!$googleEnabled) {
+        $redirectToLogin('Google sign-in is not configured.');
+    }
+    header('Location: ' . $googleAuthFlow->begin($_SESSION));
+    exit;
+}
+
+if ($authRoute === 'google_callback') {
+    try {
+        $googleResult = $googleAuthFlow->complete($_GET, $_SESSION);
+    } catch (Throwable $e) {
+        $log->warning('Google sign-in failed: {message}', ['message' => $e->getMessage()]);
+        $redirectToLogin('Google sign-in could not be completed. Please try again.');
+    }
+
+    if ($googleResult['status'] === GoogleAuthFlow::CANCELLED) {
+        $redirectToLogin('Google sign-in was cancelled.');
+    }
+    if ($googleResult['status'] === GoogleAuthFlow::EXPIRED) {
+        $redirectToLogin('Google sign-in session expired. Please try again.');
+    }
+    if ($googleResult['status'] === GoogleAuthFlow::ERROR) {
+        $redirectToLogin('Google sign-in could not be completed.');
+    }
+    if ($googleResult['status'] === GoogleAuthFlow::DENIED) {
+        unset($_SESSION['authed'], $_SESSION['user_role'], $_SESSION['user_email'], $_SESSION['user_name'], $_SESSION['auth_provider']);
+        session_regenerate_id(true);
+        header('Location: ' . $loginPath . '?auth=access_denied');
+        exit;
+    }
+
+    $identity = $googleResult['identity'];
+    session_regenerate_id(true);
+    $_SESSION['authed'] = true;
+    $_SESSION['user_role'] = $googleResult['role'];
+    $_SESSION['user_email'] = (string) $identity['email'];
+    $_SESSION['user_name'] = (string) ($identity['name'] ?? $identity['email']);
+    $_SESSION['auth_provider'] = 'google';
+    $_SESSION['google_subject'] = (string) $identity['sub'];
+    $csrfToken = Auth::rotateCsrfToken();
+    header('Location: ' . $loginPath);
+    exit;
+}
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && !Auth::validateCsrf($_POST['_csrf'] ?? '')) {
     http_response_code(419);
@@ -96,7 +157,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && !Auth::validateCsrf($_PO
     exit(1);
 }
 
-if ($action === 'login') {
+if ($action === 'login' && $passwordLoginEnabled) {
     $ip        = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
     $usersFile = __DIR__ . '/data/users.json';
     if (file_exists($usersFile)) {
@@ -238,7 +299,9 @@ extract(PageLoader::load($page, $action, $ctx), EXTR_SKIP);
 // ── Render ────────────────────────────────────────────────────────────────────
 
 ob_start();
-if (!$authed) {
+if (!$authed && $authRoute === 'access_denied') {
+    require __DIR__ . '/views/access-denied.php';
+} elseif (!$authed) {
     require __DIR__ . '/views/login.php';
 } else {
     require __DIR__ . '/views/layout.php';

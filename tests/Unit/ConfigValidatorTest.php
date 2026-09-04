@@ -9,12 +9,18 @@ class ConfigValidatorTest extends TestCase
 {
     private string $tmpDir;
     private string|false $previousWebPassword;
+    /** @var array<string, string|false> */
+    private array $previousGoogleEnvironment = [];
 
     protected function setUp(): void
     {
         $this->tmpDir = sys_get_temp_dir() . '/configvalidator_' . uniqid();
         mkdir($this->tmpDir, 0755, true);
         $this->previousWebPassword = getenv('WEB_PASSWORD');
+        foreach (['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI', 'GOOGLE_ALLOWED_DOMAINS', 'GOOGLE_DEFAULT_ROLE', 'GOOGLE_LOGIN_ONLY'] as $name) {
+            $this->previousGoogleEnvironment[$name] = getenv($name);
+            putenv($name);
+        }
     }
 
     protected function tearDown(): void
@@ -23,6 +29,13 @@ class ConfigValidatorTest extends TestCase
             putenv('WEB_PASSWORD');
         } else {
             putenv('WEB_PASSWORD=' . $this->previousWebPassword);
+        }
+        foreach ($this->previousGoogleEnvironment as $name => $value) {
+            if ($value === false) {
+                putenv($name);
+            } else {
+                putenv($name . '=' . $value);
+            }
         }
         $this->removeDir($this->tmpDir);
     }
@@ -208,6 +221,117 @@ class ConfigValidatorTest extends TestCase
 
         $this->assertTrue($result['ok']);
         $this->assertStringContainsString('multi-user login', implode("\n", $result['notes']));
+    }
+
+    public function testEnvironmentAcceptsConfiguredGoogleLoginWithoutWebPassword(): void
+    {
+        putenv('WEB_PASSWORD');
+        putenv('GOOGLE_CLIENT_ID=client-id');
+        putenv('GOOGLE_CLIENT_SECRET=client-secret');
+        putenv('GOOGLE_REDIRECT_URI=https://ops.example.com/?auth=google_callback');
+        putenv('GOOGLE_ALLOWED_DOMAINS=example.com,subsidiary.com');
+
+        try {
+            $result = ConfigValidator::validateEnvironment();
+
+            $this->assertTrue($result['ok'], implode("\n", $result['issues']));
+            $this->assertStringContainsString('Google sign-in is enabled', implode("\n", $result['notes']));
+        } finally {
+            foreach (['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI', 'GOOGLE_ALLOWED_DOMAINS'] as $name) {
+                putenv($name);
+            }
+        }
+    }
+
+    public function testEnvironmentRejectsIncompleteGoogleOnlyConfiguration(): void
+    {
+        putenv('WEB_PASSWORD');
+        putenv('GOOGLE_LOGIN_ONLY=1');
+        putenv('GOOGLE_CLIENT_ID=client-id');
+
+        try {
+            $result = ConfigValidator::validateEnvironment();
+
+            $this->assertFalse($result['ok']);
+            $issues = implode("\n", $result['issues']);
+            $this->assertStringContainsString('GOOGLE_CLIENT_SECRET is missing', $issues);
+            $this->assertStringContainsString('GOOGLE_LOGIN_ONLY is enabled', $issues);
+        } finally {
+            putenv('GOOGLE_LOGIN_ONLY');
+            putenv('GOOGLE_CLIENT_ID');
+        }
+    }
+
+    public function testEnvironmentReportsAllMissingPartsOfPartialGoogleConfiguration(): void
+    {
+        putenv('WEB_PASSWORD=real-password');
+        putenv('GOOGLE_CLIENT_ID=client-id');
+
+        $result = ConfigValidator::validateEnvironment();
+        $issues = implode("\n", $result['issues']);
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('GOOGLE_CLIENT_SECRET is missing', $issues);
+        $this->assertStringContainsString('GOOGLE_REDIRECT_URI', $issues);
+        $this->assertStringContainsString('GOOGLE_ALLOWED_DOMAINS', $issues);
+    }
+
+    public function testEnvironmentRejectsInvalidGoogleRole(): void
+    {
+        putenv('WEB_PASSWORD=real-password');
+        putenv('GOOGLE_CLIENT_ID=client-id');
+        putenv('GOOGLE_CLIENT_SECRET=client-secret');
+        putenv('GOOGLE_REDIRECT_URI=https://ops.example.com/?auth=google_callback');
+        putenv('GOOGLE_ALLOWED_DOMAINS=example.com');
+        putenv('GOOGLE_DEFAULT_ROLE=owner');
+
+        $result = ConfigValidator::validateEnvironment();
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('viewer, operator, or admin', implode("\n", $result['issues']));
+    }
+
+    public function testEnvironmentRejectsInvalidAllowedDomains(): void
+    {
+        putenv('WEB_PASSWORD=real-password');
+        putenv('GOOGLE_CLIENT_ID=client-id');
+        putenv('GOOGLE_CLIENT_SECRET=client-secret');
+        putenv('GOOGLE_REDIRECT_URI=https://ops.example.com/?auth=google_callback');
+        putenv('GOOGLE_ALLOWED_DOMAINS=invalid_domain');
+
+        $result = ConfigValidator::validateEnvironment();
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('no valid domains', implode("\n", $result['issues']));
+    }
+
+    public function testEnvironmentRejectsInsecureProductionGoogleRedirect(): void
+    {
+        putenv('WEB_PASSWORD=real-password');
+        putenv('GOOGLE_CLIENT_ID=client-id');
+        putenv('GOOGLE_CLIENT_SECRET=client-secret');
+        putenv('GOOGLE_REDIRECT_URI=http://ops.example.com/?auth=google_callback');
+        putenv('GOOGLE_ALLOWED_DOMAINS=example.com');
+
+        $result = ConfigValidator::validateEnvironment();
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('must use HTTPS', implode("\n", $result['issues']));
+    }
+
+    public function testConfiguredGoogleLoginMakesUnsafeLegacyPasswordNonBlocking(): void
+    {
+        putenv('WEB_PASSWORD=change_me_now');
+        putenv('GOOGLE_CLIENT_ID=client-id');
+        putenv('GOOGLE_CLIENT_SECRET=client-secret');
+        putenv('GOOGLE_REDIRECT_URI=https://ops.example.com/?auth=google_callback');
+        putenv('GOOGLE_ALLOWED_DOMAINS=example.com');
+        putenv('GOOGLE_LOGIN_ONLY=1');
+
+        $result = ConfigValidator::validateEnvironment();
+
+        $this->assertTrue($result['ok'], implode("\n", $result['issues']));
+        $this->assertStringNotContainsString('unsafe default', implode("\n", $result['issues']));
     }
 
     public function testInvalidTagPolicyReportsMalformedRequiredAndForbiddenRules(): void

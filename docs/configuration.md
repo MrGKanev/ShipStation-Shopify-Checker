@@ -8,8 +8,14 @@
 | `SHOPIFY_ACCESS_TOKEN` | ✅ | Shopify Admin API access token |
 | `SS_API_KEY` | - | ShipStation → Settings → API (required for audit/push features) |
 | `SS_API_SECRET` | - | Same page |
-| `WEB_PASSWORD` | ✅ | Dashboard login password. Plain text is supported for compatibility; a PHP `password_hash()` value is also accepted. |
+| `WEB_PASSWORD` | Conditional | Dashboard login password. Not required when Google sign-in is fully configured. Plain text is supported for compatibility; a PHP `password_hash()` value is also accepted. |
 | `WEB_USERNAME` | - | Login username (default: `admin`) |
+| `GOOGLE_CLIENT_ID` | - | OAuth 2.0 Web application client ID from Google Cloud. Required to enable Google sign-in. |
+| `GOOGLE_CLIENT_SECRET` | - | OAuth client secret. Required to enable Google sign-in. |
+| `GOOGLE_REDIRECT_URI` | - | Exact callback URL registered in Google Cloud, for example `https://ops.example.com/?auth=google_callback`. |
+| `GOOGLE_ALLOWED_DOMAINS` | - | Comma-separated Google Workspace domains allowed to sign in, for example `example.com,subsidiary.com`. |
+| `GOOGLE_DEFAULT_ROLE` | - | RBAC role assigned to Google users: `viewer` (default), `operator`, or `admin`. |
+| `GOOGLE_LOGIN_ONLY` | - | Set to `1` to hide and disable username/password login outside the localhost quick-login path. |
 | `CACHE_TTL` | - | Cache duration in seconds (default: `82800` = 23 h). Set to `0` to disable. |
 | `APP_TITLE` | - | Label shown in browser tab and sidebar as `{APP_TITLE} - Shopify OPS` (default: `Shopify OPS`) |
 | `APP_LOGO` | - | URL to an image that replaces the brand text |
@@ -92,7 +98,9 @@ Each check can also override the recipient - leave its email field blank to fall
 
 ## Security
 
-- Username/password authentication stored in `.env`; set a non-placeholder `WEB_PASSWORD`
+- Google sign-in uses the authorization-code flow with PKCE and a one-time, 10-minute `state` value.
+- Domain access is checked server-side against Google's verified Workspace `hd` claim. The email suffix and the account-picker hint are not trusted for authorization.
+- Username/password authentication remains available unless `GOOGLE_LOGIN_ONLY=1`; set a non-placeholder `WEB_PASSWORD` when using it.
 - 3 failed login attempts per IP triggers a 1-week lockout (manageable from Settings)
 - `metrics.php` requires `METRICS_TOKEN` by default; use `METRICS_ALLOW_PUBLIC=1` only for local/dev deployments.
 - All user-supplied values escaped with `htmlspecialchars`
@@ -107,6 +115,26 @@ Each check can also override the recipient - leave its email field blank to fall
 If `data/users.json` does not exist, the legacy `.env` login is disabled outside
 localhost when `WEB_PASSWORD` is missing or still set to `changeme` /
 `change_me_now`.
+
+## Google sign-in
+
+1. In Google Cloud Console, create an **OAuth client ID** with application type **Web application**.
+2. Add the exact `GOOGLE_REDIRECT_URI` to **Authorized redirect URIs**. The scheme, host, path, and query string must match the deployed value.
+3. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and `GOOGLE_ALLOWED_DOMAINS` in `.env`.
+4. Optionally set `GOOGLE_DEFAULT_ROLE=operator` (or `admin`) and `GOOGLE_LOGIN_ONLY=1`.
+
+Example:
+
+```dotenv
+GOOGLE_CLIENT_ID=123456789.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-xxxxxxxxxxxxxxxx
+GOOGLE_REDIRECT_URI=https://ops.example.com/?auth=google_callback
+GOOGLE_ALLOWED_DOMAINS=example.com,subsidiary.com
+GOOGLE_DEFAULT_ROLE=viewer
+GOOGLE_LOGIN_ONLY=1
+```
+
+Accounts authenticated by Google but outside the allowlist are redirected to a dedicated access-denied page. Multiple domains are supported; separate them with commas.
 
 ---
 
