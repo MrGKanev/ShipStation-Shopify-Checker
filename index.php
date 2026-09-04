@@ -8,6 +8,7 @@ require_once __DIR__ . '/src/Logger.php';
 require_once __DIR__ . '/src/Auth.php';
 require_once __DIR__ . '/src/GoogleAuth.php';
 require_once __DIR__ . '/src/GoogleAuthFlow.php';
+require_once __DIR__ . '/src/Security.php';
 require_once __DIR__ . '/src/Stores.php';
 require_once __DIR__ . '/src/IgnoreList.php';
 require_once __DIR__ . '/src/PushLog.php';
@@ -51,6 +52,8 @@ Dotenv\Dotenv::createUnsafeImmutable(__DIR__)->safeLoad();
 Stores::init(__DIR__);
 
 $log = Logger::getInstance(__DIR__ . '/logs');
+$isHttps = Security::isHttps($_SERVER);
+Security::applyHeaders($isHttps);
 
 set_exception_handler(function (\Throwable $e) use ($log): void {
     $log->error('Uncaught {class}: {message}', [
@@ -76,16 +79,22 @@ set_error_handler(function (int $severity, string $message, string $file, int $l
 // ── Session / auth ────────────────────────────────────────────────────────────
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
-    $secureCookie = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
     session_set_cookie_params([
         'lifetime' => 0,
         'path'     => '/',
-        'secure'   => $secureCookie,
+        'secure'   => $isHttps,
         'httponly' => true,
         'samesite' => 'Lax',
     ]);
 }
 session_start();
+
+if (Security::sessionExpired($_SESSION)) {
+    $log->info('Authentication session expired', ['ip' => Security::clientIp($_SERVER)]);
+    $_SESSION = [];
+    session_regenerate_id(true);
+    $_SESSION['_login_error'] = 'Your session expired. Please sign in again.';
+}
 
 $action      = $_POST['action'] ?? '';
 $error       = (string) ($_SESSION['_login_error'] ?? '');
@@ -99,6 +108,7 @@ $googleAuthFlow = new GoogleAuthFlow($googleAuth);
 $googleEnabled = $googleAuth->isConfigured();
 $googleLoginOnly = filter_var(getenv('GOOGLE_LOGIN_ONLY') ?: '', FILTER_VALIDATE_BOOLEAN);
 $passwordLoginEnabled = !$googleLoginOnly;
+$clientIp = Security::clientIp($_SERVER);
 
 $redirectToLogin = static function (string $message) use ($loginPath): never {
     $_SESSION['_login_error'] = $message;
@@ -109,6 +119,10 @@ $redirectToLogin = static function (string $message) use ($loginPath): never {
 if ($authRoute === 'google') {
     if (!$googleEnabled) {
         $redirectToLogin('Google sign-in is not configured.');
+    }
+    if (!Security::allowRate($_SESSION, 'google_oauth_start', 10, 600)) {
+        $log->warning('Google sign-in rate limit exceeded', ['ip' => $clientIp]);
+        $redirectToLogin('Too many sign-in attempts. Please wait a few minutes.');
     }
     header('Location: ' . $googleAuthFlow->begin($_SESSION));
     exit;
@@ -132,6 +146,10 @@ if ($authRoute === 'google_callback') {
         $redirectToLogin('Google sign-in could not be completed.');
     }
     if ($googleResult['status'] === GoogleAuthFlow::DENIED) {
+        $log->warning('Google sign-in denied', [
+            'email' => (string) ($googleResult['identity']['email'] ?? ''),
+            'ip' => $clientIp,
+        ]);
         unset($_SESSION['authed'], $_SESSION['user_role'], $_SESSION['user_email'], $_SESSION['user_name'], $_SESSION['auth_provider']);
         session_regenerate_id(true);
         header('Location: ' . $loginPath . '?auth=access_denied');
@@ -146,6 +164,8 @@ if ($authRoute === 'google_callback') {
     $_SESSION['user_name'] = (string) ($identity['name'] ?? $identity['email']);
     $_SESSION['auth_provider'] = 'google';
     $_SESSION['google_subject'] = (string) $identity['sub'];
+    Security::markAuthenticated($_SESSION);
+    $log->info('Google sign-in succeeded', ['email' => $_SESSION['user_email'], 'ip' => $clientIp]);
     $csrfToken = Auth::rotateCsrfToken();
     header('Location: ' . $loginPath);
     exit;
@@ -158,7 +178,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && !Auth::validateCsrf($_PO
 }
 
 if ($action === 'login' && $passwordLoginEnabled) {
-    $ip        = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $ip        = $clientIp;
     $usersFile = __DIR__ . '/data/users.json';
     if (file_exists($usersFile)) {
         // Multi-user mode: users.json takes precedence over ENV credentials
@@ -167,6 +187,10 @@ if ($action === 'login' && $passwordLoginEnabled) {
             session_regenerate_id(true);
             $_SESSION['authed']    = true;
             $_SESSION['user_role'] = $role;
+            $_SESSION['user_name'] = trim((string) ($_POST['username'] ?? ''));
+            $_SESSION['auth_provider'] = 'password';
+            Security::markAuthenticated($_SESSION);
+            $log->info('Password sign-in succeeded', ['username' => $_SESSION['user_name'], 'ip' => $clientIp]);
             $csrfToken = Auth::rotateCsrfToken();
             header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
             exit;
@@ -184,6 +208,10 @@ if ($action === 'login' && $passwordLoginEnabled) {
                 session_regenerate_id(true);
                 $_SESSION['authed']    = true;
                 $_SESSION['user_role'] = 'admin';
+                $_SESSION['user_name'] = $legacyUser;
+                $_SESSION['auth_provider'] = 'password';
+                Security::markAuthenticated($_SESSION);
+                $log->info('Password sign-in succeeded', ['username' => $legacyUser, 'ip' => $clientIp]);
                 $csrfToken = Auth::rotateCsrfToken();
                 header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
                 exit;
@@ -196,12 +224,19 @@ if ($action === 'dev_login' && $isLocalhost) {
     session_regenerate_id(true);
     $_SESSION['authed']    = true;
     $_SESSION['user_role'] = 'admin';
+    $_SESSION['user_name'] = 'Local developer';
+    $_SESSION['auth_provider'] = 'development';
+    Security::markAuthenticated($_SESSION);
     $csrfToken = Auth::rotateCsrfToken();
     header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
     exit;
 }
 
 if ($action === 'logout') {
+    $log->info('User signed out', [
+        'username' => (string) ($_SESSION['user_email'] ?? $_SESSION['user_name'] ?? ''),
+        'ip' => $clientIp,
+    ]);
     Auth::logout();
     header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
     exit;
