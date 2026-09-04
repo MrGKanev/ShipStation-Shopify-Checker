@@ -49,4 +49,20 @@ class UserActionLogTest extends TestCase
         $this->assertSame((string) ($max + 9), $rows[0]['details']['order_number']);
         $this->assertSame('10', $rows[$max - 1]['details']['order_number']);
     }
+
+    public function testImportsLegacyJsonIntoSharedSqliteDatabase(): void
+    {
+        file_put_contents($this->tmpDir . '/user_action_log.json', json_encode([[
+            'id' => 'legacy-action', 'at' => '2026-01-01 00:00:00', 'action' => 'legacy',
+            'ip' => 'cli', 'user_agent' => 'cli', 'details' => ['imported' => true],
+        ]]));
+        putenv('STATE_STORAGE=sqlite');
+        try {
+            $this->assertSame('legacy-action', UserActionLog::all()[0]['id']);
+            $this->assertTrue(UserActionLog::all()[0]['details']['imported']);
+            $this->assertFileExists($this->tmpDir . '/user_action_log.json');
+        } finally {
+            putenv('STATE_STORAGE');
+        }
+    }
 }

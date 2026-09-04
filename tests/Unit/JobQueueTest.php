@@ -82,4 +82,34 @@ class JobQueueTest extends TestCase
         $this->assertSame('running', JobQueue::all()[0]['status']);
         $this->assertSame($id, JobQueue::all()[0]['id']);
     }
+
+    public function testImportsLegacyJsonIntoSqliteWithoutDeletingRollbackFile(): void
+    {
+        $legacy = [[
+            'id' => 'legacy-job', 'type' => 'audit', 'label' => 'Legacy', 'status' => 'pending',
+            'queued_at' => '2026-01-01 00:00:00', 'started_at' => '', 'finished_at' => '',
+            'payload' => ['legacy' => true], 'result' => [], 'error' => '',
+        ]];
+        file_put_contents($this->tmpDir . '/jobs.json', json_encode($legacy));
+        putenv('STATE_STORAGE=sqlite');
+        try {
+            $this->assertSame('legacy-job', JobQueue::all()[0]['id']);
+            $this->assertFileExists($this->tmpDir . '/jobs.json');
+            $this->assertFileExists($this->tmpDir . '/state.sqlite');
+        } finally {
+            putenv('STATE_STORAGE');
+        }
+    }
+
+    public function testJsonDriverRemainsAvailableAsRollbackPath(): void
+    {
+        putenv('STATE_STORAGE=json');
+        try {
+            JobQueue::enqueue('audit', ['rollback' => true]);
+            $this->assertFileExists($this->tmpDir . '/jobs.json');
+            $this->assertFileDoesNotExist($this->tmpDir . '/state.sqlite');
+        } finally {
+            putenv('STATE_STORAGE');
+        }
+    }
 }

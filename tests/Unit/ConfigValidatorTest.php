@@ -9,6 +9,7 @@ class ConfigValidatorTest extends TestCase
 {
     private string $tmpDir;
     private string|false $previousWebPassword;
+    private string|false $previousStateStorage;
     /** @var array<string, string|false> */
     private array $previousGoogleEnvironment = [];
 
@@ -17,6 +18,8 @@ class ConfigValidatorTest extends TestCase
         $this->tmpDir = sys_get_temp_dir() . '/configvalidator_' . uniqid();
         mkdir($this->tmpDir, 0755, true);
         $this->previousWebPassword = getenv('WEB_PASSWORD');
+        $this->previousStateStorage = getenv('STATE_STORAGE');
+        putenv('STATE_STORAGE');
         foreach (['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI', 'GOOGLE_ALLOWED_DOMAINS', 'GOOGLE_DEFAULT_ROLE', 'GOOGLE_LOGIN_ONLY'] as $name) {
             $this->previousGoogleEnvironment[$name] = getenv($name);
             putenv($name);
@@ -37,7 +40,23 @@ class ConfigValidatorTest extends TestCase
                 putenv($name . '=' . $value);
             }
         }
+        if ($this->previousStateStorage === false) {
+            putenv('STATE_STORAGE');
+        } else {
+            putenv('STATE_STORAGE=' . $this->previousStateStorage);
+        }
         $this->removeDir($this->tmpDir);
+    }
+
+    public function testEnvironmentRejectsUnknownStateStorageDriver(): void
+    {
+        putenv('STATE_STORAGE=redis');
+        putenv('WEB_PASSWORD=a-safe-password');
+
+        $result = ConfigValidator::validateEnvironment();
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('STATE_STORAGE must be sqlite or json.', implode("\n", $result['issues']));
     }
 
     public function testValidOrderTypesPasses(): void

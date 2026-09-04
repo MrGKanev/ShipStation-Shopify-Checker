@@ -16,7 +16,7 @@ A self-hosted Shopify operations toolkit. Audits and surfaces Shopify order issu
 
 ## Requirements
 
-- PHP 8.5+ with the `curl` extension
+- PHP 8.5+ with the `curl` and `pdo_sqlite` extensions
 - A web server (Apache / Nginx / Caddy) or `php -S` for local use
 - Shopify Admin API access token (`read_orders`, `read_fulfillments`, `read_metaobjects` scopes)
 - ShipStation API credentials _(optional - audit and push features only)_

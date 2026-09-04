@@ -188,6 +188,15 @@ class ConfigValidator
             $issues[] = 'WEB_PASSWORD uses an unsafe default placeholder.';
         }
 
+        $stateStorage = strtolower(trim((string) (getenv('STATE_STORAGE') ?: 'sqlite')));
+        if (!in_array($stateStorage, ['sqlite', 'json'], true)) {
+            $issues[] = 'STATE_STORAGE must be sqlite or json.';
+        } elseif ($stateStorage === 'sqlite' && !extension_loaded('pdo_sqlite')) {
+            $issues[] = 'STATE_STORAGE=sqlite requires the pdo_sqlite PHP extension.';
+        } elseif ($stateStorage === 'sqlite') {
+            $notes[] = 'Job queue and operator audit state use SQLite; legacy JSON files are retained for rollback.';
+        }
+
         $allowPublicMetrics = filter_var(getenv('METRICS_ALLOW_PUBLIC') ?: '', FILTER_VALIDATE_BOOLEAN);
         if (!getenv('METRICS_TOKEN')) {
             $notes[] = $allowPublicMetrics

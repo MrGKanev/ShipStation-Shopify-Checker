@@ -16,6 +16,10 @@
 | `GOOGLE_ALLOWED_DOMAINS` | - | Comma-separated Google Workspace domains allowed to sign in, for example `example.com,subsidiary.com`. |
 | `GOOGLE_DEFAULT_ROLE` | - | RBAC role assigned to Google users: `viewer` (default), `operator`, or `admin`. |
 | `GOOGLE_LOGIN_ONLY` | - | Set to `1` to hide and disable username/password login outside the localhost quick-login path. |
+| `TRUSTED_PROXIES` | - | Comma-separated proxy IPs/CIDRs whose forwarded HTTPS and client-IP headers may be trusted. Leave empty when not behind a proxy. |
+| `SESSION_IDLE_TIMEOUT` | - | Authenticated-session idle timeout in seconds (default: `1800`). |
+| `SESSION_ABSOLUTE_TIMEOUT` | - | Maximum authenticated-session lifetime in seconds (default: `43200`). |
+| `STATE_STORAGE` | - | `sqlite` (default) for jobs/operator audit state, or `json` for rollback. |
 | `CACHE_TTL` | - | Cache duration in seconds (default: `82800` = 23 h). Set to `0` to disable. |
 | `APP_TITLE` | - | Label shown in browser tab and sidebar as `{APP_TITLE} - Shopify OPS` (default: `Shopify OPS`) |
 | `APP_LOGO` | - | URL to an image that replaces the brand text |
@@ -47,7 +51,7 @@ To force a fresh fetch: **Clear all cache** in the Run Audit page, or set `CACHE
 
 ## Background jobs
 
-The Job Queue stores pending audit jobs under `data/jobs.json` (or `data/<store>/jobs.json` in multi-store mode). Queue an audit from **Run Audit** or **Job Queue**, then process one pending job:
+The Job Queue and operator action log use `data/state.sqlite` (or `data/<store>/state.sqlite` in multi-store mode). On first use, existing `jobs.json` and `user_action_log.json` rows are imported automatically. The JSON files are retained unchanged as rollback copies; set `STATE_STORAGE=json` to switch back. Queue an audit from **Run Audit** or **Job Queue**, then process one pending job:
 
 ```bash
 php worker.php --once
@@ -99,7 +103,11 @@ Each check can also override the recipient - leave its email field blank to fall
 ## Security
 
 - Google sign-in uses the authorization-code flow with PKCE and a one-time, 10-minute `state` value.
+- Google OAuth starts are rate-limited to 10 attempts per 10-minute session window.
 - Domain access is checked server-side against Google's verified Workspace `hd` claim. The email suffix and the account-picker hint are not trusted for authorization.
+- Authenticated sessions expire after 30 idle minutes or 12 hours total by default.
+- Responses set CSP, clickjacking, MIME-sniffing, referrer and browser-permission protections; HTTPS responses also set HSTS.
+- Forwarded protocol/client-IP headers are used only when the direct peer matches `TRUSTED_PROXIES`.
 - Username/password authentication remains available unless `GOOGLE_LOGIN_ONLY=1`; set a non-placeholder `WEB_PASSWORD` when using it.
 - 3 failed login attempts per IP triggers a 1-week lockout (manageable from Settings)
 - `metrics.php` requires `METRICS_TOKEN` by default; use `METRICS_ALLOW_PUBLIC=1` only for local/dev deployments.
