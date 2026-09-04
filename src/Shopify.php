@@ -162,7 +162,7 @@ class Shopify
      * filtering in the GraphQL query string, so we fetch each page with the
      * metafield inline and keep only matching rows.
      *
-     * @return array<int, array<string, mixed>>
+     * @return array{matches:list<array<string,mixed>>,scanned:int,with_mf:int,sample_values:list<mixed>,pages:int,truncated:bool}
      */
     public function searchOrdersByMetafield(
         string $namespace,
@@ -242,7 +242,7 @@ class Shopify
      * Returns all orders for a given customer email, plus customer summary data.
      * Uses GraphQL email: filter (indexed, fast).
      *
-     * @return array{orders: array, customer: array|null, total_spent: float, currency: string, truncated: bool}
+     * @return array{orders: array, customer: array|null, totalSpent: float, currency: string, truncated: bool}
      */
     public function lookupCustomer(string $email, int $maxPages = 20): array
     {

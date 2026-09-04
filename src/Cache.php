@@ -34,7 +34,7 @@ class Cache
      * @template T
      * @param  string   $prefix  Short label ('ss', 'shopify').
      * @param  string   $key     Anything that uniquely identifies the request.
-     * @param  callable $fetch   Called with no args; must return the value to cache.
+     * @param  callable(): T $fetch Called with no args; must return the value to cache.
      * @param  int|null $ttl     Optional per-entry freshness cap. The cache's
      *                            configured TTL remains the upper bound.
      * @return T
@@ -258,6 +258,7 @@ class Cache
         return $ttl === null ? $this->ttl : max(1, min($this->ttl, $ttl));
     }
 
+    /** @phpstan-impure */
     private function readFresh(string $file, mixed &$data): bool
     {
         if (!file_exists($file)) {

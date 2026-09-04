@@ -21,7 +21,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-version }}
-          extensions: curl, json
+          extensions: curl, json, pdo_sqlite
           coverage: none
 
       - name: Install dependencies
@@ -32,6 +32,9 @@ jobs:
 
       - name: Run tests
         run: composer test
+
+      - name: Run static analysis
+        run: composer analyse
 
   frontend:
     runs-on: ubuntu-latest

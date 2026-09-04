@@ -266,7 +266,7 @@ class ToolRegistry
         }
         $tools = [];
         foreach (self::HUBS as $group => $hub) {
-            foreach (($hub['sections'] ?? []) as $sectionTools) {
+            foreach ($hub['sections'] as $sectionTools) {
                 foreach ($sectionTools as $tool) {
                     $tool['group'] = $group;
                     $tools[(string) $tool['page']] = $tool;

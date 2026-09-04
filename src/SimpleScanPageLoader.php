@@ -369,7 +369,7 @@ class SimpleScanPageLoader
         usort($rows, fn($a, $b) => strcmp($b['refund_date'], $a['refund_date']));
         usort($skuStat, fn($a, $b) => $b['units'] <=> $a['units']);
 
-        return [$rows, array_values($skuStat)];
+        return [$rows, $skuStat];
     }
 
     private static function loadReturnedItems(string $action, array $ctx): array

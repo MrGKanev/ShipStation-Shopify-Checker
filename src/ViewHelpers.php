@@ -20,8 +20,8 @@ function esc(mixed $v): string
 function injectCsrfTokens(string $html, string $csrfToken): string
 {
     return preg_replace_callback('/<form\b([^>]*)>(.*?)<\/form>/is', function (array $m) use ($csrfToken): string {
-        $attrs = $m[1] ?? '';
-        $body  = $m[2] ?? '';
+        $attrs = $m[1];
+        $body  = $m[2];
         if (!preg_match('/\bmethod\s*=\s*([\'"]?)post\1/i', $attrs)) {
             return $m[0];
         }

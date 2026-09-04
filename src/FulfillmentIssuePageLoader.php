@@ -268,7 +268,7 @@ class FulfillmentIssuePageLoader
             if (!$num || !isset($shIndex[$num])) continue;
 
             $sh            = $shIndex[$num];
-            $shFulfillment = $sh['fulfillment_status'] ?? '';
+            $shFulfillment = $sh['fulfillment_status'];
             if ($shFulfillment === 'fulfilled') continue;
 
             $rows[] = [
@@ -279,8 +279,8 @@ class FulfillmentIssuePageLoader
                 'email'          => $o['customerEmail'] ?? '',
                 'total'          => $o['orderTotal']   ?? 0,
                 'sh_fulfillment' => $shFulfillment ?: 'unfulfilled',
-                'sh_financial'   => $sh['financial_status'] ?? '',
-                'shopify_id'     => $sh['shopify_id'] ?? '',
+                'sh_financial'   => $sh['financial_status'],
+                'shopify_id'     => $sh['shopify_id'],
                 'ss_url'         => $o['orderId'] ? 'https://app.shipstation.com/#!/orders/order-details/' . urlencode((string)$o['orderId']) : null,
             ];
         }
@@ -580,7 +580,7 @@ class FulfillmentIssuePageLoader
         usort($bySku, fn($a, $b) => $b['oldest_days'] <=> $a['oldest_days'] ?: $b['orders'] <=> $a['orders']);
         usort($byType, fn($a, $b) => $b['oldest_days'] <=> $a['oldest_days'] ?: $b['orders'] <=> $a['orders']);
 
-        return [$rows, array_values($bySku), array_values($byType)];
+        return [$rows, $bySku, $byType];
     }
 
     private static function loadCarrierPerf(string $action, array $ctx): array

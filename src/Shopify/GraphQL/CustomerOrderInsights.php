@@ -13,7 +13,7 @@ class CustomerOrderInsights
     }
 
     /**
-     * @return array{orders: array, customer: array|null, total_spent: float, currency: string, truncated: bool}
+     * @return array{orders: array, customer: array|null, totalSpent: float, currency: string, truncated: bool}
      */
     public function lookupCustomer(string $email, int $maxPages = 20): array
     {

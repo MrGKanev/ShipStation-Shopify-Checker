@@ -1,0 +1,8 @@
+parameters:
+    level: 5
+    paths:
+        - src
+    scanFiles:
+        - tests/Unit/support/PHPMailerStub.php
+    treatPhpDocTypesAsCertain: false
+    tmpDir: var/phpstan

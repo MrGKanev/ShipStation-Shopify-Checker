@@ -57,7 +57,7 @@ final class ItemizedFulfillmentReport
         }
 
         usort($rows, fn($a, $b) => [$a['order'], $a['product']] <=> [$b['order'], $b['product']]);
-        return array_values($rows);
+        return $rows;
     }
 
     /**

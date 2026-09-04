@@ -12,9 +12,7 @@ class CustomDataLookups
     {
     }
 
-    /**
-     * @return array<int, array<string, mixed>>
-     */
+    /** @return array<int, array<string, mixed>> */
     public function fetchMetafieldDefinitions(string $ownerType = 'ORDER'): array
     {
         $fetch = function () use ($ownerType): array {
@@ -127,9 +125,7 @@ class CustomDataLookups
         return $result;
     }
 
-    /**
-     * @return array<int, array<string, mixed>>
-     */
+    /** @return array{matches:list<array<string,mixed>>,scanned:int,with_mf:int,sample_values:list<mixed>,pages:int,truncated:bool} */
     public function searchOrdersByMetafield(
         string $namespace,
         string $key,
