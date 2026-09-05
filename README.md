@@ -91,6 +91,6 @@ php worker.php --store store_id --once
 - [Search & Lookup - spot-check, timeline, metafields, tags, customer](docs/search-lookup.md)
 - [Order type classification - rules, JSON config, required items](docs/order-types.md)
 - [Configuration - all ENV vars, caching, security](docs/configuration.md)
-- [Roadmap and future technical work](docs/roadmap.md)
+- [Laravel rewrite plan](docs/laravel-rewrite.md)
 
 Added or edited an audit page? Run `composer docs` to regenerate the Audit table in [docs/tools.md](docs/tools.md) from `ToolRegistry` - `composer test` fails if it's out of sync.
