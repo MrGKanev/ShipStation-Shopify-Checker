@@ -16,6 +16,13 @@
                     <span class="rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200">
                         Laravel rewrite
                     </span>
+
+                    @can('manage-administration')
+                        <nav class="hidden items-center gap-3 text-sm sm:flex" aria-label="Administration">
+                            <a class="text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400" href="{{ route('admin.stores.index') }}">Stores</a>
+                            <a class="text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400" href="{{ route('admin.users.index') }}">Users</a>
+                        </nav>
+                    @endcan
                 </div>
 
                 <div class="flex flex-wrap items-center gap-3 text-sm">
@@ -53,6 +60,12 @@
             </aside>
 
             <main>
+                @if (session('status'))
+                    <div class="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200" role="status">
+                        {{ session('status') }}
+                    </div>
+                @endif
+
                 @yield('content')
             </main>
         </div>
