@@ -2,6 +2,10 @@
 
 A self-hosted Shopify operations toolkit. Audits and surfaces Shopify order issues, provides search and lookup tools, and optionally syncs with ShipStation for order matching and push. Runs on plain PHP - no framework, no build step.
 
+> **Laravel rewrite:** This plain-PHP application is the stable production line.
+> Its replacement is being built separately in [`laravel/`](laravel/). See the
+> [rewrite plan](docs/laravel-rewrite.md) for scope and progress.
+
 > **Shopify is the only required integration.** Most pages work with a Shopify access token alone. ShipStation credentials are optional - needed only for the audit engine, push log, and order matching features.
 
 ---

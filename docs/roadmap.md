@@ -1,5 +1,15 @@
 # Roadmap
 
+## Laravel rewrite
+
+The current plain-PHP architecture will be frozen as the final stable legacy
+line. The replacement will be developed as a separate Laravel application and
+released only after feature parity and production-like cutover validation are
+complete. It will start with fresh operational data; no legacy data migration
+or production rollback path is planned.
+
+See the [Laravel rewrite plan](laravel-rewrite.md).
+
 ## Authentication
 
 ### TODO: Replace the custom Google OAuth client with a maintained package
@@ -21,4 +31,3 @@ Migration acceptance criteria:
 - Preserve multi-domain allowlisting, RBAC role assignment, Google-only mode, and the dedicated access-denied page.
 - Port the existing mocked success and failure tests to the package adapter; no test may require a live Google request.
 - Run the full PHPUnit suite, frontend build, Composer validation, and dependency security audits before removing the custom code.
-
