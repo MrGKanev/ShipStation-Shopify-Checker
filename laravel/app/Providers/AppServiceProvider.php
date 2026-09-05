@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Integrations\Shopify\Contracts\ShopifyAdminGateway;
+use App\Integrations\Shopify\ShopifyAdminClient;
 use App\Models\User;
 use App\UserRole;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -18,7 +20,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(ShopifyAdminGateway::class, ShopifyAdminClient::class);
     }
 
     /**

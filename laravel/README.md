@@ -60,5 +60,6 @@ composer audit
 The rewrite now has session authentication, viewer/operator/admin roles,
 encrypted store credentials, deterministic active-store selection, a guarded
 first-install command, and administration screens for users, roles, store
-access, stores, and integration credentials. The dashboard is intentionally a
-status shell; Shopify and ShipStation workflows have not been moved yet.
+access, stores, and integration credentials. Store-scoped Shopify and
+ShipStation clients back the first migrated read-only workflow: single-order
+lookup across both systems. The dashboard remains a migration status shell.

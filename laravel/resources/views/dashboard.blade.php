@@ -16,12 +16,12 @@
 
             <article class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
                 <p class="text-sm text-slate-500 dark:text-slate-400">Shopify connection</p>
-                <p class="mt-2 text-lg font-semibold">Not implemented</p>
+                <p class="mt-2 text-lg font-semibold">Integration client active</p>
             </article>
 
             <article class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
                 <p class="text-sm text-slate-500 dark:text-slate-400">Migrated tools</p>
-                <p class="mt-2 text-lg font-semibold">0</p>
+                <p class="mt-2 text-lg font-semibold">1 · Order lookup</p>
             </article>
         </section>
     </div>
