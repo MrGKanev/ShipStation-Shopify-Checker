@@ -56,7 +56,8 @@ composer audit
 
 ## Current milestone
 
-The foundation milestone establishes a Laravel 13 application compatible with
-PHP 8.5 and Guzzle 8, SQLite schema setup, database-backed queues/cache, the
-framework health endpoint, integration configuration placeholders, tests, and
-CI. Business workflows have not been moved yet.
+The rewrite now has its first application layer: session authentication with
+login throttling, viewer/operator/admin roles, encrypted store credentials,
+user-to-store access, and deterministic active-store selection. The dashboard
+is intentionally a status shell; Shopify and ShipStation workflows have not
+been moved yet.
