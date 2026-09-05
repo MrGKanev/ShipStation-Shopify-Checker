@@ -18,6 +18,7 @@ class StoreController extends Controller
     public function index(): View
     {
         $stores = Store::query()
+            ->select(['id', 'slug', 'label', 'shopify_store'])
             ->withCount('users')
             ->orderBy('label')
             ->orderBy('id')

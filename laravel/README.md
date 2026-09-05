@@ -29,6 +29,7 @@ cp .env.example .env
 php artisan key:generate
 touch database/database.sqlite
 php artisan migrate
+php artisan ops:install
 ```
 
 Install and build frontend dependencies from the repository root:
@@ -56,8 +57,8 @@ composer audit
 
 ## Current milestone
 
-The rewrite now has its first application layer: session authentication with
-login throttling, viewer/operator/admin roles, encrypted store credentials,
-user-to-store access, and deterministic active-store selection. The dashboard
-is intentionally a status shell; Shopify and ShipStation workflows have not
-been moved yet.
+The rewrite now has session authentication, viewer/operator/admin roles,
+encrypted store credentials, deterministic active-store selection, a guarded
+first-install command, and administration screens for users, roles, store
+access, stores, and integration credentials. The dashboard is intentionally a
+status shell; Shopify and ShipStation workflows have not been moved yet.

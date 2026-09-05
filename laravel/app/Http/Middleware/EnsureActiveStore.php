@@ -20,6 +20,7 @@ class EnsureActiveStore
     {
         $availableStores = $request->user()
             ->stores()
+            ->select(['stores.id', 'stores.slug', 'stores.label', 'stores.shopify_store'])
             ->orderBy('label')
             ->orderBy('stores.id')
             ->get();

@@ -13,6 +13,26 @@ class UserControllerTest extends TestCase
 {
     use LazilyRefreshDatabase;
 
+    public function test_administrator_can_render_user_forms_without_exposing_passwords(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $store = Store::factory()->create();
+        $admin->stores()->attach($store);
+        $user = User::factory()->create(['password' => 'hidden-password']);
+        $user->stores()->attach($store);
+
+        $this->actingAs($admin)
+            ->get(route('admin.users.create'))
+            ->assertOk()
+            ->assertSeeText('Add user');
+
+        $this->actingAs($admin)
+            ->get(route('admin.users.edit', $user))
+            ->assertOk()
+            ->assertSeeText('Edit '.$user->name)
+            ->assertDontSee('hidden-password');
+    }
+
     public function test_administrator_can_render_the_user_list_with_escaped_content(): void
     {
         $admin = User::factory()->admin()->create();
@@ -80,6 +100,28 @@ class UserControllerTest extends TestCase
             ->assertRedirect(route('admin.users.create'))
             ->assertSessionHasErrors(['password', 'role', 'store_ids.0']);
         $this->assertDatabaseMissing('users', ['email' => 'invalid@example.com']);
+    }
+
+    public function test_user_creation_rejects_a_duplicate_email(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $store = Store::factory()->create();
+        $admin->stores()->attach($store);
+        User::factory()->create(['email' => 'existing@example.com']);
+
+        $response = $this->actingAs($admin)->post(route('admin.users.store'), [
+            'name' => 'Duplicate User',
+            'email' => 'EXISTING@EXAMPLE.COM',
+            'password' => 'secure-password',
+            'password_confirmation' => 'secure-password',
+            'role' => UserRole::Viewer->value,
+            'store_ids' => [$store->getKey()],
+        ]);
+
+        $response->assertSessionHasErrors([
+            'email' => 'The email has already been taken.',
+        ]);
+        $this->assertSame(2, User::query()->count());
     }
 
     public function test_user_update_keeps_blank_password_and_replaces_store_access(): void
