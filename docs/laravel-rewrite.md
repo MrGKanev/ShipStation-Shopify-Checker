@@ -138,6 +138,49 @@ interfaces, инжектирани в use case-ите.
 - Feature-parity matrix-ът покрива всички видими страници и background задачи.
 - Release tag и legacy branch са създадени.
 
+## Test-parity и разширено покритие
+
+Laravel suite-ът трябва да е по-силен от legacy suite-а, а не само да достигне
+същия брой тестове. Всеки legacy тест и всеки доказан production behavior се
+записва в traceability matrix с едно от следните състояния:
+
+- мигриран към еквивалентен Laravel unit, feature, integration или browser test;
+- заменен от по-широк тест, който доказва същия contract и допълнителни случаи;
+- умишлено отпаднал заедно с feature-а и подкрепен с одобрено отклонение.
+
+Не се допуска legacy тест да изчезне без записана причина. Броят тестове не е
+самостоятелна цел: мерим покрити behaviors, decisions, failure paths и security
+boundaries. За всеки пренесен workflow се добавят приложимите нови случаи:
+
+- празни, минимални, максимални, malformed и неочаквани входове;
+- permission matrix за всички роли и cross-store/tenant isolation;
+- CSRF, output escaping, mass assignment и липса на secrets в responses/logs;
+- празни, частични, невалидни и променени upstream payload-и;
+- pagination boundaries, duplicate records и нестабилен ред на резултатите;
+- connection timeout, HTTP 429, `Retry-After`, 4xx, 5xx и изчерпани retries;
+- timezone, DST, начална/крайна дата и други гранични стойности;
+- job retry, idempotency, concurrency, crash recovery и duplicate delivery;
+- CSV/export escaping, encoding, големи datasets и memory/request budgets;
+- accessibility и основни browser journeys за критичните workflows.
+
+Contract и integration тестовете никога не използват реална външна мрежа.
+Shopify, ShipStation, email и notification заявките се изпълняват през точни
+fakes, които отказват всяка неочаквана заявка. Анонимизирани production-derived
+fixtures допълват synthetic edge cases и golden fixtures.
+
+### Test exit criteria
+
+- Всеки legacy test ID има Laravel test ID или одобрена причина за отпадане.
+- Всеки feature-parity ред сочи success, validation, authorization, empty-state
+  и приложимите failure-path тестове.
+- Няма незаписани network calls, flaky зависимости от време или случайност и
+  order-dependent тестове.
+- Differential тестовете доказват еквивалентни нормализирани резултати за
+  общите legacy/Laravel fixtures.
+- Новооткрити edge cases се добавят първо като regression тест.
+- Пълният Laravel suite, static analysis, build и security audits са
+  задължителни CI checks преди cutover.
+
 ## Фаза 1: Laravel foundation
 
 ### Работа
@@ -347,12 +390,14 @@ Matrix-ът е release control документ, а не само checklist. М�
 |---|---|
 | Feature/tool | Route, action, CLI или scheduled задача |
 | Legacy reference | Клас, метод, view и tests в stable версията |
+| Legacy test IDs | Всеки стар тест, който доказва feature contract-а |
 | Inputs | Полета, defaults и validation |
 | Permissions | Допустими роли и store scope |
 | Outputs | View данни, CSV, logs и notifications |
 | Side effects | DB/file/API промени |
 | Fixtures | Golden datasets за сравнение |
 | Laravel tests | Unit, feature, integration и browser coverage |
+| Added edge cases | Ново покритие над legacy suite-а |
 | Status | Not started / In progress / Parity / Accepted deviation |
 | Owner/sign-off | Техническо и продуктово одобрение |
 
@@ -364,6 +409,10 @@ Rewrite-ът е готов за production само когато:
 - production-like fresh install е повторяем;
 - authentication, authorization и store isolation са проверени;
 - audit и report резултатите съвпадат върху golden и production-derived data;
+- всеки legacy тест е мигриран, заменен с по-силно покритие или има одобрена
+  причина за отпадане;
+- Laravel suite-ът покрива допълнителните validation, security, integration,
+  pagination, concurrency и recovery edge cases от test стратегията;
 - jobs са idempotent и recovery процедурите са тествани;
 - CI, security review, performance budgets и operational runbooks са готови;
 - cutover е изпълнен поне веднъж извън production;
@@ -382,10 +431,10 @@ Rewrite-ът е готов за production само когато:
 | Dependency incompatibility | Compatibility spike преди заключване на stack-а |
 | Критичен дефект след необратимия cutover | По-строг release sign-off, production-like rehearsal и бърз fix-forward процес |
 
-## Първа практическа задача
+## Текуща практическа задача
 
-Първият rewrite milestone не е създаване на controllers. Той е завършването на
-Фаза 0: release tag, legacy branch, feature-parity matrix, списък на данните,
-които няма да се пренасят, и golden fixtures. След одобряването им може да се
-създаде Laravel skeleton без риск да бъде пропуснато важно поведение от stable
-версията.
+След Laravel foundation, authentication, stores и administration следва
+integration boundary за Shopify и ShipStation, а после read-only търсене на
+единична поръчка през активния магазин. Всеки следващ workflow се пренася
+заедно със съответните legacy tests, traceability записи и допълнителните edge
+cases от test стратегията по-горе.
