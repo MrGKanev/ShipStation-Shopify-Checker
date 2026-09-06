@@ -408,7 +408,7 @@ Matrix-ът е release control документ, а не само checklist. М�
 достъпен route/controller/view и покриващи тестове. Наличен domain helper без
 завършен потребителски workflow не се брои за готов feature.
 
-Последно обновяване: **2026-09-06**, след batch Spot-check slice-а.
+Последно обновяване: **2026-09-06**, след Tracking Feed и Packing Slip slice-а.
 
 Легенда: **Done** = feature parity за основния workflow; **Partial** = използваем,
 но по-тесен от legacy; **Todo** = няма завършен Laravel workflow;
@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 3 | 4.2% |
+| Done | 5 | 6.9% |
 | Partial | 2 | 2.8% |
-| Todo | 65 | 90.3% |
+| Todo | 63 | 87.5% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -531,10 +531,10 @@ Audit subtotal: **Done 0 · Partial 1 · Todo 46 · Replaced 1**.
 | `tagsearch` | Tag Search | Todo | Shopify indexed tag search. |
 | `tagaudit` | Tag Audit | Todo | Tag inventory, frequency и last seen. |
 | `metafields` | Metafields | Todo | Definitions и order/value lookup. |
-| `tracking` | Tracking Feed | Todo | Dedicated multi-order tracking workflow. |
-| `packingslip` | Packing Slip Preview | Todo | ShipStation print-friendly preview. |
+| `tracking` | Tracking Feed | Done | 1–30 уникални номера, real `/shipments`, unshipped fallback, carrier allowlist и atomic safe errors. |
+| `packingslip` | Packing Slip Preview | Done | Exact-match ShipStation lookup, safe view-data builder, ambiguity state и print-friendly preview. |
 
-Search subtotal: **Done 3 · Partial 0 · Todo 8 · Replaced 1**.
+Search subtotal: **Done 5 · Partial 0 · Todo 6 · Replaced 1**.
 
 ### Manage — 6
 
@@ -572,22 +572,21 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 23 | 199 | 758 |
+| Laravel rewrite | 27 | 217 | 844 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
-| Fully mapped | 0 | 0.0% |
+| Fully mapped | 2 | 1.7% |
 | Partial / parity verification | 20 | 17.4% |
-| Pending | 95 | 82.6% |
+| Pending | 93 | 80.9% |
 | **Общо** | **115** | **100%** |
 
 #### Fully mapped legacy test files
 
-Все още няма файл, маркиран като напълно мигриран. Реализираните workflows имат
-силно Laravel покритие, но старите test methods трябва да бъдат нанесени един по
-един в traceability matrix преди отметката да стане `[x]`.
+- [x] `PackingSlipPageLoaderTest.php` — всичките 6 legacy paths са нанесени в Laravel feature/domain tests; добавени са exact-match ambiguity, malformed nested data, XSS и invalid-date cases
+- [x] `TrackingFeedTest.php` — всичките 7 builder contracts са нанесени; добавени са всички carriers, истински split shipments, unshipped fallback, malformed data, tenant и atomic-error cases
 
 #### Partial или чакащи method-level parity проверка
 
@@ -678,7 +677,6 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `OrderPolicyChecksTest.php`
 - [ ] `OrderPolicyPageLoaderTest.php`
 - [ ] `OrphanDetectorTest.php`
-- [ ] `PackingSlipPageLoaderTest.php`
 - [ ] `PageLoaderTest.php`
 - [ ] `PartialFulfillStallsTest.php`
 - [ ] `PostShipAddrChangeTest.php`
@@ -703,7 +701,6 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `SsShippedUnfulfilledTest.php`
 - [ ] `TaxAuditTest.php`
 - [ ] `ToolRegistryTest.php`
-- [ ] `TrackingFeedTest.php`
 - [ ] `UserActionLogTest.php`
 - [ ] `ViewHelpersTest.php`
 - [ ] `VoidedShipmentsTest.php`

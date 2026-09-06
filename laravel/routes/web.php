@@ -9,6 +9,8 @@ use App\Http\Controllers\OrderBatchLookupController;
 use App\Http\Controllers\OrderComparisonController;
 use App\Http\Controllers\OrderLookupController;
 use App\Http\Controllers\OrderTimelineController;
+use App\Http\Controllers\OrderTrackingController;
+use App\Http\Controllers\PackingSlipController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -33,6 +35,10 @@ Route::middleware('auth')->group(function (): void {
             ->name('orders.spot-check.store');
         Route::get('/orders/compare', OrderComparisonController::class)->name('orders.compare');
         Route::get('/orders/timeline', OrderTimelineController::class)->name('orders.timeline');
+        Route::get('/orders/tracking', [OrderTrackingController::class, 'create'])->name('orders.tracking');
+        Route::post('/orders/tracking', [OrderTrackingController::class, 'store'])->middleware('throttle:tracking')->name('orders.tracking.store');
+        Route::get('/orders/packing-slip', [PackingSlipController::class, 'create'])->name('orders.packing-slip');
+        Route::post('/orders/packing-slip', [PackingSlipController::class, 'store'])->middleware('throttle:packing-slip')->name('orders.packing-slip.store');
 
         Route::prefix('admin')
             ->name('admin.')
