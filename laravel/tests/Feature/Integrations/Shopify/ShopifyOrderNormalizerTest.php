@@ -19,6 +19,8 @@ class ShopifyOrderNormalizerTest extends TestCase
             'displayFinancialStatus' => 'PAID',
             'displayFulfillmentStatus' => 'FULFILLED',
             'totalPriceSet' => ['shopMoney' => ['amount' => '129.90']],
+            'note' => 'Handle carefully',
+            'tags' => ['vip', 'priority'],
             'shippingAddress' => [
                 'firstName' => 'Ada',
                 'lastName' => 'Lovelace',
@@ -85,6 +87,8 @@ class ShopifyOrderNormalizerTest extends TestCase
                 'phone' => '+44123456789',
             ],
             'billing_address' => null,
+            'note' => 'Handle carefully',
+            'tags' => ['vip', 'priority'],
             'line_items' => [[
                 'id' => 987,
                 'title' => 'Blue Widget',
@@ -128,5 +132,13 @@ class ShopifyOrderNormalizerTest extends TestCase
         $this->assertSame(0, $order['line_items'][0]['quantity']);
         $this->assertSame('', $order['fulfillments'][0]['status']);
         $this->assertSame([], $order['fulfillments'][0]['tracking_numbers']);
+    }
+
+    public function test_rejects_malformed_tags_without_returning_a_partial_order(): void
+    {
+        $this->expectException(\UnexpectedValueException::class);
+        $this->expectExceptionMessage('Shopify returned an invalid tags collection.');
+
+        (new ShopifyOrderNormalizer)->normalize(['tags' => 'vip']);
     }
 }

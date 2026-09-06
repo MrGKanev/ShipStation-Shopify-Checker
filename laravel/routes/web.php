@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\StoreController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthenticatedSessionController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\OrderComparisonController;
 use App\Http\Controllers\OrderLookupController;
 use Illuminate\Support\Facades\Route;
 
@@ -24,6 +25,7 @@ Route::middleware('auth')->group(function (): void {
     Route::middleware('active.store')->group(function (): void {
         Route::get('/dashboard', DashboardController::class)->name('dashboard');
         Route::get('/orders/lookup', OrderLookupController::class)->name('orders.lookup');
+        Route::get('/orders/compare', OrderComparisonController::class)->name('orders.compare');
 
         Route::prefix('admin')
             ->name('admin.')

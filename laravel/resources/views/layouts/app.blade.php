@@ -45,6 +45,7 @@
                 <nav class="mb-5 flex flex-col gap-1 border-b border-slate-200 pb-5 text-sm dark:border-slate-800" aria-label="Primary">
                     <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('dashboard') }}">Dashboard</a>
                     <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('orders.lookup') }}">Order lookup</a>
+                    <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('orders.compare') }}">Order compare</a>
                     @can('manage-administration')
                         <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 sm:hidden dark:hover:bg-slate-800" href="{{ route('admin.stores.index') }}">Manage stores</a>
                         <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 sm:hidden dark:hover:bg-slate-800" href="{{ route('admin.users.index') }}">Manage users</a>

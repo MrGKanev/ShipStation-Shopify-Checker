@@ -45,6 +45,8 @@ class ShopifyAdminClient implements ShopifyAdminGateway
                     createdAt
                     cancelledAt
                     email
+                    note
+                    tags
                     displayFinancialStatus
                     displayFulfillmentStatus
                     totalPriceSet { shopMoney { amount currencyCode } }

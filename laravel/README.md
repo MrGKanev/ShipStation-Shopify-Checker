@@ -63,4 +63,6 @@ first-install command, and administration screens for users, roles, store
 access, stores, and integration credentials. Store-scoped Shopify and
 ShipStation clients back the first migrated read-only workflow: single-order
 lookup across both systems with detailed address, status, fulfillment, and
-SKU/quantity comparison. The dashboard remains a migration status shell.
+SKU/quantity comparison. The legacy two-order comparison workflow is also
+available through the same normalized boundaries. The dashboard remains a
+migration status shell.

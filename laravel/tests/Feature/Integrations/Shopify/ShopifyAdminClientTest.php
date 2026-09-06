@@ -77,6 +77,8 @@ class ShopifyAdminClientTest extends TestCase
             && str_contains((string) $request['query'], 'query FindOrderByName')
             && str_contains((string) $request['query'], 'shippingAddress')
             && str_contains((string) $request['query'], 'billingAddress')
+            && str_contains((string) $request['query'], 'note')
+            && str_contains((string) $request['query'], 'tags')
             && str_contains((string) $request['query'], 'lineItems(first: 250)')
             && str_contains((string) $request['query'], 'fulfillments(first: 250)'));
     }

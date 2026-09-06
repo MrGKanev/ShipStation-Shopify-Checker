@@ -66,6 +66,19 @@ class OrderLookupControllerTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_array_order_number_is_rejected_without_causing_a_server_error(): void
+    {
+        Http::preventStrayRequests();
+        [$user] = $this->userWithStore();
+
+        $response = $this->from(route('orders.lookup'))
+            ->actingAs($user)
+            ->get(route('orders.lookup', ['order_number' => ['65075']]));
+
+        $response->assertRedirect(route('orders.lookup'))->assertSessionHasErrors('order_number');
+        Http::assertNothingSent();
+    }
+
     public function test_viewer_can_lookup_an_order_in_both_integrations_with_active_store_credentials(): void
     {
         Http::preventStrayRequests();

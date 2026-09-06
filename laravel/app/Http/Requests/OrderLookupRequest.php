@@ -24,7 +24,13 @@ class OrderLookupRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         if ($this->has('order_number')) {
-            $orderNumber = ltrim($this->string('order_number')->trim()->toString(), '#');
+            $value = $this->input('order_number');
+
+            if (! is_string($value)) {
+                return;
+            }
+
+            $orderNumber = ltrim(trim($value), '#');
 
             $this->merge([
                 'order_number' => $orderNumber === '' ? null : $orderNumber,

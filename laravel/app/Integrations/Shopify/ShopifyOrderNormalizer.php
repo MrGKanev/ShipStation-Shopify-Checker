@@ -2,6 +2,8 @@
 
 namespace App\Integrations\Shopify;
 
+use UnexpectedValueException;
+
 class ShopifyOrderNormalizer
 {
     /**
@@ -31,6 +33,14 @@ class ShopifyOrderNormalizer
 
         if (array_key_exists('billingAddress', $node)) {
             $order['billing_address'] = $this->normalizeAddress($node['billingAddress'] ?? null);
+        }
+
+        if (array_key_exists('note', $node)) {
+            $order['note'] = $this->nullableString($node['note'], 'note') ?? '';
+        }
+
+        if (array_key_exists('tags', $node)) {
+            $order['tags'] = $this->normalizeTags($node['tags']);
         }
 
         if (isset($node['lineItems']['nodes']) && is_array($node['lineItems']['nodes'])) {
@@ -153,5 +163,34 @@ class ShopifyOrderNormalizer
             'partially_fulfilled' => 'partial',
             default => $normalized,
         };
+    }
+
+    /** @return list<string> */
+    private function normalizeTags(mixed $tags): array
+    {
+        if (! is_array($tags) || ! array_is_list($tags)) {
+            throw new UnexpectedValueException('Shopify returned an invalid tags collection.');
+        }
+
+        $normalized = [];
+
+        foreach ($tags as $tag) {
+            $normalized[] = $this->nullableString($tag, 'tag') ?? '';
+        }
+
+        return $normalized;
+    }
+
+    private function nullableString(mixed $value, string $field): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (! is_string($value)) {
+            throw new UnexpectedValueException("Shopify returned an invalid {$field} value.");
+        }
+
+        return $value;
     }
 }
