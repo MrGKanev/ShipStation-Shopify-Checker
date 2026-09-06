@@ -30,6 +30,9 @@ interface ShopifyAdminGateway
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function highValueOrderCandidates(Store $store, string $startDate, string $endDate): array;
 
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function countryMismatchCandidates(Store $store, string $startDate, string $endDate): array;
+
     /**
      * @param  array<string, bool|int|string>  $query
      * @return array<string, mixed>

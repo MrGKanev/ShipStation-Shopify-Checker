@@ -21,7 +21,7 @@
 
             <article class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
                 <p class="text-sm text-slate-500 dark:text-slate-400">Migrated tools</p>
-                <p class="mt-2 text-lg font-semibold">8 · Seven order tools and one audit report</p>
+                <p class="mt-2 text-lg font-semibold">9 · Seven order tools and two audit reports</p>
             </article>
         </section>
     </div>

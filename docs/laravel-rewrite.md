@@ -408,7 +408,7 @@ Matrix-ът е release control документ, а не само checklist. М�
 достъпен route/controller/view и покриващи тестове. Наличен domain helper без
 завършен потребителски workflow не се брои за готов feature.
 
-Последно обновяване: **2026-09-06**, след High-Value No Phone report slice-а.
+Последно обновяване: **2026-09-06**, след Country Mismatch report slice-а.
 
 Легенда: **Done** = feature parity за основния workflow; **Partial** = използваем,
 но по-тесен от legacy; **Todo** = няма завършен Laravel workflow;
@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 7 | 9.7% |
+| Done | 8 | 11.1% |
 | Partial | 2 | 2.8% |
-| Todo | 61 | 84.7% |
+| Todo | 60 | 83.3% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -506,7 +506,7 @@ feature страниците. Те се следят отделно:
 | `zombieproducts` | Zombie Products | Todo | Active products без продаваем inventory. |
 | `catalogquality` | Catalog Quality | Todo | Publication, SEO и collection checks. |
 | `giftcards` | Gift Cards | Todo | Unused/expiring balances. |
-| `countrymismatch` | Billing ≠ Shipping Country | Todo | Single-order signal съществува; bulk audit липсва. |
+| `countrymismatch` | Billing ≠ Shipping Country | Done | ISO-only comparison, missing-country count, currency display, stable sorting и visible truncation. |
 | `discountabuse` | Discount Abuse | Todo | Discount clusters по адрес/email. |
 | `tagpolicy` | Tag Policy Audit | Todo | Required/forbidden tag combinations. |
 | `taxaudit` | Tax Audit | Todo | Paid non-exempt orders с нулев tax. |
@@ -515,7 +515,7 @@ feature страниците. Те се следят отделно:
 | `sameip` | Same IP, Different Emails | Todo | Fraud-ring signal по client IP. |
 | `disputes` | Chargebacks / Disputes | Todo | Open disputes и response deadlines. |
 
-Audit subtotal: **Done 1 · Partial 1 · Todo 45 · Replaced 1**.
+Audit subtotal: **Done 2 · Partial 1 · Todo 44 · Replaced 1**.
 
 ### Search & Lookup — 12
 
@@ -572,7 +572,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 33 | 236 | 955 |
+| Laravel rewrite | 36 | 242 | 981 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 

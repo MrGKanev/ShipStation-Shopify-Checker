@@ -52,6 +52,7 @@
                     <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('orders.packing-slip') }}">Packing slip</a>
                     <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('orders.tag-search') }}">Tag search</a>
                     @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.high-value-no-phone') }}">High-value no phone</a>@endcan
+                    @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.country-mismatch') }}">Country mismatch</a>@endcan
                     @can('manage-administration')
                         <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 sm:hidden dark:hover:bg-slate-800" href="{{ route('admin.stores.index') }}">Manage stores</a>
                         <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 sm:hidden dark:hover:bg-slate-800" href="{{ route('admin.users.index') }}">Manage users</a>
