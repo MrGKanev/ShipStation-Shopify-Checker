@@ -401,6 +401,320 @@ Matrix-ът е release control документ, а не само checklist. М�
 | Status | Not started / In progress / Parity / Accepted deviation |
 | Owner/sign-off | Техническо и продуктово одобрение |
 
+## Live migration tracker
+
+Тази секция се обновява във всеки migration slice. Source of truth за legacy
+инструментите е `src/ToolRegistry.php`; Laravel статусът се определя само по
+достъпен route/controller/view и покриващи тестове. Наличен domain helper без
+завършен потребителски workflow не се брои за готов feature.
+
+Последно обновяване: **2026-09-06**, commit `a5aafd9`.
+
+Легенда: **Done** = feature parity за основния workflow; **Partial** = използваем,
+но по-тесен от legacy; **Todo** = няма завършен Laravel workflow;
+**Replaced** = съзнателно заменен UX, който не трябва да се пренася едно към едно.
+
+### Обобщение на feature progress
+
+| Статус | Страници/инструменти | Дял от 72 |
+|---|---:|---:|
+| Done | 2 | 2.8% |
+| Partial | 3 | 4.2% |
+| Todo | 65 | 90.3% |
+| Replaced | 2 | 2.8% |
+| **Общо** | **72** | **100%** |
+
+Завършените foundation, authentication, store context, administration и API
+boundary задачи са реален migration progress, но не надуват броя на legacy
+feature страниците. Те се следят отделно:
+
+- [x] Laravel application foundation, health endpoint и CI
+- [x] Session authentication и login throttling
+- [x] Viewer/operator/admin роли и authorization
+- [x] Stores, encrypted credentials и active-store isolation
+- [x] First-install command и administration за users/stores
+- [x] Shopify GraphQL client, normalization и pagination foundation
+- [x] ShipStation client, normalization, retries и store credentials
+- [x] Един дългосрочен Draft PR за целия rewrite
+- [ ] Production observability, metrics и operational runbooks
+- [ ] Background jobs, idempotency, retry и recovery foundation
+- [ ] Final parity review, UAT, deployment rehearsal и необратим cutover
+
+### Cross-cutting и non-page legacy capabilities
+
+- [x] Password/session login в Laravel
+- [x] Multi-store membership и active-store switching
+- [x] Encrypted integration credentials
+- [ ] Google OAuth login и callback flow
+- [ ] Main audit CLI/web orchestration (`audit.php`)
+- [ ] Queue worker и scheduled execution (`worker.php`)
+- [ ] Daily email digest (`email_digest.php`)
+- [ ] Slack notifications и per-tool rules
+- [ ] Email notifications, recipients и per-tool rules
+- [ ] Discord notifications
+- [ ] Report persistence, downloads и CSV/export contracts
+- [ ] Metrics endpoint и authentication (`metrics.php`)
+- [ ] Structured application/run/action logging
+- [ ] Cache behavior и invalidation
+- [ ] Ignore/unignore mutations и bulk import
+- [ ] Shopify → ShipStation push workflow и idempotency
+- [ ] Print queue actions и recovery
+- [ ] Webhook monitoring и health state
+- [ ] Laravel scheduler/queue deployment и failed-job runbook
+
+### Audit инструменти — 48
+
+| ID | Legacy feature | Статус | Бележка |
+|---|---|---|---|
+| `dashboard` | Dashboard | Partial | Laravel показва store и migration status; legacy audit stats/actions липсват. |
+| `hub-audit` | Audit hub | Replaced | Заменен от постоянна sidebar навигация и директни routes. |
+| `reports` | Reports | Todo | Saved reports и downloads. |
+| `run` | Run Audit | Todo | Shopify ↔ ShipStation audit по период. |
+| `trends` | Trends | Todo | Aggregated audit report trends. |
+| `dupes` | Duplicate Detector | Todo | Близки duplicate orders. |
+| `refunds` | Refunds Tracker | Todo | Shopify refunds ↔ ShipStation status. |
+| `repeatrefunds` | Repeat Refunds | Todo | Повторни refunds по клиент. |
+| `returns` | Return / RMA Tracker | Todo | Item-level returns и SKU rates. |
+| `returneditems` | Returned Items Report | Todo | Itemized returned quantities. |
+| `orphans` | Orphan Detector | Todo | ShipStation orders без Shopify order. |
+| `activess` | Active SS Conflicts | Todo | Cancelled/refunded Shopify, но active в ShipStation. |
+| `ssshipped` | SS Shipped / Shopify Unfulfilled | Todo | Cross-platform fulfillment sync failures. |
+| `orderedits` | Order Edit History | Todo | Post-placement changes. |
+| `noteflags` | Note Flags | Todo | Flagged keywords в order notes. |
+| `addrcheck` | Address Scanner | Todo | Непълни/невалидни адреси. |
+| `emailcheck` | Email Checker | Todo | Invalid/disposable/suspicious emails. |
+| `hvorders` | High-Value No Phone | Todo | High-value unfulfilled orders без телефон. |
+| `addrchanges` | Address Changes | Todo | Shipping address edits. |
+| `postshipaddr` | Post-Ship Address Change | Todo | Address edit след fulfillment. |
+| `addrdupes` | Duplicate Shipping Addresses | Todo | Различни emails към еднакъв адрес. |
+| `failedship` | Voided Shipments | Todo | Voided ShipStation shipments. |
+| `slabreaches` | Fulfillment SLA Breaches | Todo | Time-to-first-fulfillment SLA. |
+| `bundlecheck` | Bundle Check | Todo | Липсващи required companion items. |
+| `partialfulfill` | Partial Fulfillment Stalls | Todo | Stalled partial fulfillments. |
+| `onholdstall` | On-Hold Stall | Todo | Fulfillment orders на hold. |
+| `notracking` | Fulfilled Without Tracking | Todo | Fulfilled orders без tracking след grace period. |
+| `shipmentaging` | Shipment Aging | Todo | Стари awaiting-shipment orders. |
+| `itemmismatch` | Shipped Item Mismatch | Todo | Shopify ordered items ↔ ShipStation shipped items. |
+| `fulfilleditems` | Fulfilled Items Report | Todo | Itemized fulfilled quantities. |
+| `carrierperf` | Carrier Performance | Todo | Delivery time и late rate по carrier. |
+| `shipmargin` | Shipping Margin Erosion | Todo | Label cost над customer shipping charge. |
+| `productcheck` | Product Completeness | Todo | Missing image/description/SKU. |
+| `skudupes` | SKU Duplicates | Todo | Shared SKU между variants. |
+| `inventoryoversell` | Inventory Oversell Risk | Todo | Awaiting quantity над Shopify stock. |
+| `inventoryaging` | Inventory Aging | Todo | Zero-stock variants със скорошни продажби. |
+| `inventoryforecast` | Inventory Forecast | Todo | Days-to-zero по sell-through. |
+| `zombieproducts` | Zombie Products | Todo | Active products без продаваем inventory. |
+| `catalogquality` | Catalog Quality | Todo | Publication, SEO и collection checks. |
+| `giftcards` | Gift Cards | Todo | Unused/expiring balances. |
+| `countrymismatch` | Billing ≠ Shipping Country | Todo | Single-order signal съществува; bulk audit липсва. |
+| `discountabuse` | Discount Abuse | Todo | Discount clusters по адрес/email. |
+| `tagpolicy` | Tag Policy Audit | Todo | Required/forbidden tag combinations. |
+| `taxaudit` | Tax Audit | Todo | Paid non-exempt orders с нулев tax. |
+| `consentaudit` | Marketing Consent Audit | Todo | Customer marketing consent. |
+| `riskreport` | Fraud Risk Report | Todo | Single-order scorer съществува; bulk report липсва. |
+| `sameip` | Same IP, Different Emails | Todo | Fraud-ring signal по client IP. |
+| `disputes` | Chargebacks / Disputes | Todo | Open disputes и response deadlines. |
+
+Audit subtotal: **Done 0 · Partial 1 · Todo 46 · Replaced 1**.
+
+### Search & Lookup — 12
+
+| ID | Legacy feature | Статус | Бележка |
+|---|---|---|---|
+| `hub-search` | Search & Lookup hub | Replaced | Заменен от sidebar links. |
+| `globalsearch` | Global Search | Todo | Reports, push log и ignored-order търсене. |
+| `spotcheck` | Spot-check | Partial | Laravel търси 1 order; legacy поддържа 1–50 и source mode. |
+| `compare` | Order Compare | Done | `/orders/compare`, safe errors, ambiguity и optional ShipStation status. |
+| `timeline` | Order Timeline | Done | Shopify events/refunds/fulfillments + ShipStation + risk analysis. |
+| `customer` | Customer Lookup | Todo | Order history, LTV summary и CSV. |
+| `cohort` | Customer LTV | Todo | Top customers и cohort retention. |
+| `tagsearch` | Tag Search | Todo | Shopify indexed tag search. |
+| `tagaudit` | Tag Audit | Todo | Tag inventory, frequency и last seen. |
+| `metafields` | Metafields | Todo | Definitions и order/value lookup. |
+| `tracking` | Tracking Feed | Todo | Dedicated multi-order tracking workflow. |
+| `packingslip` | Packing Slip Preview | Todo | ShipStation print-friendly preview. |
+
+Search subtotal: **Done 2 · Partial 1 · Todo 8 · Replaced 1**.
+
+### Manage — 6
+
+| ID | Legacy feature | Статус |
+|---|---|---|
+| `ignored` | Ignored Orders | Todo |
+| `pushlog` | Push Log | Todo |
+| `runlog` | Run History | Todo |
+| `jobs` | Job Queue | Todo |
+| `actionlog` | Action Log | Todo |
+| `printqueue` | Print Queue | Todo |
+
+Manage subtotal: **Done 0 · Partial 0 · Todo 6 · Replaced 0**.
+
+### Settings — 6
+
+| ID | Legacy feature | Статус | Бележка |
+|---|---|---|---|
+| `settings` | Settings | Partial | Users/stores/credentials са готови; connection tests, banned IP и notification overview липсват. |
+| `slackrules` | Slack Rules | Todo | Per-tool notification thresholds и recipients. |
+| `emailrules` | Email Rules | Todo | Per-tool email rules и digest settings. |
+| `apihealth` | API Health | Todo | `/up` не заменя integration diagnostics и scope checks. |
+| `configcheck` | Config Check | Todo | Policy/config validation трябва да бъде заменено с Laravel config contracts. |
+| `webhookhealth` | Webhook Health | Todo | Webhook delivery/recency diagnostics. |
+
+Settings subtotal: **Done 0 · Partial 1 · Todo 5 · Replaced 0**.
+
+### Test migration tracker
+
+Броят Laravel тестове не е директен процент от legacy suite-а: новите feature
+тестове често заменят няколко стари unit теста и добавят validation, escaping,
+pagination, malformed payload и tenant-isolation случаи. Release gate остава
+поведенческа traceability, не механично достигане на еднакъв брой тестове.
+
+| Suite | Test files | Executed tests | Assertions |
+|---|---:|---:|---:|
+| Stable plain PHP | 115 | 1,528 | 3,659 |
+| Laravel rewrite | 22 | 176 | 621 |
+
+Текущ file-level disposition на всичките **115 legacy test файла**:
+
+| Статус | Файлове | Дял |
+|---|---:|---:|
+| Fully mapped | 0 | 0.0% |
+| Partial / parity verification | 20 | 17.4% |
+| Pending | 95 | 82.6% |
+| **Общо** | **115** | **100%** |
+
+#### Fully mapped legacy test files
+
+Все още няма файл, маркиран като напълно мигриран. Реализираните workflows имат
+силно Laravel покритие, но старите test methods трябва да бъдат нанесени един по
+един в traceability matrix преди отметката да стане `[x]`.
+
+#### Partial или чакащи method-level parity проверка
+
+- [ ] `AllViewsSmokeTest.php` — новите views имат feature rendering tests, но всички legacy views не са пренесени
+- [ ] `AuthPermissionSnapshotTest.php` — Laravel roles/policies са покрити; пълната legacy permission matrix остава
+- [ ] `AuthTest.php` — session auth е пренесен; legacy Google/banned-IP/permission branches остават
+- [ ] `AuthViewsTest.php` — login е покрит; всички auth view contracts остават
+- [ ] `GraphQL/EventNormalizerTest.php` — event normalization работи; всички 28 legacy test methods чакат mapping
+- [ ] `GraphQL/IdsTest.php` — order/event ID paths са покрити; общият legacy ID contract остава
+- [ ] `GraphQL/OrderComponentNormalizerTest.php` — address/items/fulfillment subset е пренесен
+- [ ] `GraphQL/OrderDirectLookupTest.php` — direct order lookup работи, но legacy full field set остава
+- [ ] `GraphQL/OrderEventLookupTest.php` — pagination contract е пренесен; method-level mapping остава
+- [ ] `GraphQL/OrderNormalizerTest.php` — timeline/risk/order subset е пренесен; всички останали fields остават
+- [ ] `HttpAuthEndpointTest.php` — login/logout са покрити; целият legacy endpoint contract остава
+- [ ] `OrderInsightPageLoaderTest.php` — compare/timeline subset е пренесен; останалите insights остават
+- [ ] `OrderTimelineTest.php` — workflow е пренесен и разширен; 26 legacy methods чакат explicit mapping
+- [ ] `RiskScorerTest.php` — осемте сигнала са пренесени; custom weights и 33-method mapping остават
+- [ ] `SearchLookupPageLoaderTest.php` — single lookup/compare/timeline subset е пренесен
+- [ ] `SecurityTest.php` — escaping, validation и tenant isolation са разширени; целият checklist остава
+- [ ] `ShipStationClientTest.php` — lookup/shipments/pagination/retries subset е пренесен
+- [ ] `ShopifyClientTest.php` — GraphQL HTTP boundary subset е пренесен
+- [ ] `StoresTest.php` — Laravel stores са нов DB модел; legacy multi-store behavior се сверява
+- [ ] `ViewSmokeTest.php` — мигрираните screens се render-ват; останалите screens липсват
+
+#### Pending legacy test files
+
+- [ ] `ActionsTest.php`
+- [ ] `ActiveSsConflictsTest.php`
+- [ ] `AddressChangesTest.php`
+- [ ] `AddressCheckTest.php`
+- [ ] `AddressScannerPageTest.php`
+- [ ] `ApiHealthTest.php`
+- [ ] `AtomicFileTest.php`
+- [ ] `AuditSnapshotTest.php`
+- [ ] `AuditTest.php`
+- [ ] `AutoloadCoverageTest.php`
+- [ ] `BundleCheckPageTest.php`
+- [ ] `CacheTest.php`
+- [ ] `CarrierPerfTest.php`
+- [ ] `CatalogQualityTest.php`
+- [ ] `ComparatorTest.php`
+- [ ] `ConfigValidatorTest.php`
+- [ ] `ConsentAuditTest.php`
+- [ ] `CustomerLTVPageLoaderTest.php`
+- [ ] `DateRangeTest.php`
+- [ ] `DiscordNotifierTest.php`
+- [ ] `DisputesPageLoaderTest.php`
+- [ ] `DocsGeneratorTest.php`
+- [ ] `EmailDigestTest.php`
+- [ ] `EmailNotifierTest.php`
+- [ ] `EmailRulesTest.php`
+- [ ] `FraudComplianceChecksTest.php`
+- [ ] `FraudRiskReportTest.php`
+- [ ] `FulfillmentIssuePageLoaderTest.php`
+- [ ] `FulfillmentLogisticsChecksTest.php`
+- [ ] `GiftCardPageLoaderTest.php`
+- [ ] `GiftCardsTest.php`
+- [ ] `GoogleAuthFlowTest.php`
+- [ ] `GoogleAuthTest.php`
+- [ ] `GraphQL/AdminLookupsTest.php`
+- [ ] `GraphQL/CatalogAndFulfillmentTest.php`
+- [ ] `GraphQL/CustomDataLookupsTest.php`
+- [ ] `GraphQL/CustomerOrderInsightsTest.php`
+- [ ] `GraphQL/DisputeLookupTest.php`
+- [ ] `GraphQL/DuplicateOrderInsightsTest.php`
+- [ ] `GraphQL/MetafieldNormalizerTest.php`
+- [ ] `GraphQL/OrderArchiveTest.php`
+- [ ] `GraphQL/OrderAuditsTest.php`
+- [ ] `GraphQL/OrderEventAuditsTest.php`
+- [ ] `GraphQL/OrderFetcherTest.php`
+- [ ] `GraphQL/OrderHoldLookupTest.php`
+- [ ] `GraphQL/OrderInsightsTest.php`
+- [ ] `GraphQL/OrderLookupTest.php`
+- [ ] `GraphQL/OrderQueryAuditsTest.php`
+- [ ] `GraphQL/OrderTagInsightsTest.php`
+- [ ] `GraphQL/ProductNormalizerTest.php`
+- [ ] `GraphQL/QueryStringsTest.php`
+- [ ] `IgnoreListTest.php`
+- [ ] `InventoryForecastTest.php`
+- [ ] `ItemizedFulfillmentReportTest.php`
+- [ ] `JobQueueTest.php`
+- [ ] `JsonFileLockTest.php`
+- [ ] `LoggerTest.php`
+- [ ] `ManageSettingsPageLoaderTest.php`
+- [ ] `MetricsEndpointTest.php`
+- [ ] `OnHoldStallTest.php`
+- [ ] `OrderAnomalyPageLoaderTest.php`
+- [ ] `OrderPolicyChecksTest.php`
+- [ ] `OrderPolicyPageLoaderTest.php`
+- [ ] `OrphanDetectorTest.php`
+- [ ] `PackingSlipPageLoaderTest.php`
+- [ ] `PageLoaderTest.php`
+- [ ] `PartialFulfillStallsTest.php`
+- [ ] `PostShipAddrChangeTest.php`
+- [ ] `PrintQueueTest.php`
+- [ ] `ProductCatalogueChecksTest.php`
+- [ ] `ProductInventoryPageLoaderTest.php`
+- [ ] `PushLogTest.php`
+- [ ] `RefundsTrackerTest.php`
+- [ ] `RepeatRefundsTest.php`
+- [ ] `ReportRegistryTest.php`
+- [ ] `ReporterTest.php`
+- [ ] `ReturnRmaTrackerTest.php`
+- [ ] `ReturnedItemsReportTest.php`
+- [ ] `RunLogTest.php`
+- [ ] `SameIpTest.php`
+- [ ] `ScanRunnerTest.php`
+- [ ] `ShopifyFlowHealthTest.php`
+- [ ] `SidebarSettingsTest.php`
+- [ ] `SimpleScanPageLoaderTest.php`
+- [ ] `SlackNotifierTest.php`
+- [ ] `SlackRulesTest.php`
+- [ ] `SsShippedUnfulfilledTest.php`
+- [ ] `TaxAuditTest.php`
+- [ ] `ToolRegistryTest.php`
+- [ ] `TrackingFeedTest.php`
+- [ ] `UserActionLogTest.php`
+- [ ] `ViewHelpersTest.php`
+- [ ] `VoidedShipmentsTest.php`
+- [ ] `WorkerTest.php`
+- [ ] `ZombieProductsTest.php`
+
+При приключване на feature неговите legacy test файлове не се маркират
+автоматично като готови. Първо се сверяват отделните test methods срещу Laravel
+tests; липсващите edge cases се добавят, а заменените contracts получават кратка
+причина в tracker-а.
+
 ## Definition of done за Laravel release
 
 Rewrite-ът е готов за production само когато:
