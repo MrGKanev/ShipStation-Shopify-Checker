@@ -36,6 +36,9 @@ interface ShopifyAdminGateway
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function tagAuditCandidates(Store $store, string $startDate, string $endDate): array;
 
+    /** @return array{products: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function productCompletenessCandidates(Store $store): array;
+
     /**
      * @param  array<string, bool|int|string>  $query
      * @return array<string, mixed>

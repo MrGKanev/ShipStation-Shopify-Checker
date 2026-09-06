@@ -408,7 +408,7 @@ Matrix-ът е release control документ, а не само checklist. М�
 достъпен route/controller/view и покриващи тестове. Наличен domain helper без
 завършен потребителски workflow не се брои за готов feature.
 
-Последно обновяване: **2026-09-06**, след Tag Audit report slice-а.
+Последно обновяване: **2026-09-06**, след Product Completeness report slice-а.
 
 Легенда: **Done** = feature parity за основния workflow; **Partial** = използваем,
 но по-тесен от legacy; **Todo** = няма завършен Laravel workflow;
@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 9 | 12.5% |
+| Done | 10 | 13.9% |
 | Partial | 2 | 2.8% |
-| Todo | 59 | 81.9% |
+| Todo | 58 | 80.6% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -498,7 +498,7 @@ feature страниците. Те се следят отделно:
 | `fulfilleditems` | Fulfilled Items Report | Todo | Itemized fulfilled quantities. |
 | `carrierperf` | Carrier Performance | Todo | Delivery time и late rate по carrier. |
 | `shipmargin` | Shipping Margin Erosion | Todo | Label cost над customer shipping charge. |
-| `productcheck` | Product Completeness | Todo | Missing image/description/SKU. |
+| `productcheck` | Product Completeness | Done | True image check, meaningful description, strict complete variant scan, missing/no-variant classification и visible truncation. |
 | `skudupes` | SKU Duplicates | Todo | Shared SKU между variants. |
 | `inventoryoversell` | Inventory Oversell Risk | Todo | Awaiting quantity над Shopify stock. |
 | `inventoryaging` | Inventory Aging | Todo | Zero-stock variants със скорошни продажби. |
@@ -515,7 +515,7 @@ feature страниците. Те се следят отделно:
 | `sameip` | Same IP, Different Emails | Todo | Fraud-ring signal по client IP. |
 | `disputes` | Chargebacks / Disputes | Todo | Open disputes и response deadlines. |
 
-Audit subtotal: **Done 2 · Partial 1 · Todo 44 · Replaced 1**.
+Audit subtotal: **Done 3 · Partial 1 · Todo 43 · Replaced 1**.
 
 ### Search & Lookup — 12
 
@@ -572,15 +572,15 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 39 | 254 | 1,016 |
+| Laravel rewrite | 42 | 264 | 1,040 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
 | Fully mapped | 3 | 2.6% |
-| Partial / parity verification | 21 | 18.3% |
-| Pending | 91 | 79.1% |
+| Partial / parity verification | 23 | 20.0% |
+| Pending | 89 | 77.4% |
 | **Общо** | **115** | **100%** |
 
 #### Fully mapped legacy test files
@@ -605,6 +605,8 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `HttpAuthEndpointTest.php` — login/logout са покрити; целият legacy endpoint contract остава
 - [ ] `OrderInsightPageLoaderTest.php` — compare/timeline subset е пренесен; останалите insights остават
 - [ ] `OrderTimelineTest.php` — workflow е пренесен и разширен; 26 legacy methods чакат explicit mapping
+- [ ] `ProductCatalogueChecksTest.php` — Product Completeness matrix е пренесена и разширена; SKU duplicates и inventory aging остават
+- [ ] `ProductInventoryPageLoaderTest.php` — Product Completeness wiring/error/success paths са пренесени; останалите catalogue workflows остават
 - [ ] `RiskScorerTest.php` — осемте сигнала са пренесени; custom weights и 33-method mapping остават
 - [ ] `SearchLookupPageLoaderTest.php` — single lookup/compare/timeline subset е пренесен
 - [ ] `SecurityTest.php` — escaping, validation и tenant isolation са разширени; целият checklist остава
@@ -681,8 +683,6 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `PartialFulfillStallsTest.php`
 - [ ] `PostShipAddrChangeTest.php`
 - [ ] `PrintQueueTest.php`
-- [ ] `ProductCatalogueChecksTest.php`
-- [ ] `ProductInventoryPageLoaderTest.php`
 - [ ] `PushLogTest.php`
 - [ ] `RefundsTrackerTest.php`
 - [ ] `RepeatRefundsTest.php`

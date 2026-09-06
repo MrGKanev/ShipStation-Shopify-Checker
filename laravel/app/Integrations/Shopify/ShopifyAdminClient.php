@@ -475,6 +475,91 @@ class ShopifyAdminClient implements ShopifyAdminGateway
         return ['orders' => $orders, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
     }
 
+    /** @return array{products: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function productCompletenessCandidates(Store $store): array
+    {
+        $query = <<<'GRAPHQL'
+            query ProductCompletenessCandidates($after: String) {
+              products(first: 250, after: $after, query: "status:active") {
+                pageInfo { hasNextPage endCursor }
+                edges {
+                  node {
+                    id
+                    legacyResourceId
+                    title
+                    vendor
+                    productType
+                    status
+                    descriptionHtml
+                    images(first: 1) { nodes { id } }
+                    variants(first: 250) {
+                      pageInfo { hasNextPage endCursor }
+                      nodes { sku }
+                    }
+                  }
+                }
+              }
+            }
+            GRAPHQL;
+        $result = $this->paginateGraphql($store, $query, 'products', maxPages: 100);
+        $products = [];
+
+        foreach ($result['edges'] as $edge) {
+            if (! is_array($edge['node'] ?? null)) {
+                throw new ShopifyGraphqlException([], 'Shopify product completeness report returned an unexpected response shape.');
+            }
+
+            $products[] = $this->completeProductVariants($store, $edge['node']);
+        }
+
+        return ['products' => $products, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
+    }
+
+    /** @param array<string, mixed> $product @return array<string, mixed> */
+    private function completeProductVariants(Store $store, array $product): array
+    {
+        $variants = $product['variants'] ?? null;
+
+        if (! is_array($variants) || ! is_array($variants['nodes'] ?? null) || ! is_array($variants['pageInfo'] ?? null)) {
+            throw new ShopifyGraphqlException([], 'Shopify product variants returned an unexpected response shape.');
+        }
+
+        $nodes = $variants['nodes'];
+        $pages = 1;
+        $query = <<<'GRAPHQL'
+            query ProductCompletenessVariants($id: ID!, $after: String) {
+              product(id: $id) {
+                variants(first: 250, after: $after) {
+                  pageInfo { hasNextPage endCursor }
+                  nodes { sku }
+                }
+              }
+            }
+            GRAPHQL;
+
+        while (($variants['pageInfo']['hasNextPage'] ?? null) === true) {
+            if ($pages >= 100 || ! is_string($product['id'] ?? null) || ! is_string($variants['pageInfo']['endCursor'] ?? null) || $variants['pageInfo']['endCursor'] === '') {
+                throw new ShopifyGraphqlException([], 'Shopify product variant pagination could not be completed.');
+            }
+
+            $cursor = $variants['pageInfo']['endCursor'];
+            $response = $this->graphql($store, $query, ['id' => $product['id'], 'after' => $cursor]);
+            $next = $response['data']['product']['variants'] ?? null;
+
+            if (! is_array($next) || ! is_array($next['nodes'] ?? null) || ! is_array($next['pageInfo'] ?? null) || (($next['pageInfo']['hasNextPage'] ?? null) === true && ($next['pageInfo']['endCursor'] ?? null) === $cursor)) {
+                throw new ShopifyGraphqlException([], 'Shopify product variants returned an unexpected response shape.');
+            }
+
+            array_push($nodes, ...$next['nodes']);
+            $variants = $next;
+            $pages++;
+        }
+
+        $product['variants'] = $nodes;
+
+        return $product;
+    }
+
     /**
      * @param  array<string, mixed>  $order
      * @return array<string, mixed>
