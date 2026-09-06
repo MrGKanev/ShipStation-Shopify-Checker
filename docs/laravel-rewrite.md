@@ -408,7 +408,7 @@ Matrix-ът е release control документ, а не само checklist. М�
 достъпен route/controller/view и покриващи тестове. Наличен domain helper без
 завършен потребителски workflow не се брои за готов feature.
 
-Последно обновяване: **2026-09-06**, след Country Mismatch report slice-а.
+Последно обновяване: **2026-09-06**, след Tag Audit report slice-а.
 
 Легенда: **Done** = feature parity за основния workflow; **Partial** = използваем,
 но по-тесен от legacy; **Todo** = няма завършен Laravel workflow;
@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 8 | 11.1% |
+| Done | 9 | 12.5% |
 | Partial | 2 | 2.8% |
-| Todo | 60 | 83.3% |
+| Todo | 59 | 81.9% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -529,12 +529,12 @@ Audit subtotal: **Done 2 · Partial 1 · Todo 44 · Replaced 1**.
 | `customer` | Customer Lookup | Todo | Order history, LTV summary и CSV. |
 | `cohort` | Customer LTV | Todo | Top customers и cohort retention. |
 | `tagsearch` | Tag Search | Done | Exact case-insensitive match, optional validated range, pagination/truncation и safe Shopify links. |
-| `tagaudit` | Tag Audit | Todo | Tag inventory, frequency и last seen. |
+| `tagaudit` | Tag Audit | Done | Per-order frequency, last seen/order, 90-day orphan signal, drill-down и visible truncation. |
 | `metafields` | Metafields | Todo | Definitions и order/value lookup. |
 | `tracking` | Tracking Feed | Done | 1–30 уникални номера, real `/shipments`, unshipped fallback, carrier allowlist и atomic safe errors. |
 | `packingslip` | Packing Slip Preview | Done | Exact-match ShipStation lookup, safe view-data builder, ambiguity state и print-friendly preview. |
 
-Search subtotal: **Done 6 · Partial 0 · Todo 5 · Replaced 1**.
+Search subtotal: **Done 7 · Partial 0 · Todo 4 · Replaced 1**.
 
 ### Manage — 6
 
@@ -572,21 +572,22 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 36 | 242 | 981 |
+| Laravel rewrite | 39 | 254 | 1,016 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
-| Fully mapped | 2 | 1.7% |
+| Fully mapped | 3 | 2.6% |
 | Partial / parity verification | 21 | 18.3% |
-| Pending | 92 | 80.0% |
+| Pending | 91 | 79.1% |
 | **Общо** | **115** | **100%** |
 
 #### Fully mapped legacy test files
 
 - [x] `PackingSlipPageLoaderTest.php` — всичките 6 legacy paths са нанесени в Laravel feature/domain tests; добавени са exact-match ambiguity, malformed nested data, XSS и invalid-date cases
 - [x] `TrackingFeedTest.php` — всичките 7 builder contracts са нанесени; добавени са всички carriers, истински split shipments, unshipped fallback, malformed data, tenant и atomic-error cases
+- [x] `GraphQL/OrderTagInsightsTest.php` — tag search и tag statistics contracts са нанесени; добавени са bounded pagination, date variables, malformed payload, duplicate-per-order и XSS cases
 
 #### Partial или чакащи method-level parity проверка
 
@@ -661,7 +662,6 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `GraphQL/OrderInsightsTest.php`
 - [ ] `GraphQL/OrderLookupTest.php`
 - [ ] `GraphQL/OrderQueryAuditsTest.php`
-- [ ] `GraphQL/OrderTagInsightsTest.php`
 - [ ] `GraphQL/ProductNormalizerTest.php`
 - [ ] `GraphQL/QueryStringsTest.php`
 - [ ] `IgnoreListTest.php`
