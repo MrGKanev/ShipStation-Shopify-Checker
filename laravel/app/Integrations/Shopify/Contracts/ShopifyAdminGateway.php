@@ -23,6 +23,11 @@ interface ShopifyAdminGateway
     public function getOrderEvents(Store $store, string $orderId): array;
 
     /**
+     * @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool}
+     */
+    public function searchOrdersByTag(Store $store, string $tag, ?string $startDate = null, ?string $endDate = null): array;
+
+    /**
      * @param  array<string, bool|int|string>  $query
      * @return array<string, mixed>
      */

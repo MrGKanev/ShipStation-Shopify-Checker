@@ -49,5 +49,8 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('packing-slip', fn (Request $request): Limit => Limit::perMinute(10)->by(
             ($request->user()?->getAuthIdentifier() ?? 'guest').'|'.$request->ip(),
         ));
+        RateLimiter::for('tag-search', fn (Request $request): Limit => Limit::perMinute(10)->by(
+            ($request->user()?->getAuthIdentifier() ?? 'guest').'|'.$request->ip(),
+        ));
     }
 }

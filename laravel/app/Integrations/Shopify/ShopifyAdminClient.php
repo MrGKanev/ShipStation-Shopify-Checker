@@ -350,6 +350,57 @@ class ShopifyAdminClient implements ShopifyAdminGateway
     }
 
     /**
+     * @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool}
+     */
+    public function searchOrdersByTag(Store $store, string $tag, ?string $startDate = null, ?string $endDate = null): array
+    {
+        $escapedTag = str_replace(['\\', '"'], ['\\\\', '\\"'], $tag);
+        $search = 'tag:"'.$escapedTag.'"';
+
+        if ($startDate !== null) {
+            $search .= ' created_at:>='.$startDate.'T00:00:00Z';
+        }
+
+        if ($endDate !== null) {
+            $search .= ' created_at:<='.$endDate.'T23:59:59Z';
+        }
+
+        $query = <<<'GRAPHQL'
+            query SearchOrdersByTag($search: String!, $after: String) {
+              orders(first: 250, after: $after, sortKey: CREATED_AT, reverse: true, query: $search) {
+                pageInfo { hasNextPage endCursor }
+                edges {
+                  node {
+                    id
+                    legacyResourceId
+                    name
+                    createdAt
+                    email
+                    tags
+                    displayFinancialStatus
+                    displayFulfillmentStatus
+                    totalPriceSet { shopMoney { amount currencyCode } }
+                  }
+                }
+              }
+            }
+            GRAPHQL;
+
+        $result = $this->paginateGraphql($store, $query, 'orders', ['search' => $search]);
+        $orders = [];
+
+        foreach ($result['edges'] as $edge) {
+            if (! is_array($edge['node'] ?? null)) {
+                throw new ShopifyGraphqlException([], 'Shopify tag search returned an unexpected response shape.');
+            }
+
+            $orders[] = $this->orderNormalizer->normalize($edge['node']);
+        }
+
+        return ['orders' => $orders, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
+    }
+
+    /**
      * @param  array<string, mixed>  $order
      * @return array<string, mixed>
      */

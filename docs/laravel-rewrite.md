@@ -408,7 +408,7 @@ Matrix-ът е release control документ, а не само checklist. М�
 достъпен route/controller/view и покриващи тестове. Наличен domain helper без
 завършен потребителски workflow не се брои за готов feature.
 
-Последно обновяване: **2026-09-06**, след Tracking Feed и Packing Slip slice-а.
+Последно обновяване: **2026-09-06**, след Tag Search slice-а.
 
 Легенда: **Done** = feature parity за основния workflow; **Partial** = използваем,
 но по-тесен от legacy; **Todo** = няма завършен Laravel workflow;
@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 5 | 6.9% |
+| Done | 6 | 8.3% |
 | Partial | 2 | 2.8% |
-| Todo | 63 | 87.5% |
+| Todo | 62 | 86.1% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -528,13 +528,13 @@ Audit subtotal: **Done 0 · Partial 1 · Todo 46 · Replaced 1**.
 | `timeline` | Order Timeline | Done | Shopify events/refunds/fulfillments + ShipStation + risk analysis. |
 | `customer` | Customer Lookup | Todo | Order history, LTV summary и CSV. |
 | `cohort` | Customer LTV | Todo | Top customers и cohort retention. |
-| `tagsearch` | Tag Search | Todo | Shopify indexed tag search. |
+| `tagsearch` | Tag Search | Done | Exact case-insensitive match, optional validated range, pagination/truncation и safe Shopify links. |
 | `tagaudit` | Tag Audit | Todo | Tag inventory, frequency и last seen. |
 | `metafields` | Metafields | Todo | Definitions и order/value lookup. |
 | `tracking` | Tracking Feed | Done | 1–30 уникални номера, real `/shipments`, unshipped fallback, carrier allowlist и atomic safe errors. |
 | `packingslip` | Packing Slip Preview | Done | Exact-match ShipStation lookup, safe view-data builder, ambiguity state и print-friendly preview. |
 
-Search subtotal: **Done 5 · Partial 0 · Todo 6 · Replaced 1**.
+Search subtotal: **Done 6 · Partial 0 · Todo 5 · Replaced 1**.
 
 ### Manage — 6
 
@@ -572,7 +572,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 27 | 217 | 844 |
+| Laravel rewrite | 30 | 228 | 922 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
