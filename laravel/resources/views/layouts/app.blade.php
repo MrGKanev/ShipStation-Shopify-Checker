@@ -46,6 +46,7 @@
                     <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('dashboard') }}">Dashboard</a>
                     <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('orders.lookup') }}">Order lookup</a>
                     <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('orders.compare') }}">Order compare</a>
+                    <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('orders.timeline') }}">Order timeline</a>
                     @can('manage-administration')
                         <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 sm:hidden dark:hover:bg-slate-800" href="{{ route('admin.stores.index') }}">Manage stores</a>
                         <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 sm:hidden dark:hover:bg-slate-800" href="{{ route('admin.users.index') }}">Manage users</a>

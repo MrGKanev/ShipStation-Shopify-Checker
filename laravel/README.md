@@ -64,5 +64,7 @@ access, stores, and integration credentials. Store-scoped Shopify and
 ShipStation clients back the first migrated read-only workflow: single-order
 lookup across both systems with detailed address, status, fulfillment, and
 SKU/quantity comparison. The legacy two-order comparison workflow is also
-available through the same normalized boundaries. The dashboard remains a
-migration status shell.
+available through the same normalized boundaries. The order timeline now
+combines paginated Shopify events, fulfillments, refunds, ShipStation activity,
+operational warnings, and the legacy-compatible order risk score. The dashboard
+remains a migration status shell.

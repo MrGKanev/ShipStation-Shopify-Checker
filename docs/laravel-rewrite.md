@@ -433,8 +433,9 @@ Rewrite-ът е готов за production само когато:
 
 ## Текуща практическа задача
 
-След Laravel foundation, authentication, stores и administration следва
-integration boundary за Shopify и ShipStation, а после read-only търсене на
-единична поръчка през активния магазин. Всеки следващ workflow се пренася
+Laravel foundation, authentication, stores, administration, Shopify/ShipStation
+integration boundaries, единичното търсене, сравнението между две поръчки и
+order timeline workflow-ът са пренесени. Следващият read-only workflow се избира
+от останалите Search & Lookup инструменти. Всеки следващ workflow се пренася
 заедно със съответните legacy tests, traceability записи и допълнителните edge
 cases от test стратегията по-горе.

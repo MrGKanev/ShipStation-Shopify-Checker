@@ -14,7 +14,10 @@ class ShopifyOrderNormalizerTest extends TestCase
             'legacyResourceId' => '123456789',
             'name' => '#65075',
             'createdAt' => '2026-08-30T10:15:00Z',
+            'processedAt' => '2026-08-30T10:16:00Z',
+            'closedAt' => '2026-09-03T09:00:00Z',
             'cancelledAt' => null,
+            'cancelReason' => 'CUSTOMER',
             'email' => 'buyer@example.com',
             'displayFinancialStatus' => 'PAID',
             'displayFulfillmentStatus' => 'FULFILLED',
@@ -57,6 +60,33 @@ class ShopifyOrderNormalizerTest extends TestCase
                     'number' => 'TRACK-1',
                     'url' => 'https://tracking.example/TRACK-1',
                 ]],
+                'fulfillmentLineItems' => ['edges' => [[
+                    'node' => [
+                        'quantity' => 2,
+                        'lineItem' => [
+                            'id' => 'gid://shopify/LineItem/987',
+                            'title' => 'Blue Widget',
+                            'name' => 'Blue Widget - Large',
+                            'sku' => 'WIDGET-BLUE-L',
+                            'quantity' => 3,
+                            'variantTitle' => 'Large',
+                            'originalUnitPriceSet' => ['shopMoney' => ['amount' => '39.95']],
+                        ],
+                    ],
+                ]]],
+            ]],
+            'refunds' => [[
+                'id' => 'gid://shopify/Refund/654',
+                'legacyResourceId' => '654',
+                'createdAt' => '2026-09-02T11:30:00Z',
+                'note' => 'Customer return',
+                'totalRefundedSet' => ['shopMoney' => ['amount' => '39.95']],
+                'transactions' => ['nodes' => [[
+                    'id' => 'gid://shopify/OrderTransaction/321',
+                    'kind' => 'REFUND',
+                    'status' => 'SUCCESS',
+                    'amountSet' => ['shopMoney' => ['amount' => '39.95']],
+                ]]],
             ]],
         ]);
 
@@ -71,6 +101,9 @@ class ShopifyOrderNormalizerTest extends TestCase
             'fulfillment_status' => 'fulfilled',
             'total_price' => '129.90',
             'admin_graphql_api_id' => 'gid://shopify/Order/123456789',
+            'processed_at' => '2026-08-30T10:16:00Z',
+            'closed_at' => '2026-09-03T09:00:00Z',
+            'cancel_reason' => 'customer',
             'shipping_address' => [
                 'first_name' => 'Ada',
                 'last_name' => 'Lovelace',
@@ -111,6 +144,31 @@ class ShopifyOrderNormalizerTest extends TestCase
                 'tracking_url' => 'https://tracking.example/TRACK-1',
                 'tracking_numbers' => ['TRACK-1'],
                 'tracking_urls' => ['https://tracking.example/TRACK-1'],
+                'line_items' => [[
+                    'id' => 987,
+                    'title' => 'Blue Widget',
+                    'name' => 'Blue Widget - Large',
+                    'sku' => 'WIDGET-BLUE-L',
+                    'quantity' => 2,
+                    'variant_title' => 'Large',
+                    'price' => '39.95',
+                    'admin_graphql_api_id' => 'gid://shopify/LineItem/987',
+                ]],
+            ]],
+            'refunds' => [[
+                'id' => 654,
+                'admin_graphql_api_id' => 'gid://shopify/Refund/654',
+                'created_at' => '2026-09-02T11:30:00Z',
+                'note' => 'Customer return',
+                'total_refunded' => '39.95',
+                'refund_line_items' => [],
+                'transactions' => [[
+                    'id' => 321,
+                    'kind' => 'refund',
+                    'status' => 'success',
+                    'amount' => '39.95',
+                    'admin_graphql_api_id' => 'gid://shopify/OrderTransaction/321',
+                ]],
             ]],
         ], $order);
     }
@@ -132,6 +190,7 @@ class ShopifyOrderNormalizerTest extends TestCase
         $this->assertSame(0, $order['line_items'][0]['quantity']);
         $this->assertSame('', $order['fulfillments'][0]['status']);
         $this->assertSame([], $order['fulfillments'][0]['tracking_numbers']);
+        $this->assertSame([], $order['fulfillments'][0]['line_items']);
     }
 
     public function test_rejects_malformed_tags_without_returning_a_partial_order(): void
@@ -140,5 +199,75 @@ class ShopifyOrderNormalizerTest extends TestCase
         $this->expectExceptionMessage('Shopify returned an invalid tags collection.');
 
         (new ShopifyOrderNormalizer)->normalize(['tags' => 'vip']);
+    }
+
+    public function test_rejects_malformed_fulfillment_line_items_without_returning_a_partial_order(): void
+    {
+        $this->expectException(\UnexpectedValueException::class);
+        $this->expectExceptionMessage('Shopify returned an invalid fulfillment line item.');
+
+        (new ShopifyOrderNormalizer)->normalize([
+            'fulfillments' => [[
+                'fulfillmentLineItems' => ['edges' => [['node' => ['quantity' => 1]]]],
+            ]],
+        ]);
+    }
+
+    public function test_rejects_malformed_refund_transactions_without_returning_a_partial_order(): void
+    {
+        $this->expectException(\UnexpectedValueException::class);
+        $this->expectExceptionMessage('Shopify returned an invalid refund transaction.');
+
+        (new ShopifyOrderNormalizer)->normalize([
+            'refunds' => [[
+                'transactions' => ['nodes' => ['invalid']],
+            ]],
+        ]);
+    }
+
+    public function test_selects_high_as_the_highest_risk_among_lower_assessments(): void
+    {
+        $order = (new ShopifyOrderNormalizer)->normalize([
+            'risk' => [
+                'recommendation' => 'CANCEL',
+                'assessments' => [
+                    ['riskLevel' => 'LOW'],
+                    ['riskLevel' => 'HIGH'],
+                    ['riskLevel' => 'MEDIUM'],
+                ],
+            ],
+        ]);
+
+        $this->assertSame('HIGH', $order['risk_level']);
+        $this->assertSame('CANCEL', $order['risk_recommendation']);
+        $this->assertSame([
+            ['riskLevel' => 'LOW'],
+            ['riskLevel' => 'HIGH'],
+            ['riskLevel' => 'MEDIUM'],
+        ], $order['risk_assessments']);
+    }
+
+    public function test_returns_legacy_risk_defaults_for_empty_assessments(): void
+    {
+        $order = (new ShopifyOrderNormalizer)->normalize([
+            'risk' => [
+                'recommendation' => null,
+                'assessments' => [],
+            ],
+        ]);
+
+        $this->assertSame('', $order['risk_level']);
+        $this->assertSame('', $order['risk_recommendation']);
+        $this->assertSame([], $order['risk_assessments']);
+    }
+
+    public function test_rejects_malformed_risk_assessments_without_returning_a_partial_order(): void
+    {
+        $this->expectException(\UnexpectedValueException::class);
+        $this->expectExceptionMessage('Shopify returned an invalid risk assessment.');
+
+        (new ShopifyOrderNormalizer)->normalize([
+            'risk' => ['assessments' => ['HIGH']],
+        ]);
     }
 }

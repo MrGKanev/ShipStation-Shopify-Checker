@@ -7,6 +7,7 @@ use App\Http\Controllers\AuthenticatedSessionController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\OrderComparisonController;
 use App\Http\Controllers\OrderLookupController;
+use App\Http\Controllers\OrderTimelineController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -26,6 +27,7 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/dashboard', DashboardController::class)->name('dashboard');
         Route::get('/orders/lookup', OrderLookupController::class)->name('orders.lookup');
         Route::get('/orders/compare', OrderComparisonController::class)->name('orders.compare');
+        Route::get('/orders/timeline', OrderTimelineController::class)->name('orders.timeline');
 
         Route::prefix('admin')
             ->name('admin.')

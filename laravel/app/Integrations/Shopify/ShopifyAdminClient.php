@@ -20,7 +20,10 @@ class ShopifyAdminClient implements ShopifyAdminGateway
     /**
      * The normalizer keeps the migration boundary compatible with existing workflows.
      */
-    public function __construct(private readonly ShopifyOrderNormalizer $orderNormalizer) {}
+    public function __construct(
+        private readonly ShopifyOrderNormalizer $orderNormalizer,
+        private readonly ShopifyOrderEventNormalizer $orderEventNormalizer,
+    ) {}
 
     /**
      * @return list<array<string, mixed>>
@@ -43,13 +46,20 @@ class ShopifyAdminClient implements ShopifyAdminGateway
                     legacyResourceId
                     name
                     createdAt
+                    processedAt
+                    closedAt
                     cancelledAt
+                    cancelReason
                     email
                     note
                     tags
                     displayFinancialStatus
                     displayFulfillmentStatus
                     totalPriceSet { shopMoney { amount currencyCode } }
+                    risk {
+                      recommendation
+                      assessments { riskLevel }
+                    }
                     shippingAddress {
                       firstName
                       lastName
@@ -99,6 +109,37 @@ class ShopifyAdminClient implements ShopifyAdminGateway
                       status
                       displayStatus
                       trackingInfo(first: 10) { company number url }
+                      fulfillmentLineItems(first: 250) {
+                        edges {
+                          node {
+                            quantity
+                            lineItem {
+                              id
+                              title
+                              name
+                              sku
+                              quantity
+                              variantTitle
+                              originalUnitPriceSet { shopMoney { amount currencyCode } }
+                            }
+                          }
+                        }
+                      }
+                    }
+                    refunds {
+                      id
+                      legacyResourceId
+                      createdAt
+                      note
+                      totalRefundedSet { shopMoney { amount currencyCode } }
+                      transactions(first: 250) {
+                        nodes {
+                          id
+                          kind
+                          status
+                          amountSet { shopMoney { amount currencyCode } }
+                        }
+                      }
                     }
                   }
                 }
@@ -126,6 +167,84 @@ class ShopifyAdminClient implements ShopifyAdminGateway
         }
 
         return $orders;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function getOrderEvents(Store $store, string $orderId): array
+    {
+        $graphqlOrderId = $this->orderGid($orderId);
+        $query = <<<'GRAPHQL'
+            query GetOrderEvents($id: ID!, $after: String) {
+              order(id: $id) {
+                events(first: 250, sortKey: CREATED_AT, reverse: true, after: $after) {
+                  pageInfo { hasNextPage endCursor }
+                  edges {
+                    node {
+                      __typename
+                      id
+                      action
+                      appTitle
+                      createdAt
+                      message
+                      ... on BasicEvent {
+                        subjectId
+                        subjectType
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            GRAPHQL;
+
+        $events = [];
+        $cursor = null;
+        $pages = 0;
+
+        do {
+            $requestedCursor = $cursor;
+            $result = $this->graphql($store, $query, [
+                'id' => $graphqlOrderId,
+                'after' => $cursor,
+            ]);
+            $data = $result['data'];
+
+            if (! is_array($data) || ! array_key_exists('order', $data)) {
+                throw new ShopifyGraphqlException([], 'Shopify order events returned an unexpected response shape.');
+            }
+
+            if ($data['order'] === null && $pages === 0) {
+                return [];
+            }
+
+            $connection = is_array($data['order']) ? ($data['order']['events'] ?? null) : null;
+
+            if (! $this->isValidEventConnection($connection)) {
+                throw new ShopifyGraphqlException([], 'Shopify order events returned an unexpected response shape.');
+            }
+
+            foreach ($connection['edges'] as $edge) {
+                if (! is_array($edge) || ! is_array($edge['node'] ?? null)) {
+                    throw new ShopifyGraphqlException([], 'Shopify order events returned an unexpected response shape.');
+                }
+
+                $events[] = $this->orderEventNormalizer->normalize($edge['node'], $graphqlOrderId);
+            }
+
+            $hasNextPage = $connection['pageInfo']['hasNextPage'];
+            $cursor = is_string($connection['pageInfo']['endCursor'] ?? null)
+                ? $connection['pageInfo']['endCursor']
+                : null;
+            $pages++;
+
+            if ($hasNextPage && ($cursor === null || $cursor === '' || $cursor === $requestedCursor)) {
+                throw new ShopifyGraphqlException([], 'Shopify order events returned an unexpected response shape.');
+            }
+        } while ($hasNextPage);
+
+        return $events;
     }
 
     /**
@@ -214,6 +333,29 @@ class ShopifyAdminClient implements ShopifyAdminGateway
         }
 
         return array_all($connection['nodes'], fn (mixed $node): bool => is_array($node));
+    }
+
+    private function isValidEventConnection(mixed $connection): bool
+    {
+        return is_array($connection)
+            && is_array($connection['edges'] ?? null)
+            && is_array($connection['pageInfo'] ?? null)
+            && is_bool($connection['pageInfo']['hasNextPage'] ?? null);
+    }
+
+    private function orderGid(string $orderId): string
+    {
+        $orderId = trim($orderId);
+
+        if (preg_match('/\Agid:\/\/shopify\/Order\/[0-9]+\z/', $orderId) === 1) {
+            return $orderId;
+        }
+
+        if ($orderId === '' || ! ctype_digit($orderId)) {
+            throw new InvalidArgumentException('The Shopify order ID is invalid.');
+        }
+
+        return "gid://shopify/Order/{$orderId}";
     }
 
     /**

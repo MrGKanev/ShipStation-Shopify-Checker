@@ -27,6 +27,48 @@ class ShopifyOrderNormalizer
             'admin_graphql_api_id' => $node['id'] ?? '',
         ];
 
+        if (array_key_exists('currencyCode', $node['totalPriceSet']['shopMoney'] ?? [])) {
+            $order['currency'] = $node['totalPriceSet']['shopMoney']['currencyCode'];
+        }
+
+        if (array_key_exists('processedAt', $node)) {
+            $order['processed_at'] = $this->nullableString($node['processedAt'], 'processedAt');
+        }
+
+        if (array_key_exists('closedAt', $node)) {
+            $order['closed_at'] = $this->nullableString($node['closedAt'], 'closedAt');
+        }
+
+        if (array_key_exists('cancelReason', $node)) {
+            $cancelReason = $this->nullableString($node['cancelReason'], 'cancelReason');
+            $order['cancel_reason'] = $cancelReason === null ? null : mb_strtolower($cancelReason);
+        }
+
+        if (array_key_exists('risk', $node)) {
+            $risk = $node['risk'];
+
+            if ($risk !== null && ! is_array($risk)) {
+                throw new UnexpectedValueException('Shopify returned an invalid risk value.');
+            }
+
+            $risk = is_array($risk) ? $risk : [];
+            $assessments = $risk['assessments'] ?? [];
+
+            if (! is_array($assessments) || ! array_is_list($assessments)) {
+                throw new UnexpectedValueException('Shopify returned an invalid risk assessments collection.');
+            }
+
+            foreach ($assessments as $assessment) {
+                if (! is_array($assessment)) {
+                    throw new UnexpectedValueException('Shopify returned an invalid risk assessment.');
+                }
+            }
+
+            $order['risk_level'] = $this->highestRiskLevel($assessments);
+            $order['risk_recommendation'] = $this->nullableString($risk['recommendation'] ?? null, 'risk recommendation') ?? '';
+            $order['risk_assessments'] = $assessments;
+        }
+
         if (array_key_exists('shippingAddress', $node)) {
             $order['shipping_address'] = $this->normalizeAddress($node['shippingAddress'] ?? null);
         }
@@ -50,11 +92,12 @@ class ShopifyOrderNormalizer
             ));
         }
 
-        if (isset($node['fulfillments']) && is_array($node['fulfillments'])) {
-            $order['fulfillments'] = array_values(array_map(
-                fn (array $fulfillment): array => $this->normalizeFulfillment($fulfillment),
-                array_filter($node['fulfillments'], is_array(...)),
-            ));
+        if (array_key_exists('fulfillments', $node)) {
+            $order['fulfillments'] = $this->normalizeFulfillments($node['fulfillments']);
+        }
+
+        if (array_key_exists('refunds', $node)) {
+            $order['refunds'] = $this->normalizeRefunds($node['refunds']);
         }
 
         return $order;
@@ -117,6 +160,28 @@ class ShopifyOrderNormalizer
         ));
         $firstTracking = $trackingInfo[0] ?? [];
 
+        $lineItems = [];
+
+        if (array_key_exists('fulfillmentLineItems', $fulfillment)) {
+            $connection = $fulfillment['fulfillmentLineItems'];
+
+            if (! is_array($connection) || ! is_array($connection['edges'] ?? null)) {
+                throw new UnexpectedValueException('Shopify returned an invalid fulfillment line items connection.');
+            }
+
+            foreach ($connection['edges'] as $edge) {
+                if (! is_array($edge)
+                    || ! is_array($edge['node'] ?? null)
+                    || ! is_array($edge['node']['lineItem'] ?? null)) {
+                    throw new UnexpectedValueException('Shopify returned an invalid fulfillment line item.');
+                }
+
+                $lineItem = $this->normalizeLineItem($edge['node']['lineItem']);
+                $lineItem['quantity'] = (int) ($edge['node']['quantity'] ?? $lineItem['quantity']);
+                $lineItems[] = $lineItem;
+            }
+        }
+
         return [
             'id' => $this->legacyId($fulfillment['legacyResourceId'] ?? null, $fulfillment['id'] ?? null),
             'admin_graphql_api_id' => $fulfillment['id'] ?? '',
@@ -135,7 +200,88 @@ class ShopifyOrderNormalizer
                 fn (array $tracking): mixed => $tracking['url'] ?? '',
                 $trackingInfo,
             ))),
+            'line_items' => $lineItems,
         ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function normalizeFulfillments(mixed $fulfillments): array
+    {
+        if (! is_array($fulfillments) || ! array_is_list($fulfillments)) {
+            throw new UnexpectedValueException('Shopify returned an invalid fulfillments collection.');
+        }
+
+        $normalized = [];
+
+        foreach ($fulfillments as $fulfillment) {
+            if (! is_array($fulfillment)) {
+                throw new UnexpectedValueException('Shopify returned an invalid fulfillment.');
+            }
+
+            $normalized[] = $this->normalizeFulfillment($fulfillment);
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function normalizeRefunds(mixed $refunds): array
+    {
+        if (! is_array($refunds) || ! array_is_list($refunds)) {
+            throw new UnexpectedValueException('Shopify returned an invalid refunds collection.');
+        }
+
+        $normalized = [];
+
+        foreach ($refunds as $refund) {
+            if (! is_array($refund)) {
+                throw new UnexpectedValueException('Shopify returned an invalid refund.');
+            }
+
+            $transactions = $refund['transactions']['nodes'] ?? [];
+
+            if (! is_array($transactions) || ! array_is_list($transactions)) {
+                throw new UnexpectedValueException('Shopify returned an invalid refund transactions collection.');
+            }
+
+            $normalizedTransactions = [];
+
+            foreach ($transactions as $transaction) {
+                if (! is_array($transaction)) {
+                    throw new UnexpectedValueException('Shopify returned an invalid refund transaction.');
+                }
+
+                $normalizedTransaction = [
+                    'id' => $this->legacyId(null, $transaction['id'] ?? null),
+                    'kind' => mb_strtolower((string) ($transaction['kind'] ?? '')),
+                    'status' => mb_strtolower((string) ($transaction['status'] ?? '')),
+                    'amount' => $transaction['amountSet']['shopMoney']['amount'] ?? '0.00',
+                    'admin_graphql_api_id' => $transaction['id'] ?? '',
+                ];
+
+                if (array_key_exists('currencyCode', $transaction['amountSet']['shopMoney'] ?? [])) {
+                    $normalizedTransaction['currency'] = $transaction['amountSet']['shopMoney']['currencyCode'];
+                }
+
+                $normalizedTransactions[] = $normalizedTransaction;
+            }
+
+            $normalized[] = [
+                'id' => $this->legacyId($refund['legacyResourceId'] ?? null, $refund['id'] ?? null),
+                'admin_graphql_api_id' => $refund['id'] ?? '',
+                'created_at' => $refund['createdAt'] ?? '',
+                'note' => $this->nullableString($refund['note'] ?? null, 'refund note') ?? '',
+                'total_refunded' => $refund['totalRefundedSet']['shopMoney']['amount'] ?? '0.00',
+                'refund_line_items' => [],
+                'transactions' => $normalizedTransactions,
+            ];
+        }
+
+        return $normalized;
     }
 
     private function legacyId(mixed $legacyResourceId, mixed $graphqlId): int|string
@@ -163,6 +309,34 @@ class ShopifyOrderNormalizer
             'partially_fulfilled' => 'partial',
             default => $normalized,
         };
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $assessments
+     */
+    private function highestRiskLevel(array $assessments): string
+    {
+        $severity = [
+            'HIGH' => 3,
+            'MEDIUM' => 2,
+            'LOW' => 1,
+            'PENDING' => 0,
+            'NONE' => 0,
+        ];
+        $highestLevel = '';
+        $highestSeverity = -1;
+
+        foreach ($assessments as $assessment) {
+            $level = mb_strtoupper((string) ($assessment['riskLevel'] ?? ''));
+            $rank = $severity[$level] ?? -1;
+
+            if ($rank > $highestSeverity) {
+                $highestLevel = $level;
+                $highestSeverity = $rank;
+            }
+        }
+
+        return $highestLevel;
     }
 
     /** @return list<string> */
