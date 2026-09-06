@@ -12,6 +12,7 @@ use App\Http\Controllers\OrderTagSearchController;
 use App\Http\Controllers\OrderTimelineController;
 use App\Http\Controllers\OrderTrackingController;
 use App\Http\Controllers\PackingSlipController;
+use App\Http\Controllers\Reports\HighValueNoPhoneController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -42,6 +43,8 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/orders/packing-slip', [PackingSlipController::class, 'store'])->middleware('throttle:packing-slip')->name('orders.packing-slip.store');
         Route::get('/orders/tag-search', [OrderTagSearchController::class, 'create'])->name('orders.tag-search');
         Route::post('/orders/tag-search', [OrderTagSearchController::class, 'store'])->middleware('throttle:tag-search')->name('orders.tag-search.store');
+        Route::get('/reports/high-value-no-phone', [HighValueNoPhoneController::class, 'create'])->middleware('can:run-audits')->name('reports.high-value-no-phone');
+        Route::post('/reports/high-value-no-phone', [HighValueNoPhoneController::class, 'store'])->middleware('throttle:audit-report')->name('reports.high-value-no-phone.store');
 
         Route::prefix('admin')
             ->name('admin.')

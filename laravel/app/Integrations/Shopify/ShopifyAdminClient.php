@@ -400,6 +400,31 @@ class ShopifyAdminClient implements ShopifyAdminGateway
         return ['orders' => $orders, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
     }
 
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function highValueOrderCandidates(Store $store, string $startDate, string $endDate): array
+    {
+        $query = <<<'GRAPHQL'
+            query HighValueOrderCandidates($search: String!, $after: String) {
+              orders(first: 250, after: $after, sortKey: CREATED_AT, reverse: true, query: $search) {
+                pageInfo { hasNextPage endCursor }
+                edges { node { id legacyResourceId name createdAt cancelledAt email displayFinancialStatus displayFulfillmentStatus totalPriceSet { shopMoney { amount currencyCode } } shippingAddress { firstName lastName address1 address2 city province zip country phone } } }
+              }
+            }
+            GRAPHQL;
+        $search = "status:any (financial_status:paid OR financial_status:partially_paid) (fulfillment_status:unfulfilled OR fulfillment_status:partial) created_at:>={$startDate}T00:00:00Z created_at:<={$endDate}T23:59:59Z";
+        $result = $this->paginateGraphql($store, $query, 'orders', ['search' => $search], 100);
+        $orders = [];
+
+        foreach ($result['edges'] as $edge) {
+            if (! is_array($edge['node'] ?? null)) {
+                throw new ShopifyGraphqlException([], 'Shopify high-value report returned an unexpected response shape.');
+            }
+            $orders[] = $this->orderNormalizer->normalize($edge['node']);
+        }
+
+        return ['orders' => $orders, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
+    }
+
     /**
      * @param  array<string, mixed>  $order
      * @return array<string, mixed>

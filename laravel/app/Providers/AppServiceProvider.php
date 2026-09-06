@@ -32,6 +32,7 @@ class AppServiceProvider extends ServiceProvider
             'manage-administration',
             fn (User $user): bool => $user->role === UserRole::Admin,
         );
+        Gate::define('run-audits', fn (User $user): bool => in_array($user->role, [UserRole::Operator, UserRole::Admin], true));
 
         RateLimiter::for('login', function (Request $request): Limit {
             $email = Str::lower((string) $request->input('email'));
@@ -52,5 +53,6 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('tag-search', fn (Request $request): Limit => Limit::perMinute(10)->by(
             ($request->user()?->getAuthIdentifier() ?? 'guest').'|'.$request->ip(),
         ));
+        RateLimiter::for('audit-report', fn (Request $request): Limit => Limit::perMinute(5)->by(($request->user()?->getAuthIdentifier() ?? 'guest').'|'.$request->ip()));
     }
 }
