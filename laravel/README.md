@@ -62,4 +62,5 @@ encrypted store credentials, deterministic active-store selection, a guarded
 first-install command, and administration screens for users, roles, store
 access, stores, and integration credentials. Store-scoped Shopify and
 ShipStation clients back the first migrated read-only workflow: single-order
-lookup across both systems. The dashboard remains a migration status shell.
+lookup across both systems with detailed address, status, fulfillment, and
+SKU/quantity comparison. The dashboard remains a migration status shell.

@@ -48,6 +48,56 @@ class ShopifyAdminClient implements ShopifyAdminGateway
                     displayFinancialStatus
                     displayFulfillmentStatus
                     totalPriceSet { shopMoney { amount currencyCode } }
+                    shippingAddress {
+                      firstName
+                      lastName
+                      name
+                      company
+                      address1
+                      address2
+                      city
+                      province
+                      provinceCode
+                      country
+                      countryCodeV2
+                      zip
+                      phone
+                    }
+                    billingAddress {
+                      firstName
+                      lastName
+                      name
+                      company
+                      address1
+                      address2
+                      city
+                      province
+                      provinceCode
+                      country
+                      countryCodeV2
+                      zip
+                      phone
+                    }
+                    lineItems(first: 250) {
+                      nodes {
+                        id
+                        title
+                        name
+                        sku
+                        quantity
+                        variantTitle
+                        originalUnitPriceSet { shopMoney { amount currencyCode } }
+                      }
+                      pageInfo { hasNextPage endCursor }
+                    }
+                    fulfillments(first: 250) {
+                      id
+                      legacyResourceId
+                      createdAt
+                      status
+                      displayStatus
+                      trackingInfo(first: 10) { company number url }
+                    }
                   }
                 }
               }
@@ -68,10 +118,100 @@ class ShopifyAdminClient implements ShopifyAdminGateway
                 throw new ShopifyGraphqlException([], 'Shopify order lookup returned an unexpected response shape.');
             }
 
-            $orders[] = $this->orderNormalizer->normalize($edge['node']);
+            $orders[] = $this->orderNormalizer->normalize(
+                $this->completeLineItems($store, $edge['node']),
+            );
         }
 
         return $orders;
+    }
+
+    /**
+     * @param  array<string, mixed>  $order
+     * @return array<string, mixed>
+     */
+    private function completeLineItems(Store $store, array $order): array
+    {
+        if (! array_key_exists('lineItems', $order)) {
+            return $order;
+        }
+
+        $connection = $order['lineItems'];
+
+        if (! $this->isValidLineItemConnection($connection)) {
+            throw new ShopifyGraphqlException([], 'Shopify line items returned an unexpected response shape.');
+        }
+
+        $pages = 1;
+
+        while ($connection['pageInfo']['hasNextPage']) {
+            if ($pages >= 20) {
+                throw new ShopifyGraphqlException([], 'Shopify line item pagination exceeded its page limit.');
+            }
+
+            $cursor = $connection['pageInfo']['endCursor'] ?? null;
+            $orderId = $order['id'] ?? null;
+
+            if (! is_string($cursor) || $cursor === '' || ! is_string($orderId) || $orderId === '') {
+                throw new ShopifyGraphqlException([], 'Shopify line items returned an unexpected response shape.');
+            }
+
+            $result = $this->graphql($store, $this->lineItemsQuery(), [
+                'id' => $orderId,
+                'after' => $cursor,
+            ]);
+            $connection = $result['data']['order']['lineItems'] ?? null;
+
+            if (! $this->isValidLineItemConnection($connection)) {
+                throw new ShopifyGraphqlException([], 'Shopify line items returned an unexpected response shape.');
+            }
+
+            foreach ($connection['nodes'] as $lineItem) {
+                $order['lineItems']['nodes'][] = $lineItem;
+            }
+
+            $order['lineItems']['pageInfo'] = $connection['pageInfo'];
+            $pages++;
+        }
+
+        return $order;
+    }
+
+    /**
+     * @return non-empty-string
+     */
+    private function lineItemsQuery(): string
+    {
+        return <<<'GRAPHQL'
+            query OrderLineItems($id: ID!, $after: String!) {
+              order(id: $id) {
+                lineItems(first: 250, after: $after) {
+                  nodes {
+                    id
+                    title
+                    name
+                    sku
+                    quantity
+                    variantTitle
+                    originalUnitPriceSet { shopMoney { amount currencyCode } }
+                  }
+                  pageInfo { hasNextPage endCursor }
+                }
+              }
+            }
+            GRAPHQL;
+    }
+
+    private function isValidLineItemConnection(mixed $connection): bool
+    {
+        if (! is_array($connection)
+            || ! is_array($connection['nodes'] ?? null)
+            || ! is_array($connection['pageInfo'] ?? null)
+            || ! is_bool($connection['pageInfo']['hasNextPage'] ?? null)) {
+            return false;
+        }
+
+        return array_all($connection['nodes'], fn (mixed $node): bool => is_array($node));
     }
 
     /**

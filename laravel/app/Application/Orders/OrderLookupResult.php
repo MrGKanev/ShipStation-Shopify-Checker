@@ -8,6 +8,7 @@ readonly class OrderLookupResult
      * @param  list<array<string, mixed>>  $shopifyOrders
      * @param  list<array<string, mixed>>  $shipStationOrders
      * @param  list<array<string, mixed>>  $shipStationShipments
+     * @param  array<string, mixed>|null  $comparison
      */
     public function __construct(
         public string $orderNumber,
@@ -15,5 +16,7 @@ readonly class OrderLookupResult
         public array $shipStationOrders,
         public array $shipStationShipments,
         public bool $shipStationConfigured,
+        public string $comparisonState,
+        public ?array $comparison,
     ) {}
 }

@@ -12,7 +12,7 @@ class ShopifyOrderNormalizer
     {
         $name = (string) ($node['name'] ?? '');
 
-        return [
+        $order = [
             'id' => $this->legacyId($node['legacyResourceId'] ?? null, $node['id'] ?? null),
             'order_number' => $this->orderNumber($name),
             'name' => $name,
@@ -23,6 +23,108 @@ class ShopifyOrderNormalizer
             'fulfillment_status' => $this->fulfillmentStatus($node['displayFulfillmentStatus'] ?? null),
             'total_price' => $node['totalPriceSet']['shopMoney']['amount'] ?? '0.00',
             'admin_graphql_api_id' => $node['id'] ?? '',
+        ];
+
+        if (array_key_exists('shippingAddress', $node)) {
+            $order['shipping_address'] = $this->normalizeAddress($node['shippingAddress'] ?? null);
+        }
+
+        if (array_key_exists('billingAddress', $node)) {
+            $order['billing_address'] = $this->normalizeAddress($node['billingAddress'] ?? null);
+        }
+
+        if (isset($node['lineItems']['nodes']) && is_array($node['lineItems']['nodes'])) {
+            $order['line_items'] = array_values(array_map(
+                fn (array $lineItem): array => $this->normalizeLineItem($lineItem),
+                array_filter($node['lineItems']['nodes'], is_array(...)),
+            ));
+        }
+
+        if (isset($node['fulfillments']) && is_array($node['fulfillments'])) {
+            $order['fulfillments'] = array_values(array_map(
+                fn (array $fulfillment): array => $this->normalizeFulfillment($fulfillment),
+                array_filter($node['fulfillments'], is_array(...)),
+            ));
+        }
+
+        return $order;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $address
+     * @return array<string, mixed>|null
+     */
+    private function normalizeAddress(?array $address): ?array
+    {
+        if ($address === null) {
+            return null;
+        }
+
+        return [
+            'first_name' => $address['firstName'] ?? '',
+            'last_name' => $address['lastName'] ?? '',
+            'name' => $address['name'] ?? '',
+            'company' => $address['company'] ?? null,
+            'address1' => $address['address1'] ?? '',
+            'address2' => $address['address2'] ?? '',
+            'city' => $address['city'] ?? '',
+            'province' => $address['province'] ?? '',
+            'province_code' => $address['provinceCode'] ?? '',
+            'country' => $address['country'] ?? '',
+            'country_code' => $address['countryCodeV2'] ?? '',
+            'zip' => $address['zip'] ?? '',
+            'phone' => $address['phone'] ?? '',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $lineItem
+     * @return array<string, mixed>
+     */
+    private function normalizeLineItem(array $lineItem): array
+    {
+        return [
+            'id' => $this->legacyId(null, $lineItem['id'] ?? null),
+            'title' => $lineItem['title'] ?? $lineItem['name'] ?? '',
+            'name' => $lineItem['name'] ?? $lineItem['title'] ?? '',
+            'sku' => $lineItem['sku'] ?? '',
+            'quantity' => (int) ($lineItem['quantity'] ?? 0),
+            'variant_title' => $lineItem['variantTitle'] ?? null,
+            'price' => $lineItem['originalUnitPriceSet']['shopMoney']['amount'] ?? '0.00',
+            'admin_graphql_api_id' => $lineItem['id'] ?? '',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $fulfillment
+     * @return array<string, mixed>
+     */
+    private function normalizeFulfillment(array $fulfillment): array
+    {
+        $trackingInfo = array_values(array_filter(
+            is_array($fulfillment['trackingInfo'] ?? null) ? $fulfillment['trackingInfo'] : [],
+            is_array(...),
+        ));
+        $firstTracking = $trackingInfo[0] ?? [];
+
+        return [
+            'id' => $this->legacyId($fulfillment['legacyResourceId'] ?? null, $fulfillment['id'] ?? null),
+            'admin_graphql_api_id' => $fulfillment['id'] ?? '',
+            'created_at' => $fulfillment['createdAt'] ?? '',
+            'status' => mb_strtolower((string) ($fulfillment['status'] ?? '')),
+            'display_status' => mb_strtolower((string) ($fulfillment['displayStatus'] ?? '')),
+            'shipment_status' => mb_strtolower((string) ($fulfillment['displayStatus'] ?? '')),
+            'tracking_company' => $firstTracking['company'] ?? '',
+            'tracking_number' => $firstTracking['number'] ?? '',
+            'tracking_url' => $firstTracking['url'] ?? '',
+            'tracking_numbers' => array_values(array_filter(array_map(
+                fn (array $tracking): mixed => $tracking['number'] ?? '',
+                $trackingInfo,
+            ))),
+            'tracking_urls' => array_values(array_filter(array_map(
+                fn (array $tracking): mixed => $tracking['url'] ?? '',
+                $trackingInfo,
+            ))),
         ];
     }
 

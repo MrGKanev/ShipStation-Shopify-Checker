@@ -161,7 +161,96 @@ class OrderLookupControllerTest extends TestCase
         $response
             ->assertOk()
             ->assertSeeText('ShipStation credentials are not configured for this store.');
+        $response->assertSeeText('Configure ShipStation to enable detailed comparison.');
         Http::assertSentCount(1);
+    }
+
+    public function test_matching_order_details_render_a_successful_cross_platform_comparison(): void
+    {
+        Http::preventStrayRequests();
+        [$user, $store] = $this->userWithStore();
+        Http::fake([
+            'https://acme.myshopify.com/admin/api/2026-07/graphql.json' => Http::response($this->comparisonShopifyResponse()),
+            'https://ssapi.shipstation.com/orders*' => Http::response([
+                'orders' => [$this->matchingShipStationOrder()],
+                'pages' => 1,
+            ]),
+            'https://ssapi.shipstation.com/shipments*' => Http::response([
+                'shipments' => [],
+            ]),
+        ]);
+
+        $response = $this->actingAs($user)
+            ->withSession(['active_store_id' => $store->getKey()])
+            ->get(route('orders.lookup', ['order_number' => '65075']));
+
+        $response
+            ->assertOk()
+            ->assertSeeText('Detailed comparison')
+            ->assertSeeText('SKU quantities match.')
+            ->assertSeeText('Shipping address line 1')
+            ->assertDontSee('ShipStation is shipped while Shopify is not fully fulfilled.');
+        Http::assertSentCount(3);
+    }
+
+    public function test_item_and_established_status_differences_are_highlighted(): void
+    {
+        Http::preventStrayRequests();
+        [$user, $store] = $this->userWithStore();
+        $shopifyResponse = $this->comparisonShopifyResponse();
+        $shopifyResponse['data']['orders']['edges'][0]['node']['displayFulfillmentStatus'] = 'UNFULFILLED';
+        $shipStationOrder = $this->matchingShipStationOrder();
+        $shipStationOrder['items'] = [
+            ['sku' => 'widget', 'quantity' => 1, 'name' => 'Widget'],
+            ['sku' => 'unexpected', 'quantity' => 2, 'name' => 'Unexpected'],
+        ];
+        Http::fake([
+            'https://acme.myshopify.com/admin/api/2026-07/graphql.json' => Http::response($shopifyResponse),
+            'https://ssapi.shipstation.com/orders*' => Http::response([
+                'orders' => [$shipStationOrder],
+                'pages' => 1,
+            ]),
+            'https://ssapi.shipstation.com/shipments*' => Http::response(['shipments' => []]),
+        ]);
+
+        $response = $this->actingAs($user)
+            ->withSession(['active_store_id' => $store->getKey()])
+            ->get(route('orders.lookup', ['order_number' => '65075']));
+
+        $response
+            ->assertOk()
+            ->assertSeeText('ShipStation is shipped while Shopify is not fully fulfilled.')
+            ->assertSeeText('Missing from ShipStation')
+            ->assertSeeText('Extra in ShipStation')
+            ->assertSeeText('cable')
+            ->assertSeeText('unexpected');
+        Http::assertSentCount(3);
+    }
+
+    public function test_multiple_shipstation_matches_are_reported_without_selecting_one(): void
+    {
+        Http::preventStrayRequests();
+        [$user, $store] = $this->userWithStore();
+        $firstOrder = $this->matchingShipStationOrder();
+        $secondOrder = [...$firstOrder, 'orderId' => 43];
+        Http::fake([
+            'https://acme.myshopify.com/admin/api/2026-07/graphql.json' => Http::response($this->comparisonShopifyResponse()),
+            'https://ssapi.shipstation.com/orders*' => Http::response([
+                'orders' => [$firstOrder, $secondOrder],
+                'pages' => 1,
+            ]),
+            'https://ssapi.shipstation.com/shipments*' => Http::response(['shipments' => []]),
+        ]);
+
+        $response = $this->actingAs($user)
+            ->withSession(['active_store_id' => $store->getKey()])
+            ->get(route('orders.lookup', ['order_number' => '65075']));
+
+        $response
+            ->assertOk()
+            ->assertSeeText('Multiple matching records were found. No record was selected automatically.')
+            ->assertDontSee('SKU quantities match.');
+        Http::assertSentCount(3);
     }
 
     public function test_empty_results_are_shown_without_being_treated_as_an_error(): void
@@ -189,6 +278,31 @@ class OrderLookupControllerTest extends TestCase
             ->assertOk()
             ->assertSeeText('No Shopify order found.')
             ->assertSeeText('No ShipStation order found.')
+            ->assertSeeText('Comparison unavailable because the order was not found in Shopify.')
+            ->assertDontSee('The order lookup could not be completed.');
+        Http::assertSentCount(3);
+    }
+
+    public function test_missing_shipstation_order_is_a_valid_comparison_state(): void
+    {
+        Http::preventStrayRequests();
+        [$user, $store] = $this->userWithStore();
+        Http::fake([
+            'https://acme.myshopify.com/admin/api/2026-07/graphql.json' => Http::response($this->comparisonShopifyResponse()),
+            'https://ssapi.shipstation.com/orders*' => Http::response([
+                'orders' => [],
+                'pages' => 1,
+            ]),
+            'https://ssapi.shipstation.com/shipments*' => Http::response(['shipments' => []]),
+        ]);
+
+        $response = $this->actingAs($user)
+            ->withSession(['active_store_id' => $store->getKey()])
+            ->get(route('orders.lookup', ['order_number' => '65075']));
+
+        $response
+            ->assertOk()
+            ->assertSeeText('Comparison unavailable because the order was not found in ShipStation.')
             ->assertDontSee('The order lookup could not be completed.');
         Http::assertSentCount(3);
     }
@@ -276,6 +390,57 @@ class OrderLookupControllerTest extends TestCase
                         ],
                     ]],
                 ],
+            ],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function comparisonShopifyResponse(): array
+    {
+        $response = $this->shopifyResponse();
+        $node = &$response['data']['orders']['edges'][0]['node'];
+        $node['email'] = 'buyer@example.com';
+        $node['displayFulfillmentStatus'] = 'FULFILLED';
+        $node['shippingAddress'] = [
+            'firstName' => 'Jane',
+            'lastName' => 'Doe',
+            'address1' => '1 Main Street',
+            'city' => 'Sofia',
+            'provinceCode' => 'SOF',
+            'zip' => '1000',
+            'countryCodeV2' => 'BG',
+        ];
+        $node['lineItems'] = [
+            'nodes' => [
+                ['id' => 'gid://shopify/LineItem/1', 'sku' => 'Widget', 'quantity' => 2, 'title' => 'Widget'],
+                ['id' => 'gid://shopify/LineItem/2', 'sku' => 'Cable', 'quantity' => 1, 'title' => 'Cable'],
+            ],
+            'pageInfo' => ['hasNextPage' => false, 'endCursor' => null],
+        ];
+
+        return $response;
+    }
+
+    /** @return array<string, mixed> */
+    private function matchingShipStationOrder(): array
+    {
+        return [
+            'orderId' => 42,
+            'orderNumber' => '65075',
+            'orderStatus' => 'shipped',
+            'customerEmail' => 'buyer@example.com',
+            'orderTotal' => 129.90,
+            'shipTo' => [
+                'name' => 'jane doe',
+                'street1' => '1 main street',
+                'city' => 'SOFIA',
+                'state' => 'sof',
+                'postalCode' => '1000',
+                'country' => 'bg',
+            ],
+            'items' => [
+                ['sku' => 'widget', 'quantity' => 2, 'name' => 'Widget'],
+                ['sku' => 'cable', 'quantity' => 1, 'name' => 'Cable'],
             ],
         ];
     }

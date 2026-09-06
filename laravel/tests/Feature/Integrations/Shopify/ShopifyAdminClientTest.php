@@ -74,7 +74,81 @@ class ShopifyAdminClientTest extends TestCase
             'admin_graphql_api_id' => 'gid://shopify/Order/123456789',
         ]], $orders);
         Http::assertSent(fn (Request $request): bool => $request['variables'] === ['query' => 'name:65075']
-            && str_contains((string) $request['query'], 'query FindOrderByName'));
+            && str_contains((string) $request['query'], 'query FindOrderByName')
+            && str_contains((string) $request['query'], 'shippingAddress')
+            && str_contains((string) $request['query'], 'billingAddress')
+            && str_contains((string) $request['query'], 'lineItems(first: 250)')
+            && str_contains((string) $request['query'], 'fulfillments(first: 250)'));
+    }
+
+    public function test_fetches_every_line_item_page_before_normalizing_an_order(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://acme.myshopify.com/admin/api/2026-07/graphql.json' => Http::sequence()
+                ->push(['data' => ['orders' => ['edges' => [[
+                    'node' => [
+                        'id' => 'gid://shopify/Order/123',
+                        'name' => '#65075',
+                        'lineItems' => [
+                            'nodes' => [[
+                                'id' => 'gid://shopify/LineItem/1',
+                                'sku' => 'FIRST-SKU',
+                                'quantity' => 1,
+                            ]],
+                            'pageInfo' => ['hasNextPage' => true, 'endCursor' => 'line-cursor-1'],
+                        ],
+                    ],
+                ]]]]])
+                ->push(['data' => ['order' => ['lineItems' => [
+                    'nodes' => [[
+                        'id' => 'gid://shopify/LineItem/2',
+                        'sku' => 'SECOND-SKU',
+                        'quantity' => 2,
+                    ]],
+                    'pageInfo' => ['hasNextPage' => false, 'endCursor' => 'line-cursor-2'],
+                ]]]]),
+        ]);
+
+        $orders = $this->client()->findByOrderNumber($this->store(), '65075');
+
+        $this->assertSame(['FIRST-SKU', 'SECOND-SKU'], array_column($orders[0]['line_items'], 'sku'));
+        $this->assertSame([1, 2], array_column($orders[0]['line_items'], 'quantity'));
+        $this->assertSame([
+            ['query' => 'name:65075'],
+            ['id' => 'gid://shopify/Order/123', 'after' => 'line-cursor-1'],
+        ], Http::recorded()->map(
+            fn (array $record): array => $record[0]->data()['variables'],
+        )->all());
+        Http::assertSentCount(2);
+    }
+
+    public function test_throws_when_a_followup_line_item_page_is_malformed(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://acme.myshopify.com/admin/api/2026-07/graphql.json' => Http::sequence()
+                ->push(['data' => ['orders' => ['edges' => [[
+                    'node' => [
+                        'id' => 'gid://shopify/Order/123',
+                        'name' => '#65075',
+                        'lineItems' => [
+                            'nodes' => [],
+                            'pageInfo' => ['hasNextPage' => true, 'endCursor' => 'line-cursor-1'],
+                        ],
+                    ],
+                ]]]]])
+                ->push(['data' => ['order' => ['lineItems' => ['nodes' => []]]]]),
+        ]);
+
+        try {
+            $this->client()->findByOrderNumber($this->store(), '65075');
+            $this->fail('Expected ShopifyGraphqlException was not thrown.');
+        } catch (ShopifyGraphqlException $exception) {
+            $this->assertSame('Shopify line items returned an unexpected response shape.', $exception->getMessage());
+        }
+
+        Http::assertSentCount(2);
     }
 
     public function test_paginates_graphql_connections_with_cursor_variables(): void
