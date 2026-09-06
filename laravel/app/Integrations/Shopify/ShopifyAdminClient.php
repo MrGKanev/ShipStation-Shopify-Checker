@@ -170,6 +170,108 @@ class ShopifyAdminClient implements ShopifyAdminGateway
     }
 
     /**
+     * @param  list<string>  $orderNumbers
+     * @return array<int|string, list<array<string, mixed>>>
+     */
+    public function findByOrderNumbers(Store $store, array $orderNumbers): array
+    {
+        $cleanOrderNumbers = [];
+
+        foreach ($orderNumbers as $orderNumber) {
+            if (! is_string($orderNumber)) {
+                throw new InvalidArgumentException('Every Shopify order number must be a string.');
+            }
+
+            $cleanOrderNumber = ltrim(trim($orderNumber), '#');
+
+            if ($cleanOrderNumber === '') {
+                continue;
+            }
+
+            if (mb_strlen($cleanOrderNumber) > 64
+                || preg_match('/\A[a-zA-Z0-9_-]+\z/', $cleanOrderNumber) !== 1) {
+                throw new InvalidArgumentException('A Shopify order number is invalid.');
+            }
+
+            $cleanOrderNumbers[$cleanOrderNumber] = true;
+        }
+
+        if ($cleanOrderNumbers === []) {
+            return [];
+        }
+
+        if (count($cleanOrderNumbers) > 50) {
+            throw new InvalidArgumentException('Shopify batch lookup accepts at most 50 unique order numbers.');
+        }
+
+        $query = <<<'GRAPHQL'
+            query FindOrdersByNames($query: String!, $after: String) {
+              orders(first: 250, after: $after, query: $query) {
+                pageInfo { hasNextPage endCursor }
+                edges {
+                  node {
+                    id
+                    legacyResourceId
+                    name
+                    createdAt
+                    cancelledAt
+                    email
+                    tags
+                    displayFinancialStatus
+                    displayFulfillmentStatus
+                    totalPriceSet { shopMoney { amount currencyCode } }
+                    shippingAddress {
+                      address1
+                      country
+                      countryCodeV2
+                      phone
+                    }
+                    billingAddress {
+                      country
+                      countryCodeV2
+                    }
+                    risk {
+                      recommendation
+                      assessments { riskLevel }
+                    }
+                  }
+                }
+              }
+            }
+            GRAPHQL;
+        $terms = array_map(
+            fn (string $orderNumber): string => "name:{$orderNumber}",
+            array_keys($cleanOrderNumbers),
+        );
+        $page = $this->paginateGraphql(
+            $store,
+            $query,
+            'orders',
+            ['query' => '('.implode(' OR ', $terms).')'],
+        );
+
+        if ($page['truncated']) {
+            throw new ShopifyGraphqlException([], 'Shopify batch order lookup exceeded its page limit.');
+        }
+
+        $ordersByNumber = array_fill_keys(array_keys($cleanOrderNumbers), []);
+
+        foreach ($page['edges'] as $edge) {
+            if (! is_array($edge['node'] ?? null) || ! is_string($edge['node']['name'] ?? null)) {
+                throw new ShopifyGraphqlException([], 'Shopify batch order lookup returned an unexpected response shape.');
+            }
+
+            $cleanReturnedNumber = ltrim(trim($edge['node']['name']), '#');
+
+            if (array_key_exists($cleanReturnedNumber, $ordersByNumber)) {
+                $ordersByNumber[$cleanReturnedNumber][] = $this->orderNormalizer->normalize($edge['node']);
+            }
+        }
+
+        return $ordersByNumber;
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function getOrderEvents(Store $store, string $orderId): array

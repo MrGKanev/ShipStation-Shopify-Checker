@@ -12,6 +12,12 @@ interface ShopifyAdminGateway
     public function findByOrderNumber(Store $store, string $orderNumber): array;
 
     /**
+     * @param  list<string>  $orderNumbers
+     * @return array<int|string, list<array<string, mixed>>>
+     */
+    public function findByOrderNumbers(Store $store, array $orderNumbers): array;
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function getOrderEvents(Store $store, string $orderId): array;

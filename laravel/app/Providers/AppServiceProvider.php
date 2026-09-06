@@ -38,5 +38,9 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute(5)->by(Str::transliterate($email.'|'.$request->ip()));
         });
+
+        RateLimiter::for('spot-check', fn (Request $request): Limit => Limit::perMinute(10)->by(
+            ($request->user()?->getAuthIdentifier() ?? 'guest').'|'.$request->ip(),
+        ));
     }
 }

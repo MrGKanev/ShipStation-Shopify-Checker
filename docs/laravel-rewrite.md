@@ -408,7 +408,7 @@ Matrix-ът е release control документ, а не само checklist. М�
 достъпен route/controller/view и покриващи тестове. Наличен domain helper без
 завършен потребителски workflow не се брои за готов feature.
 
-Последно обновяване: **2026-09-06**, commit `a5aafd9`.
+Последно обновяване: **2026-09-06**, след batch Spot-check slice-а.
 
 Легенда: **Done** = feature parity за основния workflow; **Partial** = използваем,
 но по-тесен от legacy; **Todo** = няма завършен Laravel workflow;
@@ -418,8 +418,8 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 2 | 2.8% |
-| Partial | 3 | 4.2% |
+| Done | 3 | 4.2% |
+| Partial | 2 | 2.8% |
 | Todo | 65 | 90.3% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
@@ -523,7 +523,7 @@ Audit subtotal: **Done 0 · Partial 1 · Todo 46 · Replaced 1**.
 |---|---|---|---|
 | `hub-search` | Search & Lookup hub | Replaced | Заменен от sidebar links. |
 | `globalsearch` | Global Search | Todo | Reports, push log и ignored-order търсене. |
-| `spotcheck` | Spot-check | Partial | Laravel търси 1 order; legacy поддържа 1–50 и source mode. |
+| `spotcheck` | Spot-check | Done | 1–50 уникални номера, three-source mode, exact batch Shopify lookup, risk badges и safe atomic errors. |
 | `compare` | Order Compare | Done | `/orders/compare`, safe errors, ambiguity и optional ShipStation status. |
 | `timeline` | Order Timeline | Done | Shopify events/refunds/fulfillments + ShipStation + risk analysis. |
 | `customer` | Customer Lookup | Todo | Order history, LTV summary и CSV. |
@@ -534,7 +534,7 @@ Audit subtotal: **Done 0 · Partial 1 · Todo 46 · Replaced 1**.
 | `tracking` | Tracking Feed | Todo | Dedicated multi-order tracking workflow. |
 | `packingslip` | Packing Slip Preview | Todo | ShipStation print-friendly preview. |
 
-Search subtotal: **Done 2 · Partial 1 · Todo 8 · Replaced 1**.
+Search subtotal: **Done 3 · Partial 0 · Todo 8 · Replaced 1**.
 
 ### Manage — 6
 
@@ -572,7 +572,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 22 | 176 | 621 |
+| Laravel rewrite | 23 | 199 | 758 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
@@ -748,8 +748,8 @@ Rewrite-ът е готов за production само когато:
 ## Текуща практическа задача
 
 Laravel foundation, authentication, stores, administration, Shopify/ShipStation
-integration boundaries, единичното търсене, сравнението между две поръчки и
-order timeline workflow-ът са пренесени. Следващият read-only workflow се избира
-от останалите Search & Lookup инструменти. Всеки следващ workflow се пренася
-заедно със съответните legacy tests, traceability записи и допълнителните edge
-cases от test стратегията по-горе.
+integration boundaries, единичното търсене, batch Spot-check, сравнението между
+две поръчки и order timeline workflow-ът са пренесени. Следващият read-only
+workflow се избира от останалите Search & Lookup инструменти. Всеки следващ
+workflow се пренася заедно със съответните legacy tests, traceability записи и
+допълнителните edge cases от test стратегията по-горе.

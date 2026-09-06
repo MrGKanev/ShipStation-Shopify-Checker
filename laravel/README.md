@@ -66,5 +66,7 @@ lookup across both systems with detailed address, status, fulfillment, and
 SKU/quantity comparison. The legacy two-order comparison workflow is also
 available through the same normalized boundaries. The order timeline now
 combines paginated Shopify events, fulfillments, refunds, ShipStation activity,
-operational warnings, and the legacy-compatible order risk score. The dashboard
-remains a migration status shell.
+operational warnings, and the legacy-compatible order risk score. Batch
+spot-check supports 1–50 unique order numbers and can query Shopify,
+ShipStation, or both, while preserving multiple matches and per-platform
+missing states. The dashboard remains a migration status shell.

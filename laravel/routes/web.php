@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\StoreController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthenticatedSessionController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\OrderBatchLookupController;
 use App\Http\Controllers\OrderComparisonController;
 use App\Http\Controllers\OrderLookupController;
 use App\Http\Controllers\OrderTimelineController;
@@ -26,6 +27,10 @@ Route::middleware('auth')->group(function (): void {
     Route::middleware('active.store')->group(function (): void {
         Route::get('/dashboard', DashboardController::class)->name('dashboard');
         Route::get('/orders/lookup', OrderLookupController::class)->name('orders.lookup');
+        Route::get('/orders/spot-check', [OrderBatchLookupController::class, 'create'])->name('orders.spot-check');
+        Route::post('/orders/spot-check', [OrderBatchLookupController::class, 'store'])
+            ->middleware('throttle:spot-check')
+            ->name('orders.spot-check.store');
         Route::get('/orders/compare', OrderComparisonController::class)->name('orders.compare');
         Route::get('/orders/timeline', OrderTimelineController::class)->name('orders.timeline');
 
