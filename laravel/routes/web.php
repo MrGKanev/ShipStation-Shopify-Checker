@@ -30,6 +30,7 @@ use App\Http\Controllers\Reports\ProductCompletenessController;
 use App\Http\Controllers\Reports\SameIpController;
 use App\Http\Controllers\Reports\SkuDuplicatesController;
 use App\Http\Controllers\Reports\TagAuditController;
+use App\Http\Controllers\Reports\TagPolicyController;
 use App\Http\Controllers\Reports\TaxAuditController;
 use App\Http\Controllers\Reports\ZombieProductsController;
 use Illuminate\Support\Facades\Route;
@@ -79,6 +80,8 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/reports/discount-abuse', [DiscountAbuseController::class, 'store'])->middleware('throttle:audit-report')->name('reports.discount-abuse.store');
         Route::get('/reports/same-ip', [SameIpController::class, 'create'])->middleware('can:run-audits')->name('reports.same-ip');
         Route::post('/reports/same-ip', [SameIpController::class, 'store'])->middleware('throttle:audit-report')->name('reports.same-ip.store');
+        Route::get('/reports/tag-policy', [TagPolicyController::class, 'create'])->middleware('can:run-audits')->name('reports.tag-policy');
+        Route::post('/reports/tag-policy', [TagPolicyController::class, 'store'])->middleware('throttle:audit-report')->name('reports.tag-policy.store');
         Route::get('/reports/tag-audit', [TagAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.tag-audit');
         Route::post('/reports/tag-audit', [TagAuditController::class, 'store'])->middleware('throttle:audit-report')->name('reports.tag-audit.store');
         Route::get('/reports/tax-audit', [TaxAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.tax-audit');

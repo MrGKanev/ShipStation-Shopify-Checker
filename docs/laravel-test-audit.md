@@ -1,6 +1,6 @@
 # Laravel rewrite — legacy test audit
 
-Последно обновяване: **2026-09-07** след Same IP slice-а.
+Последно обновяване: **2026-09-07** след Tag Policy slice-а.
 
 Този документ е отделният checklist за тестова parity. Feature статусът се следи
 в [Laravel rewrite плана](laravel-rewrite.md), а тук се затваря всеки legacy test
@@ -11,13 +11,13 @@ contract има Laravel тест, по-силен еквивалент или з
 
 | Статус | Файлове | Дял от 115 |
 |---|---:|---:|
-| Готови | 15 | 13.0% |
+| Готови | 16 | 13.9% |
 | Частично покрити | 24 | 20.9% |
-| Непочнати | 76 | 66.1% |
-| **Оставащи за одит** | **100** | **87.0%** |
+| Непочнати | 75 | 65.2% |
+| **Оставащи за одит** | **99** | **86.1%** |
 
 Legacy baseline: **115 файла · 1,528 теста · 3,659 assertions**. Laravel
-baseline след последния slice: **396 теста · 1,574 assertions**. Броят assertions
+baseline след последния slice: **402 теста · 1,612 assertions**. Броят assertions
 е ориентир; критерият е поведенческо покритие.
 
 За всеки checkbox проверяваме business decisions, boundary интеграцията,
@@ -45,7 +45,7 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `HttpAuthEndpointTest.php` | 1 | Endpoint auth contract | Пълна route/method/session еквивалентност |
 | [ ] | `OrderInsightPageLoaderTest.php` | 12 | Compare, timeline и допълнителни order insights | Непренесените insight branches и failure states |
 | [ ] | `OrderTimelineTest.php` | 26 | Timeline events, ordering, labels и risk signals | Explicit mapping на всички 26 метода |
-| [ ] | `OrderPolicyChecksTest.php` | 16 | Discount abuse и tag-policy business rules | Discount abuse 4/4 е покрит; tag-policy rules остават |
+| [ ] | `OrderPolicyPageLoaderTest.php` | 22 | Policy-report inputs, wiring, configuration и error states | Discount Abuse, Same IP и Tag Policy paths са покрити; останалите policy reports чакат method-level сверка |
 | [ ] | `ProductInventoryPageLoaderTest.php` | 32 | Wiring за catalogue/inventory report страниците | Оставащите catalogue workflows и финална method-level сверка |
 | [ ] | `RiskScorerTest.php` | 33 | Fraud risk сигнали, weights и score bands | Custom weights и explicit mapping на всички methods |
 | [ ] | `SearchLookupPageLoaderTest.php` | 19 | Lookup/compare/timeline dispatch, validation и errors | Останалите search tools и всички loader branches |
@@ -117,7 +117,6 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `ItemizedFulfillmentReportTest.php` | 21 | Fulfilled item quantities, dates, SKU/product grouping и filters |
 | [ ] | `OnHoldStallTest.php` | 5 | Hold duration threshold, exclusions и sorting |
 | [ ] | `OrderAnomalyPageLoaderTest.php` | 20 | Fraud/anomaly page dispatch, ranges, credentials, results и failures |
-| [ ] | `OrderPolicyPageLoaderTest.php` | 22 | Policy-report inputs, wiring, configuration и error states |
 | [ ] | `PageLoaderTest.php` | 18 | Главен audit loader, compare results, ignore rules и notification behavior |
 | [ ] | `PartialFulfillStallsTest.php` | 6 | Partial fulfillment age threshold, completed exclusions и sorting |
 | [ ] | `PostShipAddrChangeTest.php` | 5 | Address edits after shipment, timing and sorting |
@@ -168,6 +167,7 @@ malformed payloads и atomic failure. Не копираме тест, който
 - [x] `AddressCheckTest.php` — 20/20 required fields, postal formats, province, PO Box, carrier and malformed-value decisions.
 - [x] `AddressScannerPageTest.php` — 4/4 severity sorting, PO Box filter and clean-address decisions.
 - [x] `SameIpTest.php` — 5/5 exact-IP grouping, distinct-email deduplication, exclusions and sorting decisions.
+- [x] `OrderPolicyChecksTest.php` — 16/16 Discount Abuse и Tag Policy configuration, required/forbidden semantics и tag normalization decisions.
 
 ## Как се обновява
 

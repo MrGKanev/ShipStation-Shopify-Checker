@@ -408,7 +408,7 @@ Matrix-ът е release control документ, а не само checklist. М�
 достъпен route/controller/view и покриващи тестове. Наличен domain helper без
 завършен потребителски workflow не се брои за готов feature.
 
-Последно обновяване: **2026-09-07**, след Inventory Oversell Risk report slice-а.
+Последно обновяване: **2026-09-07**, след Tag Policy Audit slice-а.
 
 Легенда: **Done** = feature parity за основния workflow; **Partial** = използваем,
 но по-тесен от legacy; **Todo** = няма завършен Laravel workflow;
@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 18 | 25.0% |
+| Done | 19 | 26.4% |
 | Partial | 2 | 2.8% |
-| Todo | 50 | 69.4% |
+| Todo | 49 | 68.1% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -515,14 +515,14 @@ workflow от наличния framework scaffold.
 | `giftcards` | Gift Cards | Done | Enabled positive balances, configurable expiry window, expired/never-redeemed reasons, currency display и full pagination. |
 | `countrymismatch` | Billing ≠ Shipping Country | Done | ISO-only comparison, missing-country count, currency display, stable sorting и visible truncation. |
 | `discountabuse` | Discount Abuse | Done | Paid orders grouped by normalized discount code/address, distinct-email threshold, detailed orders and deterministic cluster sorting. |
-| `tagpolicy` | Tag Policy Audit | Todo | Required/forbidden tag combinations. |
+| `tagpolicy` | Tag Policy Audit | Done | Config-native required/forbidden combinations, case-insensitive matching, paid-order scan and visible truncation. |
 | `taxaudit` | Tax Audit | Done | Paid non-exempt zero-tax orders над configurable minimum, exact boundary и total-descending sorting. |
 | `consentaudit` | Marketing Consent Audit | Done | Paid orders без subscribed email consent, informational SMS state, unknown defaults и newest-first sorting. |
 | `riskreport` | Fraud Risk Report | Done | Paid date-range scan с осем legacy сигнала, medium/high filtering, score-descending sorting и visible truncation. |
 | `sameip` | Same IP, Different Emails | Done | Paid orders grouped by exact client IP, case-insensitive distinct-email deduplication, detailed orders and deterministic risk sorting. |
 | `disputes` | Chargebacks / Disputes | Todo | Open disputes и response deadlines. |
 
-Audit subtotal: **Done 10 · Partial 1 · Todo 36 · Replaced 1**.
+Audit subtotal: **Done 11 · Partial 1 · Todo 35 · Replaced 1**.
 
 ### Search & Lookup — 12
 
@@ -583,15 +583,15 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 82 | 396 | 1,574 |
+| Laravel rewrite | 85 | 402 | 1,612 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
-| Fully mapped | 15 | 13.0% |
+| Fully mapped | 16 | 13.9% |
 | Partial / parity verification | 24 | 20.9% |
-| Pending | 76 | 66.1% |
+| Pending | 75 | 65.2% |
 | **Общо** | **115** | **100%** |
 
 #### Fully mapped legacy test files
@@ -611,6 +611,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [x] `AddressCheckTest.php` — всичките 20 address validation и malformed-value decisions са нанесени
 - [x] `AddressScannerPageTest.php` — всичките 4 filtering, clean-row и severity sorting decisions са нанесени
 - [x] `SameIpTest.php` — всичките 5 grouping, exclusion, deduplication и sorting decisions са нанесени
+- [x] `OrderPolicyChecksTest.php` — всичките 16 Discount Abuse и Tag Policy configuration, rule semantics и tag normalization decisions са нанесени
 
 #### Partial или чакащи method-level parity проверка
 
@@ -622,7 +623,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `GraphQL/EventNormalizerTest.php` — event normalization работи; всички 28 legacy test methods чакат mapping
 - [ ] `GraphQL/IdsTest.php` — order/event ID paths са покрити; общият legacy ID contract остава
 - [ ] `GraphQL/OrderComponentNormalizerTest.php` — address/items/fulfillment subset е пренесен
-- [ ] `OrderPolicyChecksTest.php` — Discount Abuse 4/4 е пренесен; Tag Policy rules остават
+- [ ] `OrderPolicyPageLoaderTest.php` — Discount Abuse, Same IP и Tag Policy paths са пренесени; останалите policy report branches чакат method-level сверка
 - [ ] `GraphQL/OrderDirectLookupTest.php` — direct order lookup работи, но legacy full field set остава
 - [ ] `FraudComplianceChecksTest.php` — High-Value No Phone, Country Mismatch и Email Checker матриците са пренесени; останалите fraud/compliance checks остават
 - [ ] `GraphQL/OrderEventLookupTest.php` — pagination contract е пренесен; method-level mapping остава
@@ -790,6 +791,18 @@ Same IP traceability (`SameIpTest.php` и `OrderPolicyPageLoaderTest.php` →
   credentials, active-store isolation, XSS, safe failure и visible truncation
   са покрити.
 
+Tag Policy traceability (`OrderPolicyChecksTest.php` и
+`OrderPolicyPageLoaderTest.php` → `TagPolicyAnalyzerTest.php`,
+`TagPolicyControllerTest.php` и `ShopifyTagPolicyTest.php`):
+
+- Празна конфигурация, required правила с all-trigger semantics, forbidden
+  комбинации, case-insensitive сравнение и string/array tag normalization са
+  пренесени; невалидните rule entries се пропускат безопасно.
+- Правилата вече са Laravel config в `config/tag-policy.php`; празният config
+  спира audit-а преди Shopify call. Paid/date query, authorization, validation,
+  credentials, active-store isolation, XSS, safe failure и visible truncation
+  са покрити.
+
 #### Pending legacy test files
 
 - [ ] `ActionsTest.php`
@@ -842,7 +855,6 @@ Same IP traceability (`SameIpTest.php` и `OrderPolicyPageLoaderTest.php` →
 - [ ] `MetricsEndpointTest.php`
 - [ ] `OnHoldStallTest.php`
 - [ ] `OrderAnomalyPageLoaderTest.php`
-- [ ] `OrderPolicyPageLoaderTest.php`
 - [ ] `OrphanDetectorTest.php`
 - [ ] `PageLoaderTest.php`
 - [ ] `PartialFulfillStallsTest.php`

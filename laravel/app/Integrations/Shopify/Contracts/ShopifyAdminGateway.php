@@ -58,6 +58,9 @@ interface ShopifyAdminGateway
     public function sameIpCandidates(Store $store, string $startDate, string $endDate): array;
 
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function tagPolicyCandidates(Store $store, string $startDate, string $endDate): array;
+
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function tagAuditCandidates(Store $store, string $startDate, string $endDate): array;
 
     /** @return array{products: list<array<string, mixed>>, pages: int, truncated: bool} */
