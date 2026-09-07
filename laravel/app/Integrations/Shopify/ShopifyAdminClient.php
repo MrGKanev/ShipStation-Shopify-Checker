@@ -535,6 +535,29 @@ class ShopifyAdminClient implements ShopifyAdminGateway
     }
 
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function fraudRiskCandidates(Store $store, string $startDate, string $endDate): array
+    {
+        $query = <<<'GRAPHQL'
+            query FraudRiskCandidates($search: String!, $after: String) {
+              orders(first: 250, after: $after, sortKey: CREATED_AT, reverse: true, query: $search) {
+                pageInfo { hasNextPage endCursor }
+                edges { node { legacyResourceId name createdAt email tags displayFinancialStatus totalPriceSet { shopMoney { amount currencyCode } } billingAddress { country countryCodeV2 } shippingAddress { address1 country countryCodeV2 phone } risk { recommendation assessments { riskLevel } } } }
+              }
+            }
+            GRAPHQL;
+        $result = $this->paginateGraphql($store, $query, 'orders', ['search' => "status:any financial_status:paid created_at:>={$startDate}T00:00:00Z created_at:<={$endDate}T23:59:59Z"], 100);
+        $orders = [];
+        foreach ($result['edges'] as $edge) {
+            if (! is_array($edge['node'] ?? null)) {
+                throw new ShopifyGraphqlException([], 'Shopify fraud risk report returned an unexpected response shape.');
+            }
+            $orders[] = $this->orderNormalizer->normalize($edge['node']);
+        }
+
+        return ['orders' => $orders, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
+    }
+
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function tagAuditCandidates(Store $store, string $startDate, string $endDate): array
     {
         $query = <<<'GRAPHQL'

@@ -1,6 +1,6 @@
 # Laravel rewrite — legacy test audit
 
-Последно обновяване: **2026-09-07** след Inventory Oversell Risk slice-а.
+Последно обновяване: **2026-09-07** след Fraud Risk Report slice-а.
 
 Този документ е отделният checklist за тестова parity. Feature статусът се следи
 в [Laravel rewrite плана](laravel-rewrite.md), а тук се затваря всеки legacy test
@@ -11,13 +11,13 @@ contract има Laravel тест, по-силен еквивалент или з
 
 | Статус | Файлове | Дял от 115 |
 |---|---:|---:|
-| Готови | 11 | 9.6% |
+| Готови | 12 | 10.4% |
 | Частично покрити | 23 | 20.0% |
-| Непочнати | 81 | 70.4% |
-| **Оставащи за одит** | **104** | **90.4%** |
+| Непочнати | 80 | 69.6% |
+| **Оставащи за одит** | **103** | **89.6%** |
 
 Legacy baseline: **115 файла · 1,528 теста · 3,659 assertions**. Laravel
-baseline след последния slice: **366 теста · 1,418 assertions**. Броят assertions
+baseline след последния slice: **371 теста · 1,450 assertions**. Броят assertions
 е ориентир; критерият е поведенческо покритие.
 
 За всеки checkbox проверяваме business decisions, boundary интеграцията,
@@ -113,7 +113,6 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `ComparatorTest.php` | 73 | Shopify↔ShipStation matching, exclusions, duplicates, bundles, shipped items, margin и hold behavior |
 | [ ] | `CustomerLTVPageLoaderTest.php` | 28 | Revenue/customer cohorts, cancellation, identity normalization, retention and range wiring |
 | [ ] | `DisputesPageLoaderTest.php` | 7 | Deadline calculation/sorting, configuration, initial/success/error states |
-| [ ] | `FraudRiskReportTest.php` | 4 | Risk report sorting, filtering and row projection |
 | [ ] | `FulfillmentIssuePageLoaderTest.php` | 36 | Loader contracts за fulfillment exceptions, filters, dates, credentials и failures |
 | [ ] | `FulfillmentLogisticsChecksTest.php` | 17 | Partial fulfillment, stalls, tracking, carrier и shipping logistics decisions |
 | [ ] | `ItemizedFulfillmentReportTest.php` | 21 | Fulfilled item quantities, dates, SKU/product grouping и filters |
@@ -168,6 +167,7 @@ malformed payloads и atomic failure. Не копираме тест, който
 - [x] `ZombieProductsTest.php` — 7/7 zombie-product decisions.
 - [x] `TaxAuditTest.php` — 6/6 zero-tax, exemption, minimum and sorting decisions.
 - [x] `ConsentAuditTest.php` — 4/4 email/SMS consent, unknown and sorting decisions.
+- [x] `FraudRiskReportTest.php` — 4/4 filtering, signal breakdown, Shopify risk and sorting decisions.
 
 ## Как се обновява
 

@@ -43,6 +43,9 @@ interface ShopifyAdminGateway
     public function consentAuditCandidates(Store $store, string $startDate, string $endDate): array;
 
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function fraudRiskCandidates(Store $store, string $startDate, string $endDate): array;
+
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function tagAuditCandidates(Store $store, string $startDate, string $endDate): array;
 
     /** @return array{products: list<array<string, mixed>>, pages: int, truncated: bool} */
