@@ -37,6 +37,9 @@ interface ShopifyAdminGateway
     public function countryMismatchCandidates(Store $store, string $startDate, string $endDate): array;
 
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function taxAuditCandidates(Store $store, string $startDate, string $endDate): array;
+
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function tagAuditCandidates(Store $store, string $startDate, string $endDate): array;
 
     /** @return array{products: list<array<string, mixed>>, pages: int, truncated: bool} */

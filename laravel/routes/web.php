@@ -24,6 +24,7 @@ use App\Http\Controllers\Reports\InventoryOversellController;
 use App\Http\Controllers\Reports\ProductCompletenessController;
 use App\Http\Controllers\Reports\SkuDuplicatesController;
 use App\Http\Controllers\Reports\TagAuditController;
+use App\Http\Controllers\Reports\TaxAuditController;
 use App\Http\Controllers\Reports\ZombieProductsController;
 use Illuminate\Support\Facades\Route;
 
@@ -62,6 +63,8 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/reports/country-mismatch', [CountryMismatchController::class, 'store'])->middleware('throttle:audit-report')->name('reports.country-mismatch.store');
         Route::get('/reports/tag-audit', [TagAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.tag-audit');
         Route::post('/reports/tag-audit', [TagAuditController::class, 'store'])->middleware('throttle:audit-report')->name('reports.tag-audit.store');
+        Route::get('/reports/tax-audit', [TaxAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.tax-audit');
+        Route::post('/reports/tax-audit', [TaxAuditController::class, 'store'])->middleware('throttle:audit-report')->name('reports.tax-audit.store');
         Route::get('/reports/product-completeness', [ProductCompletenessController::class, 'create'])->middleware('can:run-audits')->name('reports.product-completeness');
         Route::post('/reports/product-completeness', [ProductCompletenessController::class, 'store'])->middleware('throttle:audit-report')->name('reports.product-completeness.store');
 
