@@ -1,0 +1,52 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Integrations\Shopify\Contracts\ShopifyAdminGateway;
+use App\Models\Store;
+use App\Models\User;
+use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Mockery;
+use RuntimeException;
+use Tests\TestCase;
+
+class EmailCheckControllerTest extends TestCase
+{
+    use LazilyRefreshDatabase;
+
+    public function test_access_defaults_validation_and_configuration_guard(): void
+    {
+        $this->get('/reports/email-check')->assertRedirect(route('login'));
+        [$viewer] = $this->userWithStore();
+        $this->actingAs($viewer)->get('/reports/email-check')->assertForbidden();
+        [$operator] = $this->userWithStore(true, ['shopify_access_token' => '']);
+        $this->travelTo('2026-09-07');
+        $this->actingAs($operator)->get('/reports/email-check')->assertOk()->assertSee('2026-08-08')->assertSee('2026-09-07');
+        $this->actingAs($operator)->post('/reports/email-check', ['start_date' => 'bad', 'end_date' => '2026-09-01'])->assertSessionHasErrors('start_date');
+        $this->actingAs($operator)->post('/reports/email-check', ['start_date' => '2026-09-02', 'end_date' => '2026-09-01'])->assertSessionHasErrors('end_date');
+        $this->actingAs($operator)->post('/reports/email-check', ['start_date' => '2026-09-01', 'end_date' => '2026-09-01'])->assertOk()->assertSeeText('credentials are incomplete');
+    }
+
+    public function test_success_truncation_xss_and_safe_failure(): void
+    {
+        [$operator, $store] = $this->userWithStore(true);
+        $shopify = Mockery::mock(ShopifyAdminGateway::class);
+        $shopify->shouldReceive('emailCheckCandidates')->once()->with(Mockery::on(fn (Store $candidate): bool => $candidate->is($store)), '2026-09-01', '2026-09-07')->andReturn(['orders' => [['id' => '42', 'name' => '#1<script>', 'created_at' => '2026-09-02', 'email' => '<img src=x>'], ['id' => '43', 'name' => '#2', 'created_at' => '2026-09-03', 'email' => 'ab@example.com']], 'pages' => 100, 'truncated' => true]);
+        $this->app->instance(ShopifyAdminGateway::class, $shopify);
+        $this->actingAs($operator)->post('/reports/email-check', ['start_date' => '2026-09-01', 'end_date' => '2026-09-07'])->assertOk()->assertSeeText('2 scanned · 1 critical · 1 warnings')->assertSeeText('truncated after 100 pages')->assertDontSee('<script>', false)->assertDontSee('<img', false);
+
+        $shopify = Mockery::mock(ShopifyAdminGateway::class);
+        $shopify->shouldReceive('emailCheckCandidates')->andThrow(new RuntimeException('secret'));
+        $this->app->instance(ShopifyAdminGateway::class, $shopify);
+        $this->actingAs($operator)->post('/reports/email-check', ['start_date' => '2026-09-01', 'end_date' => '2026-09-07'])->assertOk()->assertSeeText('could not be completed')->assertDontSeeText('secret');
+    }
+
+    private function userWithStore(bool $operator = false, array $attributes = []): array
+    {
+        $user = $operator ? User::factory()->operator()->create() : User::factory()->create();
+        $store = Store::factory()->create($attributes);
+        $user->stores()->attach($store);
+
+        return [$user, $store];
+    }
+}

@@ -1,6 +1,6 @@
 # Laravel rewrite — legacy test audit
 
-Последно обновяване: **2026-09-07** след Fraud Risk Report slice-а.
+Последно обновяване: **2026-09-07** след Email Checker slice-а.
 
 Този документ е отделният checklist за тестова parity. Feature статусът се следи
 в [Laravel rewrite плана](laravel-rewrite.md), а тук се затваря всеки legacy test
@@ -17,7 +17,7 @@ contract има Laravel тест, по-силен еквивалент или з
 | **Оставащи за одит** | **103** | **89.6%** |
 
 Legacy baseline: **115 файла · 1,528 теста · 3,659 assertions**. Laravel
-baseline след последния slice: **371 теста · 1,450 assertions**. Броят assertions
+baseline след последния slice: **377 теста · 1,481 assertions**. Броят assertions
 е ориентир; критерият е поведенческо покритие.
 
 За всеки checkbox проверяваме business decisions, boundary интеграцията,
@@ -39,7 +39,7 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `GraphQL/IdsTest.php` | 17 | Numeric/GID преобразуване и невалидни ID стойности | Общ reusable Laravel ID contract извън текущите order paths |
 | [ ] | `GraphQL/OrderComponentNormalizerTest.php` | 27 | Address, item, shipping, fulfillment, refund и discount нормализация | Shipping/refund/discount полета и edge cases |
 | [ ] | `GraphQL/OrderDirectLookupTest.php` | 8 | Single/batch lookup, cleaning, misses и cache | Full returned field set и cache-equivalent contract |
-| [ ] | `FraudComplianceChecksTest.php` | 22 | Country mismatch, high value/no phone, consent, discount и tax checks | Оставащите fraud/compliance workflows след двата готови отчета |
+| [ ] | `FraudComplianceChecksTest.php` | 22 | Country mismatch, high value/no phone и email checker rules | Остава method-level финална сверка на общия файл след трите готови отчета |
 | [ ] | `GraphQL/OrderEventLookupTest.php` | 3 | Event lookup, pagination и missing order | Exact normalized event mapping |
 | [ ] | `GraphQL/OrderNormalizerTest.php` | 39 | Всички основни и optional order fields | Tax, refunds, discounts, attributes, journey/source и support fields |
 | [ ] | `HttpAuthEndpointTest.php` | 1 | Endpoint auth contract | Пълна route/method/session еквивалентност |
@@ -128,7 +128,7 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `ReturnRmaTrackerTest.php` | 7 | Return/RMA detection, age, statuses and sorting |
 | [ ] | `ReturnedItemsReportTest.php` | 10 | Returned SKU quantities, refunds, dates and aggregation |
 | [ ] | `SameIpTest.php` | 5 | Multiple orders sharing client IP, exclusions и count sorting |
-| [ ] | `SimpleScanPageLoaderTest.php` | 19 | Shared tag/tax/returns/email report loader, validation and notifications |
+| [ ] | `SimpleScanPageLoaderTest.php` | 19 | Shared tag/tax/returns/email report loader, validation and notifications | Email wiring/credentials са покрити; returns и notification branches остават |
 | [ ] | `SsShippedUnfulfilledTest.php` | 6 | ShipStation shipped while Shopify unfulfilled, exclusions and sorting |
 | [ ] | `VoidedShipmentsTest.php` | 5 | Voided label rows, missing address tolerance and date sorting |
 

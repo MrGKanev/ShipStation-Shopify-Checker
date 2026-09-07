@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 14 | 19.4% |
+| Done | 15 | 20.8% |
 | Partial | 2 | 2.8% |
-| Todo | 54 | 75.0% |
+| Todo | 53 | 73.6% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -489,7 +489,7 @@ workflow от наличния framework scaffold.
 | `orderedits` | Order Edit History | Todo | Post-placement changes. |
 | `noteflags` | Note Flags | Todo | Flagged keywords в order notes. |
 | `addrcheck` | Address Scanner | Todo | Непълни/невалидни адреси. |
-| `emailcheck` | Email Checker | Todo | Invalid/disposable/suspicious emails. |
+| `emailcheck` | Email Checker | Done | Paid date-range scan с missing/invalid/disposable critical правила, suspicious warning евристики, severity sorting и visible truncation. |
 | `hvorders` | High-Value No Phone | Done | Operator/admin report с currency-aware праг, cancelled exclusion, deterministic sorting и visible truncation. |
 | `addrchanges` | Address Changes | Todo | Shipping address edits. |
 | `postshipaddr` | Post-Ship Address Change | Todo | Address edit след fulfillment. |
@@ -522,7 +522,7 @@ workflow от наличния framework scaffold.
 | `sameip` | Same IP, Different Emails | Todo | Fraud-ring signal по client IP. |
 | `disputes` | Chargebacks / Disputes | Todo | Open disputes и response deadlines. |
 
-Audit subtotal: **Done 6 · Partial 1 · Todo 40 · Replaced 1**.
+Audit subtotal: **Done 7 · Partial 1 · Todo 39 · Replaced 1**.
 
 ### Search & Lookup — 12
 
@@ -583,7 +583,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 70 | 371 | 1,450 |
+| Laravel rewrite | 73 | 377 | 1,481 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
@@ -620,7 +620,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `GraphQL/IdsTest.php` — order/event ID paths са покрити; общият legacy ID contract остава
 - [ ] `GraphQL/OrderComponentNormalizerTest.php` — address/items/fulfillment subset е пренесен
 - [ ] `GraphQL/OrderDirectLookupTest.php` — direct order lookup работи, но legacy full field set остава
-- [ ] `FraudComplianceChecksTest.php` — High-Value No Phone matrix е пренесена; country mismatch и останалите fraud checks остават
+- [ ] `FraudComplianceChecksTest.php` — High-Value No Phone, Country Mismatch и Email Checker матриците са пренесени; останалите fraud/compliance checks остават
 - [ ] `GraphQL/OrderEventLookupTest.php` — pagination contract е пренесен; method-level mapping остава
 - [ ] `GraphQL/OrderNormalizerTest.php` — timeline/risk/order subset е пренесен; всички останали fields остават
 - [ ] `HttpAuthEndpointTest.php` — login/logout са покрити; целият legacy endpoint contract остава
@@ -745,6 +745,16 @@ Fraud Risk traceability (`FraudRiskReportTest.php` → `FraudRiskAnalyzerTest.ph
 - Paid/date GraphQL filter и всички scorer входове са проверени на integration
   границата; roles, validation, credentials, XSS, safe failure и truncation са
   покрити във feature tests.
+
+Email Checker traceability (`FraudComplianceChecksTest.php` и
+`SimpleScanPageLoaderTest.php` → `EmailCheckAnalyzerTest.php`,
+`EmailCheckControllerTest.php` и `ShopifyEmailCheckCandidatesTest.php`):
+
+- Missing, invalid и 28 disposable domains са critical; short local part,
+  placeholder и пет повторени символа са warnings; legacy boundaries и
+  critical-first sorting са пренесени.
+- Paid/date query, initial range, authorization, validation, credential guard,
+  store isolation, XSS, safe failure и visible truncation са покрити.
 
 #### Pending legacy test files
 

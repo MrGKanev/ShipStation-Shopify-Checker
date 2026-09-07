@@ -558,6 +558,29 @@ class ShopifyAdminClient implements ShopifyAdminGateway
     }
 
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function emailCheckCandidates(Store $store, string $startDate, string $endDate): array
+    {
+        $query = <<<'GRAPHQL'
+            query EmailCheckCandidates($search: String!, $after: String) {
+              orders(first: 250, after: $after, sortKey: CREATED_AT, reverse: true, query: $search) {
+                pageInfo { hasNextPage endCursor }
+                edges { node { legacyResourceId name createdAt email displayFinancialStatus } }
+              }
+            }
+            GRAPHQL;
+        $result = $this->paginateGraphql($store, $query, 'orders', ['search' => "status:any financial_status:paid created_at:>={$startDate}T00:00:00Z created_at:<={$endDate}T23:59:59Z"], 100);
+        $orders = [];
+        foreach ($result['edges'] as $edge) {
+            if (! is_array($edge['node'] ?? null)) {
+                throw new ShopifyGraphqlException([], 'Shopify email check returned an unexpected response shape.');
+            }
+            $orders[] = $this->orderNormalizer->normalize($edge['node']);
+        }
+
+        return ['orders' => $orders, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
+    }
+
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function tagAuditCandidates(Store $store, string $startDate, string $endDate): array
     {
         $query = <<<'GRAPHQL'

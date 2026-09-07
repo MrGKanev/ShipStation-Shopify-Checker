@@ -17,6 +17,7 @@ use App\Http\Controllers\ReadinessController;
 use App\Http\Controllers\Reports\CatalogQualityController;
 use App\Http\Controllers\Reports\ConsentAuditController;
 use App\Http\Controllers\Reports\CountryMismatchController;
+use App\Http\Controllers\Reports\EmailCheckController;
 use App\Http\Controllers\Reports\FraudRiskController;
 use App\Http\Controllers\Reports\GiftCardsController;
 use App\Http\Controllers\Reports\HighValueNoPhoneController;
@@ -67,6 +68,8 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/reports/consent-audit', [ConsentAuditController::class, 'store'])->middleware('throttle:audit-report')->name('reports.consent-audit.store');
         Route::get('/reports/fraud-risk', [FraudRiskController::class, 'create'])->middleware('can:run-audits')->name('reports.fraud-risk');
         Route::post('/reports/fraud-risk', [FraudRiskController::class, 'store'])->middleware('throttle:audit-report')->name('reports.fraud-risk.store');
+        Route::get('/reports/email-check', [EmailCheckController::class, 'create'])->middleware('can:run-audits')->name('reports.email-check');
+        Route::post('/reports/email-check', [EmailCheckController::class, 'store'])->middleware('throttle:audit-report')->name('reports.email-check.store');
         Route::get('/reports/tag-audit', [TagAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.tag-audit');
         Route::post('/reports/tag-audit', [TagAuditController::class, 'store'])->middleware('throttle:audit-report')->name('reports.tag-audit.store');
         Route::get('/reports/tax-audit', [TaxAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.tax-audit');
