@@ -56,6 +56,15 @@ class ShipStationClient implements ShipStationClientContract
         return $this->paginate('/orders', $filters, 'orders');
     }
 
+    public function fetchAwaitingOrders(): array
+    {
+        return $this->paginate('/orders', [
+            'orderStatus' => 'awaiting_shipment',
+            'sortBy' => 'OrderDate',
+            'sortDir' => 'ASC',
+        ], 'orders');
+    }
+
     /**
      * @param  array<string, scalar>  $query
      * @return array<string, mixed>

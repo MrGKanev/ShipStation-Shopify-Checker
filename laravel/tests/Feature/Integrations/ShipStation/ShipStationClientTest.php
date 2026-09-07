@@ -96,6 +96,30 @@ class ShipStationClientTest extends TestCase
         });
     }
 
+    public function test_awaiting_fetch_returns_every_page_with_expected_status_filter(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://ssapi.shipstation.com/orders*' => Http::sequence()
+                ->push(['orders' => [['orderId' => 1]], 'pages' => 2])
+                ->push(['orders' => [['orderId' => 2]], 'pages' => 2]),
+        ]);
+
+        $this->assertSame([['orderId' => 1], ['orderId' => 2]], $this->client()->fetchAwaitingOrders());
+        Http::assertSentCount(2);
+        Http::assertSent(function (Request $request): bool {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+            return $query === [
+                'orderStatus' => 'awaiting_shipment',
+                'sortBy' => 'OrderDate',
+                'sortDir' => 'ASC',
+                'pageSize' => '500',
+                'page' => '1',
+            ];
+        });
+    }
+
     public function test_401_response_throws_without_retrying(): void
     {
         Http::preventStrayRequests();

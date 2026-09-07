@@ -55,6 +55,13 @@
                     @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.country-mismatch') }}">Country mismatch</a>@endcan
                     @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.tag-audit') }}">Tag audit</a>@endcan
                     @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.product-completeness') }}">Product completeness</a>@endcan
+                    @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.sku-duplicates') }}">SKU duplicates</a>@endcan
+                    @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.inventory-oversell') }}">Oversell risk</a>@endcan
+                    @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.inventory-aging') }}">Inventory aging</a>@endcan
+                    @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.inventory-forecast') }}">Inventory forecast</a>@endcan
+                    @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.zombie-products') }}">Zombie products</a>@endcan
+                    @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.catalog-quality') }}">Catalog quality</a>@endcan
+                    @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.gift-cards') }}">Gift cards</a>@endcan
                     @can('manage-administration')
                         <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 sm:hidden dark:hover:bg-slate-800" href="{{ route('admin.stores.index') }}">Manage stores</a>
                         <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 sm:hidden dark:hover:bg-slate-800" href="{{ route('admin.users.index') }}">Manage users</a>

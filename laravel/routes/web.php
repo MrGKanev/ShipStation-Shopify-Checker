@@ -12,10 +12,18 @@ use App\Http\Controllers\OrderTagSearchController;
 use App\Http\Controllers\OrderTimelineController;
 use App\Http\Controllers\OrderTrackingController;
 use App\Http\Controllers\PackingSlipController;
+use App\Http\Controllers\ReadinessController;
+use App\Http\Controllers\Reports\CatalogQualityController;
 use App\Http\Controllers\Reports\CountryMismatchController;
+use App\Http\Controllers\Reports\GiftCardsController;
 use App\Http\Controllers\Reports\HighValueNoPhoneController;
+use App\Http\Controllers\Reports\InventoryAgingController;
+use App\Http\Controllers\Reports\InventoryForecastController;
+use App\Http\Controllers\Reports\InventoryOversellController;
 use App\Http\Controllers\Reports\ProductCompletenessController;
+use App\Http\Controllers\Reports\SkuDuplicatesController;
 use App\Http\Controllers\Reports\TagAuditController;
+use App\Http\Controllers\Reports\ZombieProductsController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -54,6 +62,21 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/reports/tag-audit', [TagAuditController::class, 'store'])->middleware('throttle:audit-report')->name('reports.tag-audit.store');
         Route::get('/reports/product-completeness', [ProductCompletenessController::class, 'create'])->middleware('can:run-audits')->name('reports.product-completeness');
         Route::post('/reports/product-completeness', [ProductCompletenessController::class, 'store'])->middleware('throttle:audit-report')->name('reports.product-completeness.store');
+
+        Route::get('/reports/sku-duplicates', [SkuDuplicatesController::class, 'create'])->middleware('can:run-audits')->name('reports.sku-duplicates');
+        Route::post('/reports/sku-duplicates', [SkuDuplicatesController::class, 'store'])->middleware('throttle:audit-report')->name('reports.sku-duplicates.store');
+        Route::get('/reports/inventory-oversell', [InventoryOversellController::class, 'create'])->middleware('can:run-audits')->name('reports.inventory-oversell');
+        Route::post('/reports/inventory-oversell', [InventoryOversellController::class, 'store'])->middleware('throttle:audit-report')->name('reports.inventory-oversell.store');
+        Route::get('/reports/inventory-aging', [InventoryAgingController::class, 'create'])->middleware('can:run-audits')->name('reports.inventory-aging');
+        Route::post('/reports/inventory-aging', [InventoryAgingController::class, 'store'])->middleware('throttle:audit-report')->name('reports.inventory-aging.store');
+        Route::get('/reports/inventory-forecast', [InventoryForecastController::class, 'create'])->middleware('can:run-audits')->name('reports.inventory-forecast');
+        Route::post('/reports/inventory-forecast', [InventoryForecastController::class, 'store'])->middleware('throttle:audit-report')->name('reports.inventory-forecast.store');
+        Route::get('/reports/zombie-products', [ZombieProductsController::class, 'create'])->middleware('can:run-audits')->name('reports.zombie-products');
+        Route::post('/reports/zombie-products', [ZombieProductsController::class, 'store'])->middleware('throttle:audit-report')->name('reports.zombie-products.store');
+        Route::get('/reports/catalog-quality', [CatalogQualityController::class, 'create'])->middleware('can:run-audits')->name('reports.catalog-quality');
+        Route::post('/reports/catalog-quality', [CatalogQualityController::class, 'store'])->middleware('throttle:audit-report')->name('reports.catalog-quality.store');
+        Route::get('/reports/gift-cards', [GiftCardsController::class, 'create'])->middleware('can:run-audits')->name('reports.gift-cards');
+        Route::post('/reports/gift-cards', [GiftCardsController::class, 'store'])->middleware('throttle:audit-report')->name('reports.gift-cards.store');
 
         Route::prefix('admin')
             ->name('admin.')

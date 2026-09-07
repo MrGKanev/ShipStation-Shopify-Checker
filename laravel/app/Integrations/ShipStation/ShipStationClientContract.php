@@ -18,4 +18,7 @@ interface ShipStationClientContract
      * @return list<array<string, mixed>>
      */
     public function fetchAllOrders(string $startDate, string $endDate): array;
+
+    /** @return list<array<string, mixed>> */
+    public function fetchAwaitingOrders(): array;
 }

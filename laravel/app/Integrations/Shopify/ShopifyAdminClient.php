@@ -478,9 +478,124 @@ class ShopifyAdminClient implements ShopifyAdminGateway
     /** @return array{products: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function productCompletenessCandidates(Store $store): array
     {
+        return $this->catalogueCandidates($store, 'status:active');
+    }
+
+    /** @return array{products: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function skuDuplicatesCandidates(Store $store): array
+    {
+        return $this->catalogueCandidates($store, null);
+    }
+
+    /** @return array{products: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function inventoryOversellCandidates(Store $store): array
+    {
+        return $this->catalogueCandidates($store, 'status:active');
+    }
+
+    /** @return array{products: list<array<string, mixed>>, orders: list<array<string, mixed>>, product_pages: int, order_pages: int, products_truncated: bool, orders_truncated: bool} */
+    public function inventoryAgingCandidates(Store $store, string $startDate, string $endDate): array
+    {
+        $products = $this->catalogueCandidates($store, 'status:active');
         $query = <<<'GRAPHQL'
-            query ProductCompletenessCandidates($after: String) {
-              products(first: 250, after: $after, query: "status:active") {
+            query InventoryAgingOrders($search: String!, $after: String) {
+              orders(first: 250, after: $after, sortKey: CREATED_AT, reverse: true, query: $search) {
+                pageInfo { hasNextPage endCursor }
+                edges {
+                  node {
+                    id legacyResourceId name createdAt cancelledAt displayFinancialStatus
+                    lineItems(first: 250) {
+                      nodes { id title name sku quantity variantTitle originalUnitPriceSet { shopMoney { amount currencyCode } } }
+                      pageInfo { hasNextPage endCursor }
+                    }
+                  }
+                }
+              }
+            }
+            GRAPHQL;
+        $search = "status:any (financial_status:paid OR financial_status:partially_paid) created_at:>={$startDate}T00:00:00Z created_at:<={$endDate}T23:59:59Z";
+        $ordersResult = $this->paginateGraphql($store, $query, 'orders', ['search' => $search], 100);
+        $orders = [];
+
+        foreach ($ordersResult['edges'] as $edge) {
+            if (! is_array($edge['node'] ?? null)) {
+                throw new ShopifyGraphqlException([], 'Shopify inventory aging report returned an unexpected response shape.');
+            }
+            $orders[] = $this->orderNormalizer->normalize($this->completeLineItems($store, $edge['node']));
+        }
+
+        return ['products' => $products['products'], 'orders' => $orders, 'product_pages' => $products['pages'], 'order_pages' => $ordersResult['pages'], 'products_truncated' => $products['truncated'], 'orders_truncated' => $ordersResult['truncated']];
+    }
+
+    /** @return array{products: list<array<string, mixed>>, orders: list<array<string, mixed>>, product_pages: int, order_pages: int, products_truncated: bool, orders_truncated: bool} */
+    public function inventoryForecastCandidates(Store $store, string $startDate, string $endDate): array
+    {
+        return $this->inventoryAgingCandidates($store, $startDate, $endDate);
+    }
+
+    /** @return array{products: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function zombieProductsCandidates(Store $store): array
+    {
+        return $this->catalogueCandidates($store, 'status:active');
+    }
+
+    /** @return array{products: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function catalogQualityCandidates(Store $store): array
+    {
+        return $this->catalogueCandidates($store, 'status:active');
+    }
+
+    /** @return array{gift_cards: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function giftCardCandidates(Store $store): array
+    {
+        $query = <<<'GRAPHQL'
+            query GiftCardCandidates($after: String) {
+              giftCards(first: 250, after: $after) {
+                pageInfo { hasNextPage endCursor }
+                edges {
+                  node {
+                    id maskedCode expiresOn enabled createdAt
+                    balance { amount currencyCode }
+                    initialValue { amount currencyCode }
+                    customer { email }
+                  }
+                }
+              }
+            }
+            GRAPHQL;
+        $result = $this->paginateGraphql($store, $query, 'giftCards', maxPages: 1000);
+        $giftCards = [];
+
+        foreach ($result['edges'] as $edge) {
+            $node = $edge['node'] ?? null;
+            if (! is_array($node)) {
+                throw new ShopifyGraphqlException([], 'Shopify gift card report returned an unexpected response shape.');
+            }
+            $balance = is_array($node['balance'] ?? null) ? $node['balance'] : [];
+            $initialValue = is_array($node['initialValue'] ?? null) ? $node['initialValue'] : [];
+            $customer = is_array($node['customer'] ?? null) ? $node['customer'] : [];
+            $giftCards[] = [
+                'id' => is_scalar($node['id'] ?? null) ? (string) $node['id'] : '',
+                'masked_code' => is_scalar($node['maskedCode'] ?? null) ? (string) $node['maskedCode'] : '',
+                'balance' => (float) ($balance['amount'] ?? 0),
+                'initial_value' => (float) ($initialValue['amount'] ?? 0),
+                'currency' => is_scalar($balance['currencyCode'] ?? $initialValue['currencyCode'] ?? null) ? (string) ($balance['currencyCode'] ?? $initialValue['currencyCode']) : '',
+                'expires_on' => is_scalar($node['expiresOn'] ?? null) ? (string) $node['expiresOn'] : null,
+                'enabled' => ($node['enabled'] ?? false) === true,
+                'created_at' => is_scalar($node['createdAt'] ?? null) ? (string) $node['createdAt'] : '',
+                'customer_email' => is_scalar($customer['email'] ?? null) ? (string) $customer['email'] : '',
+            ];
+        }
+
+        return ['gift_cards' => $giftCards, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
+    }
+
+    /** @return array{products: list<array<string, mixed>>, pages: int, truncated: bool} */
+    private function catalogueCandidates(Store $store, ?string $search): array
+    {
+        $query = <<<'GRAPHQL'
+            query CatalogueCandidates($after: String, $search: String) {
+              products(first: 250, after: $after, query: $search) {
                 pageInfo { hasNextPage endCursor }
                 edges {
                   node {
@@ -490,18 +605,21 @@ class ShopifyAdminClient implements ShopifyAdminGateway
                     vendor
                     productType
                     status
+                    onlineStoreUrl
+                    seo { title description }
+                    collections(first: 1) { nodes { id } }
                     descriptionHtml
                     images(first: 1) { nodes { id } }
                     variants(first: 250) {
                       pageInfo { hasNextPage endCursor }
-                      nodes { sku }
+                      nodes { sku title inventoryQuantity inventoryPolicy inventoryItem { tracked } }
                     }
                   }
                 }
               }
             }
             GRAPHQL;
-        $result = $this->paginateGraphql($store, $query, 'products', maxPages: 100);
+        $result = $this->paginateGraphql($store, $query, 'products', ['search' => $search], maxPages: 100);
         $products = [];
 
         foreach ($result['edges'] as $edge) {
@@ -531,7 +649,7 @@ class ShopifyAdminClient implements ShopifyAdminGateway
               product(id: $id) {
                 variants(first: 250, after: $after) {
                   pageInfo { hasNextPage endCursor }
-                  nodes { sku }
+                  nodes { sku title inventoryQuantity inventoryPolicy inventoryItem { tracked } }
                 }
               }
             }
