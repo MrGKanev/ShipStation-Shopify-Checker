@@ -1,6 +1,6 @@
 # Laravel rewrite — legacy test audit
 
-Последно обновяване: **2026-09-07** след Discount Abuse slice-а.
+Последно обновяване: **2026-09-07** след Same IP slice-а.
 
 Този документ е отделният checklist за тестова parity. Feature статусът се следи
 в [Laravel rewrite плана](laravel-rewrite.md), а тук се затваря всеки legacy test
@@ -11,13 +11,13 @@ contract има Laravel тест, по-силен еквивалент или з
 
 | Статус | Файлове | Дял от 115 |
 |---|---:|---:|
-| Готови | 14 | 12.2% |
+| Готови | 15 | 13.0% |
 | Частично покрити | 24 | 20.9% |
-| Непочнати | 77 | 67.0% |
-| **Оставащи за одит** | **101** | **87.8%** |
+| Непочнати | 76 | 66.1% |
+| **Оставащи за одит** | **100** | **87.0%** |
 
 Legacy baseline: **115 файла · 1,528 теста · 3,659 assertions**. Laravel
-baseline след последния slice: **390 теста · 1,543 assertions**. Броят assertions
+baseline след последния slice: **396 теста · 1,574 assertions**. Броят assertions
 е ориентир; критерият е поведенческо покритие.
 
 За всеки checkbox проверяваме business decisions, boundary интеграцията,
@@ -125,7 +125,6 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `RepeatRefundsTest.php` | 8 | Customer refund clustering, thresholds, missing identity и sorting |
 | [ ] | `ReturnRmaTrackerTest.php` | 7 | Return/RMA detection, age, statuses and sorting |
 | [ ] | `ReturnedItemsReportTest.php` | 10 | Returned SKU quantities, refunds, dates and aggregation |
-| [ ] | `SameIpTest.php` | 5 | Multiple orders sharing client IP, exclusions и count sorting |
 | [ ] | `SimpleScanPageLoaderTest.php` | 19 | Shared tag/tax/returns/email report loader, validation and notifications | Email wiring/credentials са покрити; returns и notification branches остават |
 | [ ] | `SsShippedUnfulfilledTest.php` | 6 | ShipStation shipped while Shopify unfulfilled, exclusions and sorting |
 | [ ] | `VoidedShipmentsTest.php` | 5 | Voided label rows, missing address tolerance and date sorting |
@@ -168,6 +167,7 @@ malformed payloads и atomic failure. Не копираме тест, който
 - [x] `FraudRiskReportTest.php` — 4/4 filtering, signal breakdown, Shopify risk and sorting decisions.
 - [x] `AddressCheckTest.php` — 20/20 required fields, postal formats, province, PO Box, carrier and malformed-value decisions.
 - [x] `AddressScannerPageTest.php` — 4/4 severity sorting, PO Box filter and clean-address decisions.
+- [x] `SameIpTest.php` — 5/5 exact-IP grouping, distinct-email deduplication, exclusions and sorting decisions.
 
 ## Как се обновява
 

@@ -642,6 +642,32 @@ class ShopifyAdminClient implements ShopifyAdminGateway
     }
 
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function sameIpCandidates(Store $store, string $startDate, string $endDate): array
+    {
+        $query = <<<'GRAPHQL'
+            query SameIpCandidates($search: String!, $after: String) {
+              orders(first: 250, after: $after, sortKey: CREATED_AT, reverse: true, query: $search) {
+                pageInfo { hasNextPage endCursor }
+                edges { node { legacyResourceId name createdAt email clientIp displayFinancialStatus displayFulfillmentStatus totalPriceSet { shopMoney { amount currencyCode } } } }
+              }
+            }
+            GRAPHQL;
+        $result = $this->paginateGraphql($store, $query, 'orders', ['search' => "status:any financial_status:paid created_at:>={$startDate}T00:00:00Z created_at:<={$endDate}T23:59:59Z"], 100);
+        $orders = [];
+        foreach ($result['edges'] as $edge) {
+            $node = $edge['node'] ?? null;
+            if (! is_array($node)) {
+                throw new ShopifyGraphqlException([], 'Shopify same IP report returned an unexpected response shape.');
+            }
+            $order = $this->orderNormalizer->normalize($node);
+            $order['client_ip'] = is_scalar($node['clientIp'] ?? null) ? trim((string) $node['clientIp']) : '';
+            $orders[] = $order;
+        }
+
+        return ['orders' => $orders, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
+    }
+
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function tagAuditCandidates(Store $store, string $startDate, string $endDate): array
     {
         $query = <<<'GRAPHQL'

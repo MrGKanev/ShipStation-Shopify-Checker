@@ -61,6 +61,7 @@
                     @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.email-check') }}">Email checker</a>@endcan
                     @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.address-check') }}">Address scanner</a>@endcan
                     @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.discount-abuse') }}">Discount abuse</a>@endcan
+                    @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.same-ip') }}">Same IP</a>@endcan
                     @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.product-completeness') }}">Product completeness</a>@endcan
                     @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.sku-duplicates') }}">SKU duplicates</a>@endcan
                     @can('run-audits')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" href="{{ route('reports.inventory-oversell') }}">Oversell risk</a>@endcan

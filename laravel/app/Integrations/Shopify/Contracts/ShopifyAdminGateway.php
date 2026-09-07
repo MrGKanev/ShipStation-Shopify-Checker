@@ -55,6 +55,9 @@ interface ShopifyAdminGateway
     public function discountAbuseCandidates(Store $store, string $startDate, string $endDate): array;
 
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function sameIpCandidates(Store $store, string $startDate, string $endDate): array;
+
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function tagAuditCandidates(Store $store, string $startDate, string $endDate): array;
 
     /** @return array{products: list<array<string, mixed>>, pages: int, truncated: bool} */

@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 17 | 23.6% |
+| Done | 18 | 25.0% |
 | Partial | 2 | 2.8% |
-| Todo | 51 | 70.8% |
+| Todo | 50 | 69.4% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -519,10 +519,10 @@ workflow от наличния framework scaffold.
 | `taxaudit` | Tax Audit | Done | Paid non-exempt zero-tax orders над configurable minimum, exact boundary и total-descending sorting. |
 | `consentaudit` | Marketing Consent Audit | Done | Paid orders без subscribed email consent, informational SMS state, unknown defaults и newest-first sorting. |
 | `riskreport` | Fraud Risk Report | Done | Paid date-range scan с осем legacy сигнала, medium/high filtering, score-descending sorting и visible truncation. |
-| `sameip` | Same IP, Different Emails | Todo | Fraud-ring signal по client IP. |
+| `sameip` | Same IP, Different Emails | Done | Paid orders grouped by exact client IP, case-insensitive distinct-email deduplication, detailed orders and deterministic risk sorting. |
 | `disputes` | Chargebacks / Disputes | Todo | Open disputes и response deadlines. |
 
-Audit subtotal: **Done 9 · Partial 1 · Todo 37 · Replaced 1**.
+Audit subtotal: **Done 10 · Partial 1 · Todo 36 · Replaced 1**.
 
 ### Search & Lookup — 12
 
@@ -583,15 +583,15 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 79 | 390 | 1,543 |
+| Laravel rewrite | 82 | 396 | 1,574 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
-| Fully mapped | 14 | 12.2% |
+| Fully mapped | 15 | 13.0% |
 | Partial / parity verification | 24 | 20.9% |
-| Pending | 77 | 67.0% |
+| Pending | 76 | 66.1% |
 | **Общо** | **115** | **100%** |
 
 #### Fully mapped legacy test files
@@ -610,6 +610,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [x] `FraudRiskReportTest.php` — всичките 4 filtering, signal, Shopify-risk и sorting decisions са нанесени и разширени
 - [x] `AddressCheckTest.php` — всичките 20 address validation и malformed-value decisions са нанесени
 - [x] `AddressScannerPageTest.php` — всичките 4 filtering, clean-row и severity sorting decisions са нанесени
+- [x] `SameIpTest.php` — всичките 5 grouping, exclusion, deduplication и sorting decisions са нанесени
 
 #### Partial или чакащи method-level parity проверка
 
@@ -779,6 +780,16 @@ Discount Abuse traceability (`OrderPolicyChecksTest.php` и
   authorization, credentials, store isolation, XSS, safe failure и visible
   truncation са покрити.
 
+Same IP traceability (`SameIpTest.php` и `OrderPolicyPageLoaderTest.php` →
+`SameIpAnalyzerTest.php`, `SameIpControllerTest.php` и
+`ShopifySameIpCandidatesTest.php`):
+
+- Exact-IP grouping, case-insensitive distinct-email counting, blank IP/email
+  and different-IP exclusions и email/order count sorting са пренесени.
+- Paid/date query и clientIp normalization, authorization, validation,
+  credentials, active-store isolation, XSS, safe failure и visible truncation
+  са покрити.
+
 #### Pending legacy test files
 
 - [ ] `ActionsTest.php`
@@ -845,7 +856,6 @@ Discount Abuse traceability (`OrderPolicyChecksTest.php` и
 - [ ] `ReturnRmaTrackerTest.php`
 - [ ] `ReturnedItemsReportTest.php`
 - [ ] `RunLogTest.php`
-- [ ] `SameIpTest.php`
 - [ ] `ScanRunnerTest.php`
 - [ ] `ShopifyFlowHealthTest.php`
 - [ ] `SidebarSettingsTest.php`
