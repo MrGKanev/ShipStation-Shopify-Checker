@@ -11,13 +11,13 @@ contract има Laravel тест, по-силен еквивалент или з
 
 | Статус | Файлове | Дял от 115 |
 |---|---:|---:|
-| Готови | 9 | 7.8% |
+| Готови | 11 | 9.6% |
 | Частично покрити | 23 | 20.0% |
-| Непочнати | 83 | 72.2% |
-| **Оставащи за одит** | **106** | **92.2%** |
+| Непочнати | 81 | 70.4% |
+| **Оставащи за одит** | **104** | **90.4%** |
 
 Legacy baseline: **115 файла · 1,528 теста · 3,659 assertions**. Laravel
-baseline след последния slice: **358 теста · 1,371 assertions**. Броят assertions
+baseline след последния slice: **366 теста · 1,418 assertions**. Броят assertions
 е ориентир; критерият е поведенческо покритие.
 
 За всеки checkbox проверяваме business decisions, boundary интеграцията,
@@ -111,7 +111,6 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `BundleCheckPageTest.php` | 9 | Missing bundle components и cancelled/refunded/pending/free/no-shipping exclusions |
 | [ ] | `CarrierPerfTest.php` | 8 | Delivery averages, late boundary, bad/missing dates и carrier grouping |
 | [ ] | `ComparatorTest.php` | 73 | Shopify↔ShipStation matching, exclusions, duplicates, bundles, shipped items, margin и hold behavior |
-| [ ] | `ConsentAuditTest.php` | 4 | Marketing-consent status, missing data and date sorting |
 | [ ] | `CustomerLTVPageLoaderTest.php` | 28 | Revenue/customer cohorts, cancellation, identity normalization, retention and range wiring |
 | [ ] | `DisputesPageLoaderTest.php` | 7 | Deadline calculation/sorting, configuration, initial/success/error states |
 | [ ] | `FraudRiskReportTest.php` | 4 | Risk report sorting, filtering and row projection |
@@ -132,7 +131,6 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `SameIpTest.php` | 5 | Multiple orders sharing client IP, exclusions и count sorting |
 | [ ] | `SimpleScanPageLoaderTest.php` | 19 | Shared tag/tax/returns/email report loader, validation and notifications |
 | [ ] | `SsShippedUnfulfilledTest.php` | 6 | ShipStation shipped while Shopify unfulfilled, exclusions and sorting |
-| [ ] | `TaxAuditTest.php` | 6 | Zero-tax paid orders, exemptions, minimum boundary and sorting |
 | [ ] | `VoidedShipmentsTest.php` | 5 | Voided label rows, missing address tolerance and date sorting |
 
 ## Непочнати — Shopify GraphQL contracts
@@ -168,6 +166,8 @@ malformed payloads и atomic failure. Не копираме тест, който
 - [x] `GiftCardsTest.php` — 8/8 gift-card decisions.
 - [x] `InventoryForecastTest.php` — 9/9 forecast decisions.
 - [x] `ZombieProductsTest.php` — 7/7 zombie-product decisions.
+- [x] `TaxAuditTest.php` — 6/6 zero-tax, exemption, minimum and sorting decisions.
+- [x] `ConsentAuditTest.php` — 4/4 email/SMS consent, unknown and sorting decisions.
 
 ## Как се обновява
 

@@ -507,6 +507,34 @@ class ShopifyAdminClient implements ShopifyAdminGateway
     }
 
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function consentAuditCandidates(Store $store, string $startDate, string $endDate): array
+    {
+        $query = <<<'GRAPHQL'
+            query ConsentAuditCandidates($search: String!, $after: String) {
+              orders(first: 250, after: $after, sortKey: CREATED_AT, reverse: true, query: $search) {
+                pageInfo { hasNextPage endCursor }
+                edges { node { legacyResourceId name createdAt email displayFinancialStatus totalPriceSet { shopMoney { amount currencyCode } } customer { emailMarketingConsent { marketingState } smsMarketingConsent { marketingState } } } }
+              }
+            }
+            GRAPHQL;
+        $result = $this->paginateGraphql($store, $query, 'orders', ['search' => "status:any financial_status:paid created_at:>={$startDate}T00:00:00Z created_at:<={$endDate}T23:59:59Z"], 100);
+        $orders = [];
+        foreach ($result['edges'] as $edge) {
+            $node = $edge['node'] ?? null;
+            if (! is_array($node)) {
+                throw new ShopifyGraphqlException([], 'Shopify consent audit returned an unexpected response shape.');
+            }
+            $order = $this->orderNormalizer->normalize($node);
+            $customer = is_array($node['customer'] ?? null) ? $node['customer'] : [];
+            $order['customer_email_consent'] = is_scalar($customer['emailMarketingConsent']['marketingState'] ?? null) ? strtolower((string) $customer['emailMarketingConsent']['marketingState']) : '';
+            $order['customer_sms_consent'] = is_scalar($customer['smsMarketingConsent']['marketingState'] ?? null) ? strtolower((string) $customer['smsMarketingConsent']['marketingState']) : '';
+            $orders[] = $order;
+        }
+
+        return ['orders' => $orders, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
+    }
+
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function tagAuditCandidates(Store $store, string $startDate, string $endDate): array
     {
         $query = <<<'GRAPHQL'

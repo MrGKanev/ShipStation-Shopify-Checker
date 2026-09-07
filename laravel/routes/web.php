@@ -15,6 +15,7 @@ use App\Http\Controllers\OrderTrackingController;
 use App\Http\Controllers\PackingSlipController;
 use App\Http\Controllers\ReadinessController;
 use App\Http\Controllers\Reports\CatalogQualityController;
+use App\Http\Controllers\Reports\ConsentAuditController;
 use App\Http\Controllers\Reports\CountryMismatchController;
 use App\Http\Controllers\Reports\GiftCardsController;
 use App\Http\Controllers\Reports\HighValueNoPhoneController;
@@ -61,6 +62,8 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/reports/high-value-no-phone', [HighValueNoPhoneController::class, 'store'])->middleware('throttle:audit-report')->name('reports.high-value-no-phone.store');
         Route::get('/reports/country-mismatch', [CountryMismatchController::class, 'create'])->middleware('can:run-audits')->name('reports.country-mismatch');
         Route::post('/reports/country-mismatch', [CountryMismatchController::class, 'store'])->middleware('throttle:audit-report')->name('reports.country-mismatch.store');
+        Route::get('/reports/consent-audit', [ConsentAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.consent-audit');
+        Route::post('/reports/consent-audit', [ConsentAuditController::class, 'store'])->middleware('throttle:audit-report')->name('reports.consent-audit.store');
         Route::get('/reports/tag-audit', [TagAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.tag-audit');
         Route::post('/reports/tag-audit', [TagAuditController::class, 'store'])->middleware('throttle:audit-report')->name('reports.tag-audit.store');
         Route::get('/reports/tax-audit', [TaxAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.tax-audit');

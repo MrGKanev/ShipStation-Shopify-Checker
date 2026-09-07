@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 11 | 15.3% |
+| Done | 13 | 18.1% |
 | Partial | 2 | 2.8% |
-| Todo | 57 | 79.2% |
+| Todo | 55 | 76.4% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -516,13 +516,13 @@ workflow от наличния framework scaffold.
 | `countrymismatch` | Billing ≠ Shipping Country | Done | ISO-only comparison, missing-country count, currency display, stable sorting и visible truncation. |
 | `discountabuse` | Discount Abuse | Todo | Discount clusters по адрес/email. |
 | `tagpolicy` | Tag Policy Audit | Todo | Required/forbidden tag combinations. |
-| `taxaudit` | Tax Audit | Todo | Paid non-exempt orders с нулев tax. |
-| `consentaudit` | Marketing Consent Audit | Todo | Customer marketing consent. |
+| `taxaudit` | Tax Audit | Done | Paid non-exempt zero-tax orders над configurable minimum, exact boundary и total-descending sorting. |
+| `consentaudit` | Marketing Consent Audit | Done | Paid orders без subscribed email consent, informational SMS state, unknown defaults и newest-first sorting. |
 | `riskreport` | Fraud Risk Report | Todo | Single-order scorer съществува; bulk report липсва. |
 | `sameip` | Same IP, Different Emails | Todo | Fraud-ring signal по client IP. |
 | `disputes` | Chargebacks / Disputes | Todo | Open disputes и response deadlines. |
 
-Audit subtotal: **Done 3 · Partial 1 · Todo 43 · Replaced 1**.
+Audit subtotal: **Done 5 · Partial 1 · Todo 41 · Replaced 1**.
 
 ### Search & Lookup — 12
 
@@ -583,15 +583,15 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 62 | 358 | 1,371 |
+| Laravel rewrite | 67 | 366 | 1,418 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
-| Fully mapped | 9 | 7.8% |
+| Fully mapped | 11 | 9.6% |
 | Partial / parity verification | 23 | 20.0% |
-| Pending | 83 | 72.2% |
+| Pending | 81 | 70.4% |
 | **Общо** | **115** | **100%** |
 
 #### Fully mapped legacy test files
@@ -605,6 +605,8 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [x] `GiftCardsTest.php` — всичките 8 gift-card decisions са нанесени и разширени
 - [x] `InventoryForecastTest.php` — всичките 9 forecast decisions са нанесени и разширени
 - [x] `ZombieProductsTest.php` — всичките 7 zombie-product decisions са нанесени и разширени
+- [x] `TaxAuditTest.php` — всичките 6 tax decisions са нанесени и разширени
+- [x] `ConsentAuditTest.php` — всичките 4 consent decisions са нанесени и разширени
 
 #### Partial или чакащи method-level parity проверка
 
@@ -723,6 +725,17 @@ Gift Cards traceability (`GiftCardsTest.php` и `GiftCardPageLoaderTest.php` →
   multi-page GraphQL results, stalled/malformed pagination contract и visible
   truncation.
 
+Tax and Consent traceability (`TaxAuditTest.php`, `ConsentAuditTest.php`,
+`SimpleScanPageLoaderTest.php` и `OrderPolicyPageLoaderTest.php` → Laravel
+report analyzers/controllers и `ShopifyPolicyAuditCandidatesTest`):
+
+- Всичките 6 tax decisions и 4 consent decisions са пренесени, включително
+  exact minimum, tax exemption, unknown consent и stable business sorting.
+- Paid/date GraphQL filters, tax/customer consent полетата, normalization и
+  bounded pagination са покрити на integration границата.
+- Initial dates, validation, roles, credential guards, active-store isolation,
+  safe upstream failures, XSS и visible truncation са покрити във feature tests.
+
 #### Pending legacy test files
 
 - [ ] `ActionsTest.php`
@@ -739,7 +752,6 @@ Gift Cards traceability (`GiftCardsTest.php` и `GiftCardPageLoaderTest.php` →
 - [ ] `CarrierPerfTest.php`
 - [ ] `ComparatorTest.php`
 - [ ] `ConfigValidatorTest.php`
-- [ ] `ConsentAuditTest.php`
 - [ ] `CustomerLTVPageLoaderTest.php`
 - [ ] `DateRangeTest.php`
 - [ ] `DiscordNotifierTest.php`
@@ -802,7 +814,6 @@ Gift Cards traceability (`GiftCardsTest.php` и `GiftCardPageLoaderTest.php` →
 - [ ] `SlackNotifierTest.php`
 - [ ] `SlackRulesTest.php`
 - [ ] `SsShippedUnfulfilledTest.php`
-- [ ] `TaxAuditTest.php`
 - [ ] `ToolRegistryTest.php`
 - [ ] `UserActionLogTest.php`
 - [ ] `ViewHelpersTest.php`

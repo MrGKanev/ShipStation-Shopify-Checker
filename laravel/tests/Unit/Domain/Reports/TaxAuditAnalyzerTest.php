@@ -15,5 +15,6 @@ class TaxAuditAnalyzerTest extends TestCase
         $base = ['id' => 1, 'name' => '#1', 'total_price' => 50, 'total_tax' => 0, 'customer_tax_exempt' => false, 'currency' => 'USD'];
         $rows = (new TaxAuditAnalyzer)->analyze([$base, [...$base, 'name' => '#2', 'total_price' => 100], [...$base, 'total_tax' => 1], [...$base, 'customer_tax_exempt' => true], [...$base, 'total_price' => 4]], 5);
         $this->assertSame(['#2', '#1'], array_column($rows, 'number'));
+        $this->assertCount(1, (new TaxAuditAnalyzer)->analyze([[...$base, 'total_price' => 5]], 5));
     }
 }
