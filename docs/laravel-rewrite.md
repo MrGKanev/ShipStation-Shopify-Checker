@@ -408,7 +408,7 @@ Matrix-ът е release control документ, а не само checklist. М�
 достъпен route/controller/view и покриващи тестове. Наличен domain helper без
 завършен потребителски workflow не се брои за готов feature.
 
-Последно обновяване: **2026-09-06**, след Product Completeness report slice-а.
+Последно обновяване: **2026-09-07**, след Inventory Oversell Risk report slice-а.
 
 Легенда: **Done** = feature parity за основния workflow; **Partial** = използваем,
 но по-тесен от legacy; **Todo** = няма завършен Laravel workflow;
@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 10 | 13.9% |
+| Done | 11 | 15.3% |
 | Partial | 2 | 2.8% |
-| Todo | 58 | 80.6% |
+| Todo | 57 | 79.2% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -435,12 +435,18 @@ feature страниците. Те се следят отделно:
 - [x] First-install command и administration за users/stores
 - [x] Shopify GraphQL client, normalization и pagination foundation
 - [x] ShipStation client, normalization, retries и store credentials
+- [x] Basic `/up` liveness и `/ready` database/queue configuration checks
+- [ ] API Health е partial: Shopify scopes и ShipStation auth са готови; returned-version header и flow history остават
 - [x] Един дългосрочен Draft PR за целия rewrite
 - [ ] Production observability, metrics и operational runbooks
 - [ ] Background jobs, idempotency, retry и recovery foundation
 - [ ] Final parity review, UAT, deployment rehearsal и необратим cutover
 
 ### Cross-cutting и non-page legacy capabilities
+
+Подробният статус и definition of done за платформените части е в
+[platform and extras audit-а](laravel-platform-audit.md). Той отделя готовия
+workflow от наличния framework scaffold.
 
 - [x] Password/session login в Laravel
 - [x] Multi-store membership и active-store switching
@@ -499,13 +505,13 @@ feature страниците. Те се следят отделно:
 | `carrierperf` | Carrier Performance | Todo | Delivery time и late rate по carrier. |
 | `shipmargin` | Shipping Margin Erosion | Todo | Label cost над customer shipping charge. |
 | `productcheck` | Product Completeness | Done | True image check, meaningful description, strict complete variant scan, missing/no-variant classification и visible truncation. |
-| `skudupes` | SKU Duplicates | Todo | Shared SKU между variants. |
-| `inventoryoversell` | Inventory Oversell Risk | Todo | Awaiting quantity над Shopify stock. |
-| `inventoryaging` | Inventory Aging | Todo | Zero-stock variants със скорошни продажби. |
-| `inventoryforecast` | Inventory Forecast | Todo | Days-to-zero по sell-through. |
-| `zombieproducts` | Zombie Products | Todo | Active products без продаваем inventory. |
-| `catalogquality` | Catalog Quality | Todo | Publication, SEO и collection checks. |
-| `giftcards` | Gift Cards | Todo | Unused/expiring balances. |
+| `skudupes` | SKU Duplicates | Done | Всички product statuses, пълна variant pagination, case-sensitive SKU grouping, blank exclusion, count sorting и visible truncation. |
+| `inventoryoversell` | Inventory Oversell Risk | Done | Active tracked deny-policy stock спрямо всички ShipStation awaiting-shipment quantities, duplicate SKU aggregation и visible catalogue truncation. |
+| `inventoryaging` | Inventory Aging | Done | Active tracked deny-policy variants с stock ≤ 0, paid-order sales window, complete product/order/line-item pagination и visible truncation. |
+| `inventoryforecast` | Inventory Forecast | Done | Фиксиран 30-дневен paid-sales прозорец, cancelled-order exclusion, daily sell-through, days-to-zero severity и visible truncation. |
+| `zombieproducts` | Zombie Products | Done | No-variant и all-tracked-deny-zero-stock detection, full active catalogue pagination и visible truncation. |
+| `catalogquality` | Catalog Quality | Done | Online Store publication, SEO title/description и collection membership върху пълния active catalogue с visible truncation. |
+| `giftcards` | Gift Cards | Done | Enabled positive balances, configurable expiry window, expired/never-redeemed reasons, currency display и full pagination. |
 | `countrymismatch` | Billing ≠ Shipping Country | Done | ISO-only comparison, missing-country count, currency display, stable sorting и visible truncation. |
 | `discountabuse` | Discount Abuse | Todo | Discount clusters по адрес/email. |
 | `tagpolicy` | Tag Policy Audit | Todo | Required/forbidden tag combinations. |
@@ -556,13 +562,17 @@ Manage subtotal: **Done 0 · Partial 0 · Todo 6 · Replaced 0**.
 | `settings` | Settings | Partial | Users/stores/credentials са готови; connection tests, banned IP и notification overview липсват. |
 | `slackrules` | Slack Rules | Todo | Per-tool notification thresholds и recipients. |
 | `emailrules` | Email Rules | Todo | Per-tool email rules и digest settings. |
-| `apihealth` | API Health | Todo | `/up` не заменя integration diagnostics и scope checks. |
+| `apihealth` | API Health | Partial | Admin-only Shopify shop/scopes и ShipStation auth checks са готови; returned-version header и flow history остават. |
 | `configcheck` | Config Check | Todo | Policy/config validation трябва да бъде заменено с Laravel config contracts. |
 | `webhookhealth` | Webhook Health | Todo | Webhook delivery/recency diagnostics. |
 
-Settings subtotal: **Done 0 · Partial 1 · Todo 5 · Replaced 0**.
+Settings subtotal: **Done 0 · Partial 2 · Todo 4 · Replaced 0**.
 
 ### Test migration tracker
+
+Подробният operational checklist е в
+[отделния legacy test audit](laravel-test-audit.md). Той е source of truth за
+ролята, method-level статуса и оставащата работа по всеки test файл.
 
 Броят Laravel тестове не е директен процент от legacy suite-а: новите feature
 тестове често заменят няколко стари unit теста и добавят validation, escaping,
@@ -572,15 +582,15 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 42 | 264 | 1,040 |
+| Laravel rewrite | 59 | 345 | 1,323 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
-| Fully mapped | 3 | 2.6% |
+| Fully mapped | 9 | 7.8% |
 | Partial / parity verification | 23 | 20.0% |
-| Pending | 89 | 77.4% |
+| Pending | 83 | 72.2% |
 | **Общо** | **115** | **100%** |
 
 #### Fully mapped legacy test files
@@ -588,10 +598,17 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [x] `PackingSlipPageLoaderTest.php` — всичките 6 legacy paths са нанесени в Laravel feature/domain tests; добавени са exact-match ambiguity, malformed nested data, XSS и invalid-date cases
 - [x] `TrackingFeedTest.php` — всичките 7 builder contracts са нанесени; добавени са всички carriers, истински split shipments, unshipped fallback, malformed data, tenant и atomic-error cases
 - [x] `GraphQL/OrderTagInsightsTest.php` — tag search и tag statistics contracts са нанесени; добавени са bounded pagination, date variables, malformed payload, duplicate-per-order и XSS cases
+- [x] `ProductCatalogueChecksTest.php` — всичките 16 catalogue decisions са нанесени и разширени
+- [x] `CatalogQualityTest.php` — всичките 6 quality decisions са нанесени и разширени
+- [x] `GiftCardPageLoaderTest.php` — всичките 4 visible workflow/failure paths са нанесени и разширени
+- [x] `GiftCardsTest.php` — всичките 8 gift-card decisions са нанесени и разширени
+- [x] `InventoryForecastTest.php` — всичките 9 forecast decisions са нанесени и разширени
+- [x] `ZombieProductsTest.php` — всичките 7 zombie-product decisions са нанесени и разширени
 
 #### Partial или чакащи method-level parity проверка
 
 - [ ] `AllViewsSmokeTest.php` — новите views имат feature rendering tests, но всички legacy views не са пренесени
+- [ ] `ApiHealthTest.php` — live credentials/scopes/connectivity paths са пренесени; Shopify returned-version header остава
 - [ ] `AuthPermissionSnapshotTest.php` — Laravel roles/policies са покрити; пълната legacy permission matrix остава
 - [ ] `AuthTest.php` — session auth е пренесен; legacy Google/banned-IP/permission branches остават
 - [ ] `AuthViewsTest.php` — login е покрит; всички auth view contracts остават
@@ -605,8 +622,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `HttpAuthEndpointTest.php` — login/logout са покрити; целият legacy endpoint contract остава
 - [ ] `OrderInsightPageLoaderTest.php` — compare/timeline subset е пренесен; останалите insights остават
 - [ ] `OrderTimelineTest.php` — workflow е пренесен и разширен; 26 legacy methods чакат explicit mapping
-- [ ] `ProductCatalogueChecksTest.php` — Product Completeness matrix е пренесена и разширена; SKU duplicates и inventory aging остават
-- [ ] `ProductInventoryPageLoaderTest.php` — Product Completeness wiring/error/success paths са пренесени; останалите catalogue workflows остават
+- [ ] `ProductInventoryPageLoaderTest.php` — Product Completeness, Inventory Oversell, Inventory Aging, Inventory Forecast, Zombie Products и Catalog Quality wiring/error/success paths са пренесени; останалите catalogue workflows остават
 - [ ] `RiskScorerTest.php` — осемте сигнала са пренесени; custom weights и 33-method mapping остават
 - [ ] `SearchLookupPageLoaderTest.php` — single lookup/compare/timeline subset е пренесен
 - [ ] `SecurityTest.php` — escaping, validation и tenant isolation са разширени; целият checklist остава
@@ -615,6 +631,97 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `StoresTest.php` — Laravel stores са нов DB модел; legacy multi-store behavior се сверява
 - [ ] `ViewSmokeTest.php` — мигрираните screens се render-ват; останалите screens липсват
 
+SKU Duplicates traceability (`ProductCatalogueChecksTest.php` →
+`laravel/tests/Unit/Domain/Reports/SkuDuplicatesAnalyzerTest.php`):
+
+- `testDuplicateSkuAcrossProductsIsFlagged`, `testDraftAndArchivedOnlyDuplicateIsCaught`,
+  `testSkuDupesSortedByCountDescending` → `test_groups_across_all_statuses_and_within_a_product_sorted_by_count`
+  и integration `test_finds_duplicates_across_product_pages_including_drafts_and_archived`.
+- `testUniqueSkuIsNotFlagged`, `testBlankSkusAreIgnored` →
+  `test_ignores_blank_and_unique_skus_but_counts_all_variants`.
+- Допълнително: numeric/trimmed/case-sensitive SKU, unsafe IDs, празен каталог,
+  GET без API call, viewer denial, foreign store input, safe errors/XSS,
+  truncation, product/variant pagination и malformed variant connection в
+  `SkuDuplicatesControllerTest` и `ShopifySkuDuplicatesCandidatesTest`.
+
+Inventory Aging traceability (`ProductCatalogueChecksTest.php` и
+`ProductInventoryPageLoaderTest.php` →
+`laravel/tests/Unit/Domain/Reports/InventoryAgingAnalyzerTest.php`):
+
+- `testTrackedDenyZeroStockWithRecentSalesIsFlagged`,
+  `testZeroStockWithNoRecentSalesIsExcludedFalsePositiveCheck`,
+  `testPositiveStockWithSalesIsExcludedFalseNegativeCheck`,
+  `testUntrackedVariantIsExcluded` и `testContinueSellingPolicyIsExcluded` →
+  analyzer success/exclusion tests.
+- Legacy initial range, credential validation и success wiring →
+  `InventoryAgingControllerTest` и `ShopifyInventoryAgingCandidatesTest`.
+- Допълнително: reversed/invalid dates, tenant-selected store, safe XSS/error
+  rendering, negative stock, aggregate sales, latest-order selection, malformed
+  upstream data, complete line-item pagination и отделни product/order
+  truncation indicators.
+
+Inventory Oversell traceability (`ProductInventoryPageLoaderTest.php` →
+`laravel/tests/Unit/Domain/Reports/InventoryOversellAnalyzerTest.php`):
+
+- Awaiting quantity над наличността, exact-stock exclusion, missing Shopify SKU,
+  blank SKU, untracked variant и continue-policy exclusion са пренесени.
+- Negative stock, multi-order quantity aggregation, duplicate Shopify SKU stock
+  aggregation и shortfall-descending sorting са покрити в analyzer тестовете.
+- Credential guards за двете системи, selected-store isolation, initial state,
+  safe XSS/error rendering и visible product truncation са покрити в
+  `InventoryOversellControllerTest`.
+- ShipStation adapter тестът проверява пълна pagination с
+  `awaiting_shipment` filter и 500 orders на страница.
+
+Inventory Forecast traceability (`InventoryForecastTest.php` и
+`ProductInventoryPageLoaderTest.php` →
+`laravel/tests/Unit/Domain/Reports/InventoryForecastAnalyzerTest.php`):
+
+- Rate, days-to-zero, no-sales/high-stock, no-sales/low-stock, zero-stock,
+  cancelled-order, untracked, continue-policy, null-last sorting и total variant
+  count са пренесени в analyzer тестовете.
+- Initial state, credentials, fixed 30-day window, selected-store isolation,
+  success и safe upstream failure са покрити в `InventoryForecastControllerTest`.
+- Общият Shopify catalogue/order adapter покрива active/paid filters, complete
+  product/variant/order/line-item pagination, cancelled timestamp и отделни
+  truncation indicators.
+
+Zombie Products traceability (`ZombieProductsTest.php` и
+`ProductInventoryPageLoaderTest.php` →
+`laravel/tests/Unit/Domain/Reports/ZombieProductsAnalyzerTest.php`):
+
+- No-variant, all-zero/negative, singular/plural detail, mixed positive stock,
+  untracked-only, continue-only и healthy product decisions са пренесени.
+- Initial state, credential guard, selected-store isolation, success, empty
+  state и safe upstream failure са покрити в `ZombieProductsControllerTest`.
+- Допълнително са покрити malformed variants, unsafe product IDs, XSS escaping,
+  complete variant pagination и visible catalogue truncation.
+
+Catalog Quality traceability (`CatalogQualityTest.php` и
+`ProductInventoryPageLoaderTest.php` →
+`laravel/tests/Unit/Domain/Reports/CatalogQualityAnalyzerTest.php`):
+
+- Healthy, unpublished, missing SEO title, missing SEO description, missing
+  collection и combined-issues decisions са пренесени с непроменен ред на
+  съобщенията.
+- Initial state, credential guard, selected-store isolation, success, empty
+  state и safe upstream failure са покрити в `CatalogQualityControllerTest`.
+- Допълнително: malformed nested data, unsafe product IDs, XSS escaping,
+  explicit GraphQL discovery fields, full variant pagination и visible
+  catalogue truncation.
+
+Gift Cards traceability (`GiftCardsTest.php` и `GiftCardPageLoaderTest.php` →
+`laravel/tests/Unit/Domain/Reports/GiftCardsAnalyzerTest.php`):
+
+- Disabled, zero balance, expiry inside/outside window, expired, never
+  redeemed, combined reasons и balance-descending sorting са пренесени.
+- Initial 30-day value, integer/minimum validation, credential guard,
+  selected-store isolation, success и safe upstream failure са покрити в
+  `GiftCardsControllerTest`.
+- Допълнително: currency normalization, malformed scalar fields, XSS escaping,
+  multi-page GraphQL results, stalled/malformed pagination contract и visible
+  truncation.
+
 #### Pending legacy test files
 
 - [ ] `ActionsTest.php`
@@ -622,7 +729,6 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `AddressChangesTest.php`
 - [ ] `AddressCheckTest.php`
 - [ ] `AddressScannerPageTest.php`
-- [ ] `ApiHealthTest.php`
 - [ ] `AtomicFileTest.php`
 - [ ] `AuditSnapshotTest.php`
 - [ ] `AuditTest.php`
@@ -630,7 +736,6 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `BundleCheckPageTest.php`
 - [ ] `CacheTest.php`
 - [ ] `CarrierPerfTest.php`
-- [ ] `CatalogQualityTest.php`
 - [ ] `ComparatorTest.php`
 - [ ] `ConfigValidatorTest.php`
 - [ ] `ConsentAuditTest.php`
@@ -645,8 +750,6 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `FraudRiskReportTest.php`
 - [ ] `FulfillmentIssuePageLoaderTest.php`
 - [ ] `FulfillmentLogisticsChecksTest.php`
-- [ ] `GiftCardPageLoaderTest.php`
-- [ ] `GiftCardsTest.php`
 - [ ] `GoogleAuthFlowTest.php`
 - [ ] `GoogleAuthTest.php`
 - [ ] `GraphQL/AdminLookupsTest.php`
@@ -667,7 +770,6 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `GraphQL/ProductNormalizerTest.php`
 - [ ] `GraphQL/QueryStringsTest.php`
 - [ ] `IgnoreListTest.php`
-- [ ] `InventoryForecastTest.php`
 - [ ] `ItemizedFulfillmentReportTest.php`
 - [ ] `JobQueueTest.php`
 - [ ] `JsonFileLockTest.php`
@@ -705,7 +807,6 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `ViewHelpersTest.php`
 - [ ] `VoidedShipmentsTest.php`
 - [ ] `WorkerTest.php`
-- [ ] `ZombieProductsTest.php`
 
 При приключване на feature неговите legacy test файлове не се маркират
 автоматично като готови. Първо се сверяват отделните test methods срещу Laravel
