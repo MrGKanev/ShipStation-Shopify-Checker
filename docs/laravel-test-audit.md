@@ -1,6 +1,6 @@
 # Laravel rewrite — legacy test audit
 
-Последно обновяване: **2026-09-07** след Tag Policy slice-а.
+Последно обновяване: **2026-09-07** след Chargebacks / Disputes slice-а.
 
 Този документ е отделният checklist за тестова parity. Feature статусът се следи
 в [Laravel rewrite плана](laravel-rewrite.md), а тук се затваря всеки legacy test
@@ -11,13 +11,13 @@ contract има Laravel тест, по-силен еквивалент или з
 
 | Статус | Файлове | Дял от 115 |
 |---|---:|---:|
-| Готови | 16 | 13.9% |
+| Готови | 17 | 14.8% |
 | Частично покрити | 24 | 20.9% |
-| Непочнати | 75 | 65.2% |
-| **Оставащи за одит** | **99** | **86.1%** |
+| Непочнати | 74 | 64.3% |
+| **Оставащи за одит** | **98** | **85.2%** |
 
 Legacy baseline: **115 файла · 1,528 теста · 3,659 assertions**. Laravel
-baseline след последния slice: **402 теста · 1,612 assertions**. Броят assertions
+baseline след последния slice: **405 теста · 1,628 assertions**. Броят assertions
 е ориентир; критерият е поведенческо покритие.
 
 За всеки checkbox проверяваме business decisions, boundary интеграцията,
@@ -111,7 +111,6 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `CarrierPerfTest.php` | 8 | Delivery averages, late boundary, bad/missing dates и carrier grouping |
 | [ ] | `ComparatorTest.php` | 73 | Shopify↔ShipStation matching, exclusions, duplicates, bundles, shipped items, margin и hold behavior |
 | [ ] | `CustomerLTVPageLoaderTest.php` | 28 | Revenue/customer cohorts, cancellation, identity normalization, retention and range wiring |
-| [ ] | `DisputesPageLoaderTest.php` | 7 | Deadline calculation/sorting, configuration, initial/success/error states |
 | [ ] | `FulfillmentIssuePageLoaderTest.php` | 36 | Loader contracts за fulfillment exceptions, filters, dates, credentials и failures |
 | [ ] | `FulfillmentLogisticsChecksTest.php` | 17 | Partial fulfillment, stalls, tracking, carrier и shipping logistics decisions |
 | [ ] | `ItemizedFulfillmentReportTest.php` | 21 | Fulfilled item quantities, dates, SKU/product grouping и filters |
@@ -168,6 +167,7 @@ malformed payloads и atomic failure. Не копираме тест, който
 - [x] `AddressScannerPageTest.php` — 4/4 severity sorting, PO Box filter and clean-address decisions.
 - [x] `SameIpTest.php` — 5/5 exact-IP grouping, distinct-email deduplication, exclusions and sorting decisions.
 - [x] `OrderPolicyChecksTest.php` — 16/16 Discount Abuse и Tag Policy configuration, required/forbidden semantics и tag normalization decisions.
+- [x] `DisputesPageLoaderTest.php` — 7/7 deadline computation, urgency sorting, initial/configuration and Shopify success paths.
 
 ## Как се обновява
 

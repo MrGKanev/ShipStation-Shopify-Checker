@@ -60,6 +60,9 @@ interface ShopifyAdminGateway
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function tagPolicyCandidates(Store $store, string $startDate, string $endDate): array;
 
+    /** @return array{disputes: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function openDisputes(Store $store): array;
+
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function tagAuditCandidates(Store $store, string $startDate, string $endDate): array;
 

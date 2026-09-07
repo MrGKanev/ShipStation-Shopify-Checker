@@ -691,6 +691,35 @@ class ShopifyAdminClient implements ShopifyAdminGateway
         return ['orders' => $orders, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
     }
 
+    /** @return array{disputes: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function openDisputes(Store $store): array
+    {
+        $query = <<<'GRAPHQL'
+            query OpenDisputes($search: String!, $after: String) {
+              disputes(first: 100, after: $after, query: $search) {
+                pageInfo { hasNextPage endCursor }
+                edges { node { legacyResourceId status initiatedAt evidenceDueBy amount { amount currencyCode } reasonDetails { reason networkReasonCode } order { legacyResourceId name } } }
+              }
+            }
+            GRAPHQL;
+        $result = $this->paginateGraphql($store, $query, 'disputes', ['search' => 'status:NEEDS_RESPONSE OR status:UNDER_REVIEW'], 20);
+        $disputes = [];
+        foreach ($result['edges'] as $edge) {
+            $node = $edge['node'] ?? null;
+            if (! is_array($node)) {
+                throw new ShopifyGraphqlException([], 'Shopify disputes returned an unexpected response shape.');
+            }
+            $order = is_array($node['order'] ?? null) ? $node['order'] : [];
+            $reason = is_array($node['reasonDetails'] ?? null) ? $node['reasonDetails'] : [];
+            $amount = is_array($node['amount'] ?? null) ? $node['amount'] : [];
+            $id = is_scalar($node['legacyResourceId'] ?? null) ? trim((string) $node['legacyResourceId']) : '';
+            $orderId = is_scalar($order['legacyResourceId'] ?? null) ? trim((string) $order['legacyResourceId']) : '';
+            $disputes[] = ['id' => ctype_digit($id) ? $id : '', 'status' => strtolower(is_scalar($node['status'] ?? null) ? (string) $node['status'] : ''), 'reason' => strtolower(is_scalar($reason['reason'] ?? null) ? (string) $reason['reason'] : ''), 'network_reason_code' => $reason['networkReasonCode'] ?? null, 'initiated_at' => is_scalar($node['initiatedAt'] ?? null) ? (string) $node['initiatedAt'] : '', 'evidence_due_by' => is_scalar($node['evidenceDueBy'] ?? null) ? (string) $node['evidenceDueBy'] : null, 'amount' => is_numeric($amount['amount'] ?? null) ? (float) $amount['amount'] : 0.0, 'currency' => is_scalar($amount['currencyCode'] ?? null) ? (string) $amount['currencyCode'] : '', 'order_id' => ctype_digit($orderId) ? $orderId : '', 'order_name' => is_scalar($order['name'] ?? null) ? (string) $order['name'] : ''];
+        }
+
+        return ['disputes' => $disputes, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
+    }
+
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function tagAuditCandidates(Store $store, string $startDate, string $endDate): array
     {

@@ -1,0 +1,9 @@
+@extends('layouts.app')
+@section('content')
+<div class="flex flex-col gap-6"><section><p class="text-sm font-medium text-indigo-600">Risk report</p><h1 class="mt-1 text-3xl font-bold">Chargebacks / Disputes</h1><p class="mt-2 text-slate-500">Open Shopify Payments disputes sorted by response deadline.</p></section>
+<form method="POST" action="{{ route('reports.disputes.store') }}">@csrf<button class="rounded-lg bg-indigo-600 px-5 py-2.5 font-semibold text-white">Scan disputes</button></form>
+@if($configurationError)<div class="rounded-xl bg-amber-50 p-4 text-amber-800">Shopify credentials are incomplete for the active store.</div>@endif
+@if($reportFailed)<div class="rounded-xl bg-red-50 p-4 text-red-800">The report could not be completed. Check Shopify and try again.</div>@endif
+@if($result)<h2 class="text-2xl font-bold">{{ $result->scanned }} open disputes</h2>@if($result->truncated)<div class="rounded-xl bg-amber-50 p-4 text-amber-800">Results are incomplete: disputes truncated after {{ $result->pages }} pages.</div>@endif
+<div class="overflow-x-auto rounded-xl border"><table class="min-w-full text-left text-sm"><thead><tr><th class="p-3">Order</th><th>Status</th><th>Reason</th><th>Amount</th><th>Initiated</th><th>Days until due</th></tr></thead><tbody>@forelse($result->rows as $row)<tr><td class="p-3">@if($row['order_id'])<a class="text-indigo-600" href="https://{{ $activeStore->shopify_store }}.myshopify.com/admin/orders/{{ $row['order_id'] }}">{{ $row['order_name'] }}</a>@else{{ $row['order_name'] ?: '—' }}@endif</td><td>{{ str_replace('_', ' ', $row['status']) }}</td><td>{{ str_replace('_', ' ', $row['reason']) }}</td><td>{{ number_format($row['amount'], 2) }} {{ $row['currency'] }}</td><td>{{ substr($row['initiated_at'], 0, 10) }}</td><td>{{ $row['days_until_due'] ?? '—' }}</td></tr>@empty<tr><td class="p-6 text-center" colspan="6">No open disputes need a response.</td></tr>@endforelse</tbody></table></div>@endif</div>
+@endsection

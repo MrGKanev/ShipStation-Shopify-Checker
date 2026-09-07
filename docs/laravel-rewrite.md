@@ -408,7 +408,7 @@ Matrix-ът е release control документ, а не само checklist. М�
 достъпен route/controller/view и покриващи тестове. Наличен domain helper без
 завършен потребителски workflow не се брои за готов feature.
 
-Последно обновяване: **2026-09-07**, след Tag Policy Audit slice-а.
+Последно обновяване: **2026-09-07**, след Chargebacks / Disputes slice-а.
 
 Легенда: **Done** = feature parity за основния workflow; **Partial** = използваем,
 но по-тесен от legacy; **Todo** = няма завършен Laravel workflow;
@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 19 | 26.4% |
+| Done | 20 | 27.8% |
 | Partial | 2 | 2.8% |
-| Todo | 49 | 68.1% |
+| Todo | 48 | 66.7% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -520,9 +520,9 @@ workflow от наличния framework scaffold.
 | `consentaudit` | Marketing Consent Audit | Done | Paid orders без subscribed email consent, informational SMS state, unknown defaults и newest-first sorting. |
 | `riskreport` | Fraud Risk Report | Done | Paid date-range scan с осем legacy сигнала, medium/high filtering, score-descending sorting и visible truncation. |
 | `sameip` | Same IP, Different Emails | Done | Paid orders grouped by exact client IP, case-insensitive distinct-email deduplication, detailed orders and deterministic risk sorting. |
-| `disputes` | Chargebacks / Disputes | Todo | Open disputes и response deadlines. |
+| `disputes` | Chargebacks / Disputes | Done | Open actionable disputes, evidence deadlines, urgency sorting and bounded pagination. |
 
-Audit subtotal: **Done 11 · Partial 1 · Todo 35 · Replaced 1**.
+Audit subtotal: **Done 12 · Partial 1 · Todo 34 · Replaced 1**.
 
 ### Search & Lookup — 12
 
@@ -583,15 +583,15 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 85 | 402 | 1,612 |
+| Laravel rewrite | 88 | 405 | 1,628 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
-| Fully mapped | 16 | 13.9% |
+| Fully mapped | 17 | 14.8% |
 | Partial / parity verification | 24 | 20.9% |
-| Pending | 75 | 65.2% |
+| Pending | 74 | 64.3% |
 | **Общо** | **115** | **100%** |
 
 #### Fully mapped legacy test files
@@ -820,7 +820,6 @@ Tag Policy traceability (`OrderPolicyChecksTest.php` и
 - [ ] `CustomerLTVPageLoaderTest.php`
 - [ ] `DateRangeTest.php`
 - [ ] `DiscordNotifierTest.php`
-- [ ] `DisputesPageLoaderTest.php`
 - [ ] `DocsGeneratorTest.php`
 - [ ] `EmailDigestTest.php`
 - [ ] `EmailNotifierTest.php`
