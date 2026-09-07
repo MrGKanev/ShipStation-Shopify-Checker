@@ -25,6 +25,36 @@ class ShopifyAdminClient implements ShopifyAdminGateway
         private readonly ShopifyOrderEventNormalizer $orderEventNormalizer,
     ) {}
 
+    /** @return array{shop_name: string, scopes: list<string>, requested_version: string} */
+    public function healthCheck(Store $store): array
+    {
+        $result = $this->graphql($store, <<<'GRAPHQL'
+            query ShopifyHealth {
+              shop { name }
+              currentAppInstallation { accessScopes { handle } }
+            }
+            GRAPHQL);
+        $shop = $result['data']['shop'] ?? null;
+        $accessScopes = $result['data']['currentAppInstallation']['accessScopes'] ?? null;
+
+        if (! is_array($shop) || ! is_array($accessScopes)) {
+            throw new ShopifyGraphqlException([], 'Shopify health check returned an unexpected response shape.');
+        }
+
+        $scopes = [];
+        foreach ($accessScopes as $scope) {
+            if (is_array($scope) && is_string($scope['handle'] ?? null) && trim($scope['handle']) !== '') {
+                $scopes[] = trim($scope['handle']);
+            }
+        }
+
+        return [
+            'shop_name' => is_scalar($shop['name'] ?? null) ? trim((string) $shop['name']) : '',
+            'scopes' => array_values(array_unique($scopes)),
+            'requested_version' => self::API_VERSION,
+        ];
+    }
+
     /**
      * @return list<array<string, mixed>>
      */

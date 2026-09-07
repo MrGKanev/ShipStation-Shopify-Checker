@@ -4,6 +4,8 @@ namespace App\Integrations\ShipStation;
 
 interface ShipStationClientContract
 {
+    public function healthCheck(): void;
+
     /**
      * @return list<array<string, mixed>>
      */

@@ -24,6 +24,12 @@ class ShipStationClient implements ShipStationClientContract
         #[SensitiveParameter] private readonly string $apiSecret,
     ) {}
 
+    public function healthCheck(): void
+    {
+        $payload = $this->get('/orders', ['pageSize' => 1]);
+        $this->items($payload, 'orders');
+    }
+
     public function findByOrderNumber(string $orderNumber): array
     {
         $payload = $this->get('/orders', [

@@ -54,5 +54,6 @@ class AppServiceProvider extends ServiceProvider
             ($request->user()?->getAuthIdentifier() ?? 'guest').'|'.$request->ip(),
         ));
         RateLimiter::for('audit-report', fn (Request $request): Limit => Limit::perMinute(5)->by(($request->user()?->getAuthIdentifier() ?? 'guest').'|'.$request->ip()));
+        RateLimiter::for('api-health', fn (Request $request): Limit => Limit::perMinute(5)->by(($request->user()?->getAuthIdentifier() ?? 'guest').'|'.$request->ip()));
     }
 }

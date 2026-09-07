@@ -12,6 +12,22 @@ use UnexpectedValueException;
 
 class ShipStationClientTest extends TestCase
 {
+    public function test_health_check_uses_a_minimal_authenticated_orders_request(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake(['https://ssapi.shipstation.com/orders*' => Http::response(['orders' => []])]);
+
+        $this->client()->healthCheck();
+
+        Http::assertSent(function (Request $request): bool {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+            return $request->method() === 'GET'
+                && $query === ['pageSize' => '1']
+                && $request->hasHeader('Authorization', 'Basic '.base64_encode('api-key:api-secret'));
+        });
+    }
+
     public function test_order_lookup_returns_raw_orders_with_basic_auth_and_expected_query(): void
     {
         Http::preventStrayRequests();

@@ -16,6 +16,29 @@ use Tests\TestCase;
 
 class ShopifyAdminClientTest extends TestCase
 {
+    public function test_health_check_returns_shop_and_unique_access_scopes(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://acme.myshopify.com/admin/api/2026-07/graphql.json' => Http::response(['data' => [
+                'shop' => ['name' => 'Acme'],
+                'currentAppInstallation' => ['accessScopes' => [
+                    ['handle' => 'read_orders'],
+                    ['handle' => 'read_fulfillments'],
+                    ['handle' => 'read_orders'],
+                ]],
+            ]]),
+        ]);
+
+        $this->assertSame([
+            'shop_name' => 'Acme',
+            'scopes' => ['read_orders', 'read_fulfillments'],
+            'requested_version' => '2026-07',
+        ], $this->client()->healthCheck($this->store()));
+        Http::assertSent(fn (Request $request): bool => str_contains((string) $request['query'], 'currentAppInstallation')
+            && str_contains((string) $request['query'], 'accessScopes { handle }'));
+    }
+
     public function test_returns_graphql_data_with_store_authentication_and_versioned_url(): void
     {
         Http::preventStrayRequests();

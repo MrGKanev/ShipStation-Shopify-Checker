@@ -1,0 +1,43 @@
+@extends('layouts.app')
+
+@section('content')
+    <div class="flex flex-col gap-6">
+        <section>
+            <p class="text-sm font-medium text-indigo-600 dark:text-indigo-400">Administration</p>
+            <h1 class="mt-1 text-3xl font-bold">API Health</h1>
+            <p class="mt-2 text-slate-500 dark:text-slate-400">Run lightweight live checks for the active store's Shopify and ShipStation connections.</p>
+        </section>
+
+        <form class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900" method="POST" action="{{ route('admin.api-health.check') }}">
+            @csrf
+            <p class="mb-4 text-sm text-slate-500 dark:text-slate-400">The check reads one small response from each provider. It does not change orders or settings.</p>
+            <button class="rounded-lg bg-indigo-600 px-5 py-2.5 font-semibold text-white hover:bg-indigo-500" type="submit">Run health check</button>
+        </form>
+
+        @if ($health)
+            <p class="text-sm text-slate-500 dark:text-slate-400">Checked at {{ $health['checked_at'] }}</p>
+            <div class="grid gap-5 lg:grid-cols-2">
+                @foreach (['shopify' => 'Shopify', 'shipstation' => 'ShipStation'] as $key => $label)
+                    @php($result = $health[$key])
+                    <section class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+                        <div class="flex items-center justify-between gap-4">
+                            <h2 class="text-xl font-bold">{{ $label }}</h2>
+                            <span class="rounded-full px-3 py-1 text-xs font-semibold {{ $result['ok'] ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200' }}">{{ $result['ok'] ? 'Healthy' : 'Needs attention' }}</span>
+                        </div>
+                        @if ($result['error'])<p class="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">{{ $result['error'] }}</p>@endif
+                        <dl class="mt-4 grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 text-sm">
+                            <dt class="text-slate-500">Configured</dt><dd>{{ $result['configured'] ? 'Yes' : 'No' }}</dd>
+                            <dt class="text-slate-500">Latency</dt><dd>{{ $result['latency_ms'] === null ? '—' : $result['latency_ms'].' ms' }}</dd>
+                            @if ($key === 'shopify')
+                                <dt class="text-slate-500">Shop</dt><dd>{{ $result['shop_name'] ?: '—' }}</dd>
+                                <dt class="text-slate-500">API version</dt><dd>{{ $result['requested_version'] ?: '—' }}</dd>
+                                <dt class="text-slate-500">Scopes</dt><dd>{{ $result['scopes'] === [] ? '—' : implode(', ', $result['scopes']) }}</dd>
+                                <dt class="text-slate-500">Missing scopes</dt><dd class="{{ $result['missing_scopes'] === [] ? '' : 'text-red-600 dark:text-red-400' }}">{{ $result['missing_scopes'] === [] ? 'None' : implode(', ', $result['missing_scopes']) }}</dd>
+                            @endif
+                        </dl>
+                    </section>
+                @endforeach
+            </div>
+        @endif
+    </div>
+@endsection

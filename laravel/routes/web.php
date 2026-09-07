@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ActiveStoreController;
+use App\Http\Controllers\Admin\ApiHealthController;
 use App\Http\Controllers\Admin\StoreController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthenticatedSessionController;
@@ -27,6 +28,7 @@ use App\Http\Controllers\Reports\ZombieProductsController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
+Route::get('/ready', ReadinessController::class)->name('ready');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
@@ -82,6 +84,8 @@ Route::middleware('auth')->group(function (): void {
             ->name('admin.')
             ->middleware('can:manage-administration')
             ->group(function (): void {
+                Route::get('/api-health', [ApiHealthController::class, 'show'])->name('api-health');
+                Route::post('/api-health', [ApiHealthController::class, 'check'])->middleware('throttle:api-health')->name('api-health.check');
                 Route::resource('stores', StoreController::class)->except(['show', 'destroy']);
                 Route::resource('users', UserController::class)->except(['show', 'destroy']);
             });
