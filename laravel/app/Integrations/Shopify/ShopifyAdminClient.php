@@ -581,6 +581,37 @@ class ShopifyAdminClient implements ShopifyAdminGateway
     }
 
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function addressCheckCandidates(Store $store, string $startDate, string $endDate, bool $unfulfilledOnly): array
+    {
+        $query = <<<'GRAPHQL'
+            query AddressCheckCandidates($search: String!, $after: String) {
+              orders(first: 250, after: $after, sortKey: CREATED_AT, reverse: true, query: $search) {
+                pageInfo { hasNextPage endCursor }
+                edges { node { legacyResourceId name createdAt email displayFinancialStatus displayFulfillmentStatus shippingAddress { firstName lastName address1 city provinceCode zip country countryCodeV2 phone } shippingLines(first: 20) { nodes { title } } } }
+              }
+            }
+            GRAPHQL;
+        $search = "status:any financial_status:paid created_at:>={$startDate}T00:00:00Z created_at:<={$endDate}T23:59:59Z".($unfulfilledOnly ? ' fulfillment_status:unfulfilled' : '');
+        $result = $this->paginateGraphql($store, $query, 'orders', ['search' => $search], 100);
+        $orders = [];
+        foreach ($result['edges'] as $edge) {
+            $node = $edge['node'] ?? null;
+            if (! is_array($node)) {
+                throw new ShopifyGraphqlException([], 'Shopify address check returned an unexpected response shape.');
+            }
+            $order = $this->orderNormalizer->normalize($node);
+            $shippingLines = $node['shippingLines']['nodes'] ?? [];
+            if (! is_array($shippingLines) || ! array_is_list($shippingLines) || array_filter($shippingLines, fn (mixed $line): bool => ! is_array($line)) !== []) {
+                throw new ShopifyGraphqlException([], 'Shopify address check returned invalid shipping lines.');
+            }
+            $order['shipping_lines'] = $shippingLines;
+            $orders[] = $order;
+        }
+
+        return ['orders' => $orders, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
+    }
+
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function tagAuditCandidates(Store $store, string $startDate, string $endDate): array
     {
         $query = <<<'GRAPHQL'

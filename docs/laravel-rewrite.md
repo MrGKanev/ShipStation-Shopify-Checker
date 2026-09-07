@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 15 | 20.8% |
+| Done | 16 | 22.2% |
 | Partial | 2 | 2.8% |
-| Todo | 53 | 73.6% |
+| Todo | 52 | 72.2% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -488,7 +488,7 @@ workflow от наличния framework scaffold.
 | `ssshipped` | SS Shipped / Shopify Unfulfilled | Todo | Cross-platform fulfillment sync failures. |
 | `orderedits` | Order Edit History | Todo | Post-placement changes. |
 | `noteflags` | Note Flags | Todo | Flagged keywords в order notes. |
-| `addrcheck` | Address Scanner | Todo | Непълни/невалидни адреси. |
+| `addrcheck` | Address Scanner | Done | Required fields, short street, US/CA postal formats, province, express phone и PO Box/carrier checks с два legacy филтъра. |
 | `emailcheck` | Email Checker | Done | Paid date-range scan с missing/invalid/disposable critical правила, suspicious warning евристики, severity sorting и visible truncation. |
 | `hvorders` | High-Value No Phone | Done | Operator/admin report с currency-aware праг, cancelled exclusion, deterministic sorting и visible truncation. |
 | `addrchanges` | Address Changes | Todo | Shipping address edits. |
@@ -522,7 +522,7 @@ workflow от наличния framework scaffold.
 | `sameip` | Same IP, Different Emails | Todo | Fraud-ring signal по client IP. |
 | `disputes` | Chargebacks / Disputes | Todo | Open disputes и response deadlines. |
 
-Audit subtotal: **Done 7 · Partial 1 · Todo 39 · Replaced 1**.
+Audit subtotal: **Done 8 · Partial 1 · Todo 38 · Replaced 1**.
 
 ### Search & Lookup — 12
 
@@ -583,15 +583,15 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 73 | 377 | 1,481 |
+| Laravel rewrite | 76 | 384 | 1,516 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
-| Fully mapped | 12 | 10.4% |
+| Fully mapped | 14 | 12.2% |
 | Partial / parity verification | 23 | 20.0% |
-| Pending | 80 | 69.6% |
+| Pending | 78 | 67.8% |
 | **Общо** | **115** | **100%** |
 
 #### Fully mapped legacy test files
@@ -608,6 +608,8 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [x] `TaxAuditTest.php` — всичките 6 tax decisions са нанесени и разширени
 - [x] `ConsentAuditTest.php` — всичките 4 consent decisions са нанесени и разширени
 - [x] `FraudRiskReportTest.php` — всичките 4 filtering, signal, Shopify-risk и sorting decisions са нанесени и разширени
+- [x] `AddressCheckTest.php` — всичките 20 address validation и malformed-value decisions са нанесени
+- [x] `AddressScannerPageTest.php` — всичките 4 filtering, clean-row и severity sorting decisions са нанесени
 
 #### Partial или чакащи method-level parity проверка
 
@@ -756,13 +758,20 @@ Email Checker traceability (`FraudComplianceChecksTest.php` и
 - Paid/date query, initial range, authorization, validation, credential guard,
   store isolation, XSS, safe failure и visible truncation са покрити.
 
+Address Scanner traceability (`AddressCheckTest.php` и
+`AddressScannerPageTest.php` → `AddressCheckAnalyzerTest.php`,
+`AddressCheckControllerTest.php` и `ShopifyAddressCheckCandidatesTest.php`):
+
+- Всички required-field, ZIP/postal, province, short-address, PO Box/carrier и
+  express-phone решения са пренесени, включително numeric ZIP стойности.
+- Critical-first sorting, PO Box-only и unfulfilled-only filters, paid date
+  query, authorization, credentials, XSS, safe failure и truncation са покрити.
+
 #### Pending legacy test files
 
 - [ ] `ActionsTest.php`
 - [ ] `ActiveSsConflictsTest.php`
 - [ ] `AddressChangesTest.php`
-- [ ] `AddressCheckTest.php`
-- [ ] `AddressScannerPageTest.php`
 - [ ] `AtomicFileTest.php`
 - [ ] `AuditSnapshotTest.php`
 - [ ] `AuditTest.php`

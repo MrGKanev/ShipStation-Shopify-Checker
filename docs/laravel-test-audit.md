@@ -1,6 +1,6 @@
 # Laravel rewrite — legacy test audit
 
-Последно обновяване: **2026-09-07** след Email Checker slice-а.
+Последно обновяване: **2026-09-07** след Address Scanner slice-а.
 
 Този документ е отделният checklist за тестова parity. Feature статусът се следи
 в [Laravel rewrite плана](laravel-rewrite.md), а тук се затваря всеки legacy test
@@ -11,13 +11,13 @@ contract има Laravel тест, по-силен еквивалент или з
 
 | Статус | Файлове | Дял от 115 |
 |---|---:|---:|
-| Готови | 12 | 10.4% |
+| Готови | 14 | 12.2% |
 | Частично покрити | 23 | 20.0% |
-| Непочнати | 80 | 69.6% |
-| **Оставащи за одит** | **103** | **89.6%** |
+| Непочнати | 78 | 67.8% |
+| **Оставащи за одит** | **101** | **87.8%** |
 
 Legacy baseline: **115 файла · 1,528 теста · 3,659 assertions**. Laravel
-baseline след последния slice: **377 теста · 1,481 assertions**. Броят assertions
+baseline след последния slice: **384 теста · 1,516 assertions**. Броят assertions
 е ориентир; критерият е поведенческо покритие.
 
 За всеки checkbox проверяваме business decisions, boundary интеграцията,
@@ -106,8 +106,6 @@ malformed payloads и atomic failure. Не копираме тест, който
 |---|---|---:|---|
 | [ ] | `ActiveSsConflictsTest.php` | 6 | Refunded/cancelled Shopify orders still active in ShipStation, dedupe и sorting |
 | [ ] | `AddressChangesTest.php` | 4 | Address-change delay, clamping и output fields |
-| [ ] | `AddressCheckTest.php` | 20 | Required address fields, US/CA postal codes, PO boxes, carrier и phone rules |
-| [ ] | `AddressScannerPageTest.php` | 4 | Severity sorting, PO-box filter и clean exclusions |
 | [ ] | `BundleCheckPageTest.php` | 9 | Missing bundle components и cancelled/refunded/pending/free/no-shipping exclusions |
 | [ ] | `CarrierPerfTest.php` | 8 | Delivery averages, late boundary, bad/missing dates и carrier grouping |
 | [ ] | `ComparatorTest.php` | 73 | Shopify↔ShipStation matching, exclusions, duplicates, bundles, shipped items, margin и hold behavior |
@@ -168,6 +166,8 @@ malformed payloads и atomic failure. Не копираме тест, който
 - [x] `TaxAuditTest.php` — 6/6 zero-tax, exemption, minimum and sorting decisions.
 - [x] `ConsentAuditTest.php` — 4/4 email/SMS consent, unknown and sorting decisions.
 - [x] `FraudRiskReportTest.php` — 4/4 filtering, signal breakdown, Shopify risk and sorting decisions.
+- [x] `AddressCheckTest.php` — 20/20 required fields, postal formats, province, PO Box, carrier and malformed-value decisions.
+- [x] `AddressScannerPageTest.php` — 4/4 severity sorting, PO Box filter and clean-address decisions.
 
 ## Как се обновява
 
