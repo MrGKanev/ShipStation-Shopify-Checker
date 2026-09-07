@@ -457,6 +457,7 @@ workflow от наличния framework scaffold.
 - [ ] Daily email digest (`email_digest.php`)
 - [ ] Slack notifications и per-tool rules
 - [ ] Email notifications, recipients и per-tool rules
+- [x] SMTP configuration diagnostic и admin-only test delivery
 - [ ] Discord notifications
 - [ ] Report persistence, downloads и CSV/export contracts
 - [ ] Metrics endpoint и authentication (`metrics.php`)
@@ -582,7 +583,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 61 | 354 | 1,357 |
+| Laravel rewrite | 62 | 358 | 1,371 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 

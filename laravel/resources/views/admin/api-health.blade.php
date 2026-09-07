@@ -14,6 +14,29 @@
             <button class="rounded-lg bg-indigo-600 px-5 py-2.5 font-semibold text-white hover:bg-indigo-500" type="submit">Run health check</button>
         </form>
 
+        <section class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-xl font-bold">SMTP delivery</h2>
+                    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Mailer: {{ $mailConfiguration['mailer'] ?: 'not set' }} · From: {{ $mailConfiguration['from_address'] ?: 'invalid' }}</p>
+                </div>
+                <span class="rounded-full px-3 py-1 text-xs font-semibold {{ $mailConfiguration['configured'] ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200' }}">{{ $mailConfiguration['configured'] ? 'Configured' : 'Needs configuration' }}</span>
+            </div>
+
+            @if ($mailResult === 'sent')<p class="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">Test email sent successfully.</p>@endif
+            @if ($mailResult === 'failed')<p class="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">Test email could not be sent. Check the SMTP configuration and application log.</p>@endif
+
+            <form class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start" method="POST" action="{{ route('admin.api-health.test-email') }}">
+                @csrf
+                <div class="flex-1">
+                    <label class="text-sm font-medium" for="email">Recipient</label>
+                    <input class="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-slate-950" id="email" name="email" type="email" value="{{ old('email', auth()->user()->email) }}" maxlength="255" required>
+                    @error('email')<p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>@enderror
+                </div>
+                <button class="mt-7 rounded-lg bg-indigo-600 px-5 py-2.5 font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50" type="submit" @disabled(! $mailConfiguration['configured'])>Send test email</button>
+            </form>
+        </section>
+
         @if ($health)
             <p class="text-sm text-slate-500 dark:text-slate-400">Checked at {{ $health['checked_at'] }}</p>
             <div class="grid gap-5 lg:grid-cols-2">

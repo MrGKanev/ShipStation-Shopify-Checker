@@ -28,7 +28,7 @@ capability-то готово.
 
 | Capability | Статус | Налично | Нужно за Done |
 |---|---|---|---|
-| SMTP transport | Foundation | Стандартният `config/mail.php` | Environment contract и validation; encrypted secrets/deployment config; connection/send diagnostic; timeout/failure behavior; redacted logs; fake и integration tests |
+| SMTP transport | Partial | Admin diagnostic показва mailer/from status и изпраща валидирано test писмо през SMTP; 10-second timeout, rate limit, safe failure log и fake tests | Production secrets/deployment configuration и реален staging delivery smoke test |
 | Audit email notifications | Todo | Няма mailables/notifications | HTML + text templates, recipients, subject/count wording, escaping, retry policy и duplicate-delivery protection |
 | CSV email attachments | Todo | Няма export attachment flow | Safe filename, CSV injection protection, encoding, MIME/size limits и memory-safe generation |
 | Per-tool email rules | Todo | Няма schema/UX | Mode off/immediate/digest, threshold, include-zero, recipient override, defaults, authorization и persistence |

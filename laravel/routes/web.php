@@ -86,6 +86,7 @@ Route::middleware('auth')->group(function (): void {
             ->group(function (): void {
                 Route::get('/api-health', [ApiHealthController::class, 'show'])->name('api-health');
                 Route::post('/api-health', [ApiHealthController::class, 'check'])->middleware('throttle:api-health')->name('api-health.check');
+                Route::post('/api-health/test-email', [ApiHealthController::class, 'sendTestEmail'])->middleware('throttle:api-health')->name('api-health.test-email');
                 Route::resource('stores', StoreController::class)->except(['show', 'destroy']);
                 Route::resource('users', UserController::class)->except(['show', 'destroy']);
             });
