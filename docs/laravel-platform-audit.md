@@ -90,7 +90,7 @@ capability-то готово.
 |---|---|---|---|
 | Application install | Done | Composer/NPM Laravel app и install command | Production runbook с migrations, assets, storage link и initial admin/store setup |
 | Configuration validation | Partial | Laravel config и request-level credential guards | Startup/deploy validation за app URL/key, DB, queue, mail, OAuth, proxy и notification settings |
-| CI checks | Partial | Текущият project има работещ test/Pint/build baseline | Задължителни PHPUnit, Pint, static analysis, frontend build и dependency/security audit gates |
+| CI checks | Done | Laravel CI изпълнява PHPUnit, Larastan level 5, Pint, Composer audit и frontend build/audit; Larastan scope покрива Application, Domain и Integrations без baseline | Разширяване към HTTP/Models и по-високо analysis ниво се прави постепенно без отслабване на gate-а |
 | Backup and restore | Todo | Няма runbook | DB/artifact backup, restore rehearsal, retention and ownership |
 | Deployment runbook | Todo | Няма production procedure | Maintenance/write freeze, migrate, build, cache config/routes, worker restart, scheduler, smoke checks и fix-forward |
 | Production observability | Todo | Няма готов operational stack | Log destination/retention, metrics scrape, dashboards, alert ownership и escalation |

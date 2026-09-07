@@ -200,7 +200,7 @@ class ShopifyAdminClient implements ShopifyAdminGateway
     }
 
     /**
-     * @param  list<string>  $orderNumbers
+     * @param  list<mixed>  $orderNumbers
      * @return array<int|string, list<array<string, mixed>>>
      */
     public function findByOrderNumbers(Store $store, array $orderNumbers): array
@@ -1021,7 +1021,7 @@ class ShopifyAdminClient implements ShopifyAdminGateway
             ->post('graphql.json', $payload)
             ->throw();
 
-        $result = $response->json();
+        $result = json_decode($response->body(), true);
 
         if (! is_array($result)) {
             throw new ShopifyGraphqlException([], 'Shopify GraphQL returned an unexpected response shape.');
@@ -1033,7 +1033,7 @@ class ShopifyAdminClient implements ShopifyAdminGateway
 
         $errors = $result['errors'] ?? [];
 
-        if (is_array($errors) && $errors !== []) {
+        if ($errors !== []) {
             /** @var list<array<string, mixed>> $errors */
             throw new ShopifyGraphqlException($errors);
         }
@@ -1098,7 +1098,7 @@ class ShopifyAdminClient implements ShopifyAdminGateway
             }
 
             $pages++;
-        } while ($hasNextPage && $cursor !== null && $pages < $maxPages);
+        } while ($hasNextPage && $pages < $maxPages);
 
         return [
             'edges' => $edges,

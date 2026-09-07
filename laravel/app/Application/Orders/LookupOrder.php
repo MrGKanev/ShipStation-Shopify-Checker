@@ -47,7 +47,7 @@ class LookupOrder
      */
     private function normalizeShipStationOrders(array $orders, array $shipments): array
     {
-        return array_values(array_map(function (array $order) use ($orders, $shipments): array {
+        return array_map(function (array $order) use ($orders, $shipments): array {
             $orderId = (string) ($order['orderId'] ?? '');
             $matchingShipments = array_values(array_filter(
                 $shipments,
@@ -56,7 +56,7 @@ class LookupOrder
             ));
 
             return $this->shipStationOrderNormalizer->normalize($order, $matchingShipments);
-        }, $orders));
+        }, $orders);
     }
 
     /**

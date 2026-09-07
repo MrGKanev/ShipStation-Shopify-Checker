@@ -8,7 +8,7 @@ class ShipStationOrderNormalizer
 {
     /**
      * @param  array<string, mixed>  $order
-     * @param  list<array<string, mixed>>  $shipments
+     * @param  array<mixed>  $shipments
      * @return array{
      *     id: int|string|null,
      *     order_number: string,
@@ -127,12 +127,11 @@ class ShipStationOrderNormalizer
     }
 
     /**
-     * @param  list<array<string, mixed>>  $shipments
      * @return list<array{id: int|string|null, order_id: int|string|null, carrier_code: string|null, service_code: string|null, tracking_number: string|null, ship_date: string|null, delivery_date: string|null, voided: bool}>
      */
-    private function shipments(array $shipments): array
+    private function shipments(mixed $shipments): array
     {
-        if (! array_is_list($shipments)) {
+        if (! is_array($shipments) || ! array_is_list($shipments)) {
             throw new UnexpectedValueException('ShipStation returned an invalid shipments collection.');
         }
 

@@ -11,7 +11,7 @@ platform audit. Това е план за зависимости, а не спи
 | Приоритет | Пакет | За какво го използваме | Решение |
 |---|---|---|---|
 | P0 | `laravel/socialite` | Google OAuth login | Добавяме с Google login slice-а |
-| P0 | `larastan/larastan` | Static analysis в CI | Добавяме скоро като самостоятелен quality slice |
+| P0 | `larastan/larastan` | Static analysis в CI | **Инсталиран:** v3.11, level 5 за Application/Domain/Integrations, без baseline |
 | P0 | `league/csv` | Общ CSV export/import contract | Добавяме с първия общ export service |
 | P1 | `spatie/laravel-activitylog` | Action log за mutations и администрация | Добавяме преди push/note/ignore/print-queue actions |
 | P1 | `spatie/laravel-health` | Worker, scheduler, disk, DB и backup health | Добавяме след queue/scheduler foundation |
@@ -49,6 +49,11 @@ composer require laravel/socialite
 Източник: [Laravel 13 Socialite documentation](https://laravel.com/framework/docs/socialite).
 
 ### 2. `larastan/larastan`
+
+**Статус: внедрен.** `composer analyse` е задължителен Laravel CI gate, а
+конфигурацията е в `laravel/phpstan.neon`. Началният scope минава без baseline и
+без потиснати грешки. Следващото разширяване е към `app/Http` и `app/Models`,
+след което analysis level може да се повишава поетапно.
 
 Проектът вече има значителен integration слой, нормализатори и масивни report
 DTO структури. PHPUnit проверява поведението, но не намира всички грешни array
