@@ -1,6 +1,6 @@
 # Laravel rewrite — legacy test audit
 
-Последно обновяване: **2026-09-07** след Address Scanner slice-а.
+Последно обновяване: **2026-09-07** след Discount Abuse slice-а.
 
 Този документ е отделният checklist за тестова parity. Feature статусът се следи
 в [Laravel rewrite плана](laravel-rewrite.md), а тук се затваря всеки legacy test
@@ -12,12 +12,12 @@ contract има Laravel тест, по-силен еквивалент или з
 | Статус | Файлове | Дял от 115 |
 |---|---:|---:|
 | Готови | 14 | 12.2% |
-| Частично покрити | 23 | 20.0% |
-| Непочнати | 78 | 67.8% |
+| Частично покрити | 24 | 20.9% |
+| Непочнати | 77 | 67.0% |
 | **Оставащи за одит** | **101** | **87.8%** |
 
 Legacy baseline: **115 файла · 1,528 теста · 3,659 assertions**. Laravel
-baseline след последния slice: **384 теста · 1,516 assertions**. Броят assertions
+baseline след последния slice: **390 теста · 1,543 assertions**. Броят assertions
 е ориентир; критерият е поведенческо покритие.
 
 За всеки checkbox проверяваме business decisions, boundary интеграцията,
@@ -45,6 +45,7 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `HttpAuthEndpointTest.php` | 1 | Endpoint auth contract | Пълна route/method/session еквивалентност |
 | [ ] | `OrderInsightPageLoaderTest.php` | 12 | Compare, timeline и допълнителни order insights | Непренесените insight branches и failure states |
 | [ ] | `OrderTimelineTest.php` | 26 | Timeline events, ordering, labels и risk signals | Explicit mapping на всички 26 метода |
+| [ ] | `OrderPolicyChecksTest.php` | 16 | Discount abuse и tag-policy business rules | Discount abuse 4/4 е покрит; tag-policy rules остават |
 | [ ] | `ProductInventoryPageLoaderTest.php` | 32 | Wiring за catalogue/inventory report страниците | Оставащите catalogue workflows и финална method-level сверка |
 | [ ] | `RiskScorerTest.php` | 33 | Fraud risk сигнали, weights и score bands | Custom weights и explicit mapping на всички methods |
 | [ ] | `SearchLookupPageLoaderTest.php` | 19 | Lookup/compare/timeline dispatch, validation и errors | Останалите search tools и всички loader branches |
@@ -116,7 +117,6 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `ItemizedFulfillmentReportTest.php` | 21 | Fulfilled item quantities, dates, SKU/product grouping и filters |
 | [ ] | `OnHoldStallTest.php` | 5 | Hold duration threshold, exclusions и sorting |
 | [ ] | `OrderAnomalyPageLoaderTest.php` | 20 | Fraud/anomaly page dispatch, ranges, credentials, results и failures |
-| [ ] | `OrderPolicyChecksTest.php` | 16 | Notes, tags, tax, consent and policy audit decisions |
 | [ ] | `OrderPolicyPageLoaderTest.php` | 22 | Policy-report inputs, wiring, configuration и error states |
 | [ ] | `PageLoaderTest.php` | 18 | Главен audit loader, compare results, ignore rules и notification behavior |
 | [ ] | `PartialFulfillStallsTest.php` | 6 | Partial fulfillment age threshold, completed exclusions и sorting |

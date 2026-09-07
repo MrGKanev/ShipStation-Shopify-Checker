@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 16 | 22.2% |
+| Done | 17 | 23.6% |
 | Partial | 2 | 2.8% |
-| Todo | 52 | 72.2% |
+| Todo | 51 | 70.8% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -514,7 +514,7 @@ workflow от наличния framework scaffold.
 | `catalogquality` | Catalog Quality | Done | Online Store publication, SEO title/description и collection membership върху пълния active catalogue с visible truncation. |
 | `giftcards` | Gift Cards | Done | Enabled positive balances, configurable expiry window, expired/never-redeemed reasons, currency display и full pagination. |
 | `countrymismatch` | Billing ≠ Shipping Country | Done | ISO-only comparison, missing-country count, currency display, stable sorting и visible truncation. |
-| `discountabuse` | Discount Abuse | Todo | Discount clusters по адрес/email. |
+| `discountabuse` | Discount Abuse | Done | Paid orders grouped by normalized discount code/address, distinct-email threshold, detailed orders and deterministic cluster sorting. |
 | `tagpolicy` | Tag Policy Audit | Todo | Required/forbidden tag combinations. |
 | `taxaudit` | Tax Audit | Done | Paid non-exempt zero-tax orders над configurable minimum, exact boundary и total-descending sorting. |
 | `consentaudit` | Marketing Consent Audit | Done | Paid orders без subscribed email consent, informational SMS state, unknown defaults и newest-first sorting. |
@@ -522,7 +522,7 @@ workflow от наличния framework scaffold.
 | `sameip` | Same IP, Different Emails | Todo | Fraud-ring signal по client IP. |
 | `disputes` | Chargebacks / Disputes | Todo | Open disputes и response deadlines. |
 
-Audit subtotal: **Done 8 · Partial 1 · Todo 38 · Replaced 1**.
+Audit subtotal: **Done 9 · Partial 1 · Todo 37 · Replaced 1**.
 
 ### Search & Lookup — 12
 
@@ -583,15 +583,15 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 76 | 384 | 1,516 |
+| Laravel rewrite | 79 | 390 | 1,543 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
 | Fully mapped | 14 | 12.2% |
-| Partial / parity verification | 23 | 20.0% |
-| Pending | 78 | 67.8% |
+| Partial / parity verification | 24 | 20.9% |
+| Pending | 77 | 67.0% |
 | **Общо** | **115** | **100%** |
 
 #### Fully mapped legacy test files
@@ -621,6 +621,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `GraphQL/EventNormalizerTest.php` — event normalization работи; всички 28 legacy test methods чакат mapping
 - [ ] `GraphQL/IdsTest.php` — order/event ID paths са покрити; общият legacy ID contract остава
 - [ ] `GraphQL/OrderComponentNormalizerTest.php` — address/items/fulfillment subset е пренесен
+- [ ] `OrderPolicyChecksTest.php` — Discount Abuse 4/4 е пренесен; Tag Policy rules остават
 - [ ] `GraphQL/OrderDirectLookupTest.php` — direct order lookup работи, но legacy full field set остава
 - [ ] `FraudComplianceChecksTest.php` — High-Value No Phone, Country Mismatch и Email Checker матриците са пренесени; останалите fraud/compliance checks остават
 - [ ] `GraphQL/OrderEventLookupTest.php` — pagination contract е пренесен; method-level mapping остава
@@ -767,6 +768,17 @@ Address Scanner traceability (`AddressCheckTest.php` и
 - Critical-first sorting, PO Box-only и unfulfilled-only filters, paid date
   query, authorization, credentials, XSS, safe failure и truncation са покрити.
 
+Discount Abuse traceability (`OrderPolicyChecksTest.php` и
+`OrderPolicyPageLoaderTest.php` → `DiscountAbuseAnalyzerTest.php`,
+`DiscountAbuseControllerTest.php` и `ShopifyDiscountAbuseCandidatesTest.php`):
+
+- Exact minimum, below-minimum exclusion, distinct-email deduplication,
+  separate-address grouping, code/address case normalization и cluster sorting
+  са покрити.
+- Paid/date query, DiscountCodeApplication filtering, validated threshold,
+  authorization, credentials, store isolation, XSS, safe failure и visible
+  truncation са покрити.
+
 #### Pending legacy test files
 
 - [ ] `ActionsTest.php`
@@ -819,7 +831,6 @@ Address Scanner traceability (`AddressCheckTest.php` и
 - [ ] `MetricsEndpointTest.php`
 - [ ] `OnHoldStallTest.php`
 - [ ] `OrderAnomalyPageLoaderTest.php`
-- [ ] `OrderPolicyChecksTest.php`
 - [ ] `OrderPolicyPageLoaderTest.php`
 - [ ] `OrphanDetectorTest.php`
 - [ ] `PageLoaderTest.php`

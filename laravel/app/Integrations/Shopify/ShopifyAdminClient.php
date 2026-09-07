@@ -612,6 +612,36 @@ class ShopifyAdminClient implements ShopifyAdminGateway
     }
 
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function discountAbuseCandidates(Store $store, string $startDate, string $endDate): array
+    {
+        $query = <<<'GRAPHQL'
+            query DiscountAbuseCandidates($search: String!, $after: String) {
+              orders(first: 250, after: $after, sortKey: CREATED_AT, reverse: true, query: $search) {
+                pageInfo { hasNextPage endCursor }
+                edges { node { legacyResourceId name createdAt email displayFinancialStatus displayFulfillmentStatus totalPriceSet { shopMoney { amount currencyCode } } shippingAddress { firstName lastName address1 city provinceCode zip country countryCodeV2 } discountApplications(first: 250) { nodes { __typename ... on DiscountCodeApplication { code } } } } }
+              }
+            }
+            GRAPHQL;
+        $result = $this->paginateGraphql($store, $query, 'orders', ['search' => "status:any financial_status:paid created_at:>={$startDate}T00:00:00Z created_at:<={$endDate}T23:59:59Z"], 100);
+        $orders = [];
+        foreach ($result['edges'] as $edge) {
+            $node = $edge['node'] ?? null;
+            if (! is_array($node)) {
+                throw new ShopifyGraphqlException([], 'Shopify discount abuse report returned an unexpected response shape.');
+            }
+            $applications = $node['discountApplications']['nodes'] ?? [];
+            if (! is_array($applications) || ! array_is_list($applications) || array_filter($applications, fn (mixed $application): bool => ! is_array($application)) !== []) {
+                throw new ShopifyGraphqlException([], 'Shopify discount abuse report returned invalid discount applications.');
+            }
+            $order = $this->orderNormalizer->normalize($node);
+            $order['discount_codes'] = array_values(array_map(fn (array $application): array => ['code' => is_scalar($application['code'] ?? null) ? trim((string) $application['code']) : ''], array_filter($applications, fn (array $application): bool => ($application['__typename'] ?? '') === 'DiscountCodeApplication')));
+            $orders[] = $order;
+        }
+
+        return ['orders' => $orders, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
+    }
+
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function tagAuditCandidates(Store $store, string $startDate, string $endDate): array
     {
         $query = <<<'GRAPHQL'
