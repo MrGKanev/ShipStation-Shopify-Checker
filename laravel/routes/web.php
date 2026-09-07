@@ -34,10 +34,12 @@ use App\Http\Controllers\Reports\TagAuditController;
 use App\Http\Controllers\Reports\TagPolicyController;
 use App\Http\Controllers\Reports\TaxAuditController;
 use App\Http\Controllers\Reports\ZombieProductsController;
+use App\Http\Controllers\StatusController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
 Route::get('/ready', ReadinessController::class)->name('ready');
+Route::get('/status', StatusController::class)->name('status');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');

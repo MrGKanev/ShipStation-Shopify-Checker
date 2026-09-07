@@ -17,7 +17,7 @@ contract има Laravel тест, по-силен еквивалент или з
 | **Оставащи за одит** | **98** | **85.2%** |
 
 Legacy baseline: **115 файла · 1,528 теста · 3,659 assertions**. Laravel
-baseline след последния slice: **405 теста · 1,628 assertions**. Броят assertions
+baseline след последния slice: **407 теста · 1,638 assertions**. Броят assertions
 е ориентир; критерият е поведенческо покритие.
 
 За всеки checkbox проверяваме business decisions, boundary интеграцията,

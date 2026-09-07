@@ -2,31 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Application\Health\CheckReadiness;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
-use Throwable;
 
 class ReadinessController extends Controller
 {
-    public function __invoke(): JsonResponse
+    public function __invoke(CheckReadiness $readiness): JsonResponse
     {
-        $checks = [
-            'database' => $this->databaseIsReady(),
-            'queue' => is_string(config('queue.default')) && trim((string) config('queue.default')) !== '',
-        ];
-        $ready = ! in_array(false, $checks, true);
+        $result = $readiness->handle();
 
-        return response()->json(['status' => $ready ? 'ready' : 'not_ready', 'checks' => $checks], $ready ? 200 : 503);
-    }
-
-    private function databaseIsReady(): bool
-    {
-        try {
-            DB::select('select 1');
-
-            return true;
-        } catch (Throwable) {
-            return false;
-        }
+        return response()->json(['status' => $result['ready'] ? 'ready' : 'not_ready', 'checks' => $result['checks']], $result['ready'] ? 200 : 503);
     }
 }

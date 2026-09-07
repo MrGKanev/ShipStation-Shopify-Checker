@@ -583,7 +583,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 88 | 405 | 1,628 |
+| Laravel rewrite | 89 | 407 | 1,638 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
