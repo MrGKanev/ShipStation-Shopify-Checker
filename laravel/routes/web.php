@@ -103,6 +103,7 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/reports/order-edits', [OrderEditController::class, 'store'])->middleware('throttle:audit-report')->name('reports.order-edits.store');
         Route::get('/reports/address-changes', [AddressChangeController::class, 'create'])->middleware('can:run-audits')->name('reports.address-changes');
         Route::post('/reports/address-changes', [AddressChangeController::class, 'store'])->middleware('throttle:audit-report')->name('reports.address-changes.store');
+        Route::post('/reports/address-changes/export', [AddressChangeController::class, 'export'])->middleware('throttle:audit-report')->name('reports.address-changes.export');
         Route::get('/reports/repeat-refunds', [RepeatRefundController::class, 'create'])->middleware('can:run-audits')->name('reports.repeat-refunds');
         Route::post('/reports/repeat-refunds', [RepeatRefundController::class, 'store'])->middleware('throttle:audit-report')->name('reports.repeat-refunds.store');
         Route::get('/reports/tag-audit', [TagAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.tag-audit');

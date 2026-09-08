@@ -4,8 +4,9 @@
     <section><p class="text-sm font-medium text-indigo-600">Risk report</p><h1 class="text-3xl font-bold">Address Changes</h1><p class="text-slate-500">Orders whose shipping address was edited after placement.</p></section>
     <form class="grid gap-4 rounded-xl border p-5 sm:grid-cols-3" method="POST" action="{{ route('reports.address-changes.store') }}">@csrf
         @foreach(['start_date'=>['From',$startDate],'end_date'=>['To',$endDate]] as $field=>[$label,$value])<div><label for="{{ $field }}">{{ $label }}</label><input class="w-full rounded-lg border px-3 py-2" id="{{ $field }}" name="{{ $field }}" type="date" value="{{ old($field,$value) }}">@error($field)<p class="text-red-600">{{ $message }}</p>@enderror</div>@endforeach
-        <button class="rounded-lg bg-indigo-600 px-5 py-2 text-white">Run report</button>
+        <div class="flex gap-2"><button class="rounded-lg bg-indigo-600 px-5 py-2 text-white">Run report</button><button class="rounded-lg border px-5 py-2" formaction="{{ route('reports.address-changes.export') }}">Download CSV</button></div>
     </form>
+    @error('export')<div class="rounded-xl bg-red-50 p-4">{{ $message }}</div>@enderror
     @if($configurationError)<div class="rounded-xl bg-amber-50 p-4">Shopify credentials are incomplete for the active store.</div>@endif
     @if($reportFailed)<div class="rounded-xl bg-red-50 p-4">The report could not be completed. Check Shopify and try again.</div>@endif
     @if($result)

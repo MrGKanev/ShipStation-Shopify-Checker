@@ -1,6 +1,6 @@
 # Laravel rewrite — legacy test audit
 
-Последно обновяване: **2026-09-08** след Google Socialite slice-а.
+Последно обновяване: **2026-09-08** след common CSV slice-а.
 
 Този документ е отделният checklist за тестова parity. Feature статусът се следи
 в [Laravel rewrite плана](laravel-rewrite.md), а тук се затваря всеки legacy test
@@ -12,12 +12,12 @@ contract има Laravel тест, по-силен еквивалент или з
 | Статус | Файлове | Дял от 115 |
 |---|---:|---:|
 | Готови | 21 | 18.3% |
-| Частично покрити | 24 | 20.9% |
-| Непочнати | 70 | 60.9% |
+| Частично покрити | 25 | 21.7% |
+| Непочнати | 69 | 60.0% |
 | **Оставащи за одит** | **94** | **81.7%** |
 
 Legacy baseline: **115 файла · 1,528 теста · 3,659 assertions**. Laravel
-baseline след последния slice: **432 теста · 1,794 assertions**. Броят assertions
+baseline след последния slice: **434 теста · 1,805 assertions**. Броят assertions
 е ориентир; критерият е поведенческо покритие.
 
 За всеки checkbox проверяваме business decisions, boundary интеграцията,
@@ -47,6 +47,7 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `OrderTimelineTest.php` | 26 | Timeline events, ordering, labels и risk signals | Explicit mapping на всички 26 метода |
 | [ ] | `OrderPolicyPageLoaderTest.php` | 22 | Policy-report inputs, wiring, configuration и error states | Discount Abuse, Same IP, Tag Policy, Duplicate Shipping Addresses, Note Flags и Order Edit paths са покрити; останалите policy reports чакат method-level сверка |
 | [ ] | `ProductInventoryPageLoaderTest.php` | 32 | Wiring за catalogue/inventory report страниците | Оставащите catalogue workflows и финална method-level сверка |
+| [ ] | `ReporterTest.php` | 19 | CSV/JSON output, summaries и filenames | Общият streamed CSV writer, filename sanitation и formula escaping са готови; JSON, summaries, attachments и всички report schemas остават |
 | [ ] | `RiskScorerTest.php` | 33 | Fraud risk сигнали, weights и score bands | Custom weights и explicit mapping на всички methods |
 | [ ] | `SearchLookupPageLoaderTest.php` | 19 | Lookup/compare/timeline dispatch, validation и errors | Останалите search tools и всички loader branches |
 | [ ] | `SecurityTest.php` | 5 | Proxy trust, sessions, rolling rate limit и headers | Full security checklist срещу Laravel middleware/config |
@@ -77,7 +78,6 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `PrintQueueTest.php` | 7 | Queue persistence, ordering и removal → packing/print queue workflow |
 | [ ] | `PushLogTest.php` | 3 | Push history append/order/limit → DB action log |
 | [ ] | `ReportRegistryTest.php` | 7 | Report definitions, groups и defaults → Laravel report registry/navigation |
-| [ ] | `ReporterTest.php` | 19 | Audit CSV/JSON output, summaries и filenames → export/report delivery service |
 | [ ] | `RunLogTest.php` | 3 | Run history append/order/limit → DB run records |
 | [ ] | `ScanRunnerTest.php` | 18 | Scan orchestration, notifications, snapshots и failures → queued report orchestration |
 | [ ] | `ShopifyFlowHealthTest.php` | 7 | Per-tool run/error health aggregation → operational dashboard |

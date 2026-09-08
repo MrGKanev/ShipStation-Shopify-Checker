@@ -491,7 +491,7 @@ workflow от наличния framework scaffold.
 | `addrcheck` | Address Scanner | Done | Required fields, short street, US/CA postal formats, province, express phone и PO Box/carrier checks с два legacy филтъра. |
 | `emailcheck` | Email Checker | Done | Paid date-range scan с missing/invalid/disposable critical правила, suspicious warning евристики, severity sorting и visible truncation. |
 | `hvorders` | High-Value No Phone | Done | Operator/admin report с currency-aware праг, cancelled exclusion, deterministic sorting и visible truncation. |
-| `addrchanges` | Address Changes | Done | Paginated shipping-address events, latest change per order, batch hydration, current address and placement-to-change delay. |
+| `addrchanges` | Address Changes | Done | Paginated shipping-address events, latest change per order, batch hydration, current address, placement-to-change delay and formula-safe streamed CSV export. |
 | `postshipaddr` | Post-Ship Address Change | Todo | Address edit след fulfillment. |
 | `addrdupes` | Duplicate Shipping Addresses | Done | Paid orders grouped by normalized address, distinct-email threshold and deterministic risk sorting. |
 | `failedship` | Voided Shipments | Todo | Voided ShipStation shipments. |
@@ -583,15 +583,15 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 106 | 432 | 1,794 |
+| Laravel rewrite | 107 | 434 | 1,805 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
 | Fully mapped | 21 | 18.3% |
-| Partial / parity verification | 24 | 20.9% |
-| Pending | 70 | 60.9% |
+| Partial / parity verification | 25 | 21.7% |
+| Pending | 69 | 60.0% |
 | **Общо** | **115** | **100%** |
 
 #### Fully mapped legacy test files
@@ -636,6 +636,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `OrderInsightPageLoaderTest.php` — compare/timeline subset е пренесен; останалите insights остават
 - [ ] `OrderTimelineTest.php` — workflow е пренесен и разширен; 26 legacy methods чакат explicit mapping
 - [ ] `ProductInventoryPageLoaderTest.php` — Product Completeness, Inventory Oversell, Inventory Aging, Inventory Forecast, Zombie Products и Catalog Quality wiring/error/success paths са пренесени; останалите catalogue workflows остават
+- [ ] `ReporterTest.php` — общият League CSV streaming contract, safe filenames и formula escaping са готови и Address Changes го използва; JSON, summaries, attachments и останалите report schemas остават
 - [ ] `RiskScorerTest.php` — осемте сигнала са пренесени; custom weights и 33-method mapping остават
 - [ ] `SearchLookupPageLoaderTest.php` — single lookup/compare/timeline subset е пренесен
 - [ ] `SecurityTest.php` — escaping, validation и tenant isolation са разширени; целият checklist остава
@@ -863,7 +864,6 @@ Tag Policy traceability (`OrderPolicyChecksTest.php` и
 - [ ] `PushLogTest.php`
 - [ ] `RefundsTrackerTest.php`
 - [ ] `ReportRegistryTest.php`
-- [ ] `ReporterTest.php`
 - [ ] `ReturnRmaTrackerTest.php`
 - [ ] `ReturnedItemsReportTest.php`
 - [ ] `RunLogTest.php`

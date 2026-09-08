@@ -39,6 +39,21 @@ class AddressChangeControllerTest extends TestCase
         $this->actingAs($operator)->post('/reports/address-changes', ['start_date' => '2026-01-01', 'end_date' => '2026-01-31'])->assertOk()->assertSeeText('could not be completed')->assertDontSeeText('secret');
     }
 
+    public function test_operator_can_download_formula_safe_csv_for_the_active_store(): void
+    {
+        [$operator, $store] = $this->userWithStore(true);
+        $gateway = Mockery::mock(ShopifyAdminGateway::class);
+        $gateway->shouldReceive('addressChangeCandidates')->once()->with(Mockery::on(fn (Store $value): bool => $value->is($store)), '2026-01-01', '2026-01-31')->andReturn(['events' => [['subject_id' => 1, 'message' => 'Shipping address was updated', 'created_at' => '2026-01-02T11:30:00Z']], 'orders' => ['1' => ['name' => '=HYPERLINK("bad")', 'created_at' => '2026-01-02T10:00:00Z', 'email' => '+cmd@example.com', 'shipping_address' => ['first_name' => 'Jane', 'city' => 'Boston']]], 'pages' => 1, 'truncated' => false]);
+        $this->app->instance(ShopifyAdminGateway::class, $gateway);
+
+        $response = $this->actingAs($operator)->post(route('reports.address-changes.export'), ['start_date' => '2026-01-01', 'end_date' => '2026-01-31']);
+        $content = $response->streamedContent();
+
+        $response->assertOk()->assertDownload('address-changes-2026-01-01-to-2026-01-31.csv');
+        $this->assertStringContainsString("'=HYPERLINK", $content);
+        $this->assertStringContainsString("'+cmd@example.com", $content);
+    }
+
     private function userWithStore(bool $operator = false, array $attributes = []): array
     {
         $user = $operator ? User::factory()->operator()->create() : User::factory()->create();
