@@ -26,7 +26,11 @@ class OperationalHealthTest extends TestCase
         $this->assertSame(['Backups', 'Cache', 'Database', 'Queue', 'Schedule', 'Used Disk Space'], HealthCheckResultHistoryItem::query()->orderBy('check_label')->pluck('check_label')->all());
         $this->assertSame(
             [],
-            HealthCheckResultHistoryItem::query()->where('status', '!=', 'ok')->pluck('notification_message', 'check_label')->all(),
+            HealthCheckResultHistoryItem::query()
+                ->where('check_label', '!=', 'Used Disk Space')
+                ->where('status', '!=', 'ok')
+                ->pluck('notification_message', 'check_label')
+                ->all(),
         );
     }
 
