@@ -1,6 +1,6 @@
 # Laravel rewrite — legacy test audit
 
-Последно обновяване: **2026-09-08** след Repeat Refunds slice-а.
+Последно обновяване: **2026-09-08** след Address Changes slice-а.
 
 Този документ е отделният checklist за тестова parity. Feature статусът се следи
 в [Laravel rewrite плана](laravel-rewrite.md), а тук се затваря всеки legacy test
@@ -11,13 +11,13 @@ contract има Laravel тест, по-силен еквивалент или з
 
 | Статус | Файлове | Дял от 115 |
 |---|---:|---:|
-| Готови | 18 | 15.7% |
+| Готови | 19 | 16.5% |
 | Частично покрити | 24 | 20.9% |
-| Непочнати | 73 | 63.5% |
-| **Оставащи за одит** | **97** | **84.3%** |
+| Непочнати | 72 | 62.6% |
+| **Оставащи за одит** | **96** | **83.5%** |
 
 Legacy baseline: **115 файла · 1,528 теста · 3,659 assertions**. Laravel
-baseline след последния slice: **420 теста · 1,705 assertions**. Броят assertions
+baseline след последния slice: **425 теста · 1,740 assertions**. Броят assertions
 е ориентир; критерият е поведенческо покритие.
 
 За всеки checkbox проверяваме business decisions, boundary интеграцията,
@@ -106,7 +106,6 @@ malformed payloads и atomic failure. Не копираме тест, който
 | Готово | Legacy файл | Тестове | Какво проверява / Laravel цел |
 |---|---|---:|---|
 | [ ] | `ActiveSsConflictsTest.php` | 6 | Refunded/cancelled Shopify orders still active in ShipStation, dedupe и sorting |
-| [ ] | `AddressChangesTest.php` | 4 | Address-change delay, clamping и output fields |
 | [ ] | `BundleCheckPageTest.php` | 9 | Missing bundle components и cancelled/refunded/pending/free/no-shipping exclusions |
 | [ ] | `CarrierPerfTest.php` | 8 | Delivery averages, late boundary, bad/missing dates и carrier grouping |
 | [ ] | `ComparatorTest.php` | 73 | Shopify↔ShipStation matching, exclusions, duplicates, bundles, shipped items, margin и hold behavior |
@@ -168,6 +167,7 @@ malformed payloads и atomic failure. Не копираме тест, който
 - [x] `OrderPolicyChecksTest.php` — 16/16 Discount Abuse и Tag Policy configuration, required/forbidden semantics и tag normalization decisions.
 - [x] `DisputesPageLoaderTest.php` — 7/7 deadline computation, urgency sorting, initial/configuration and Shopify success paths.
 - [x] `RepeatRefundsTest.php` — 8/8 threshold, successful-transaction totals, identity grouping and sorting decisions.
+- [x] `AddressChangesTest.php` — 4/4 placement-to-change delay, negative/missing timestamp clamping and current-address output decisions.
 
 ## Как се обновява
 

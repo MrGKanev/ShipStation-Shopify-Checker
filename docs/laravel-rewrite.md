@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 24 | 33.3% |
+| Done | 25 | 34.7% |
 | Partial | 2 | 2.8% |
-| Todo | 44 | 61.1% |
+| Todo | 43 | 59.7% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -491,7 +491,7 @@ workflow от наличния framework scaffold.
 | `addrcheck` | Address Scanner | Done | Required fields, short street, US/CA postal formats, province, express phone и PO Box/carrier checks с два legacy филтъра. |
 | `emailcheck` | Email Checker | Done | Paid date-range scan с missing/invalid/disposable critical правила, suspicious warning евристики, severity sorting и visible truncation. |
 | `hvorders` | High-Value No Phone | Done | Operator/admin report с currency-aware праг, cancelled exclusion, deterministic sorting и visible truncation. |
-| `addrchanges` | Address Changes | Todo | Shipping address edits. |
+| `addrchanges` | Address Changes | Done | Paginated shipping-address events, latest change per order, batch hydration, current address and placement-to-change delay. |
 | `postshipaddr` | Post-Ship Address Change | Todo | Address edit след fulfillment. |
 | `addrdupes` | Duplicate Shipping Addresses | Done | Paid orders grouped by normalized address, distinct-email threshold and deterministic risk sorting. |
 | `failedship` | Voided Shipments | Todo | Voided ShipStation shipments. |
@@ -522,7 +522,7 @@ workflow от наличния framework scaffold.
 | `sameip` | Same IP, Different Emails | Done | Paid orders grouped by exact client IP, case-insensitive distinct-email deduplication, detailed orders and deterministic risk sorting. |
 | `disputes` | Chargebacks / Disputes | Done | Open actionable disputes, evidence deadlines, urgency sorting and bounded pagination. |
 
-Audit subtotal: **Done 16 · Partial 1 · Todo 30 · Replaced 1**.
+Audit subtotal: **Done 17 · Partial 1 · Todo 29 · Replaced 1**.
 
 ### Search & Lookup — 12
 
@@ -583,15 +583,15 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 100 | 420 | 1,705 |
+| Laravel rewrite | 104 | 425 | 1,740 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
-| Fully mapped | 18 | 15.7% |
+| Fully mapped | 19 | 16.5% |
 | Partial / parity verification | 24 | 20.9% |
-| Pending | 73 | 63.5% |
+| Pending | 72 | 62.6% |
 | **Общо** | **115** | **100%** |
 
 #### Fully mapped legacy test files
@@ -613,6 +613,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [x] `SameIpTest.php` — всичките 5 grouping, exclusion, deduplication и sorting decisions са нанесени
 - [x] `OrderPolicyChecksTest.php` — всичките 16 Discount Abuse и Tag Policy configuration, rule semantics и tag normalization decisions са нанесени
 - [x] `RepeatRefundsTest.php` — всичките 8 threshold, transaction filtering, grouping and sorting decisions са нанесени
+- [x] `AddressChangesTest.php` — всичките 4 delay, missing/negative timestamp clamping и current-address output решения са нанесени и разширени с event pagination/filtering, batch hydration, authorization, validation, XSS, safe failure и truncation
 
 #### Partial или чакащи method-level parity проверка
 
@@ -808,7 +809,6 @@ Tag Policy traceability (`OrderPolicyChecksTest.php` и
 
 - [ ] `ActionsTest.php`
 - [ ] `ActiveSsConflictsTest.php`
-- [ ] `AddressChangesTest.php`
 - [ ] `AtomicFileTest.php`
 - [ ] `AuditSnapshotTest.php`
 - [ ] `AuditTest.php`

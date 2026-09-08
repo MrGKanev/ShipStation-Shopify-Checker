@@ -14,6 +14,7 @@ use App\Http\Controllers\OrderTimelineController;
 use App\Http\Controllers\OrderTrackingController;
 use App\Http\Controllers\PackingSlipController;
 use App\Http\Controllers\ReadinessController;
+use App\Http\Controllers\Reports\AddressChangeController;
 use App\Http\Controllers\Reports\AddressCheckController;
 use App\Http\Controllers\Reports\CatalogQualityController;
 use App\Http\Controllers\Reports\ConsentAuditController;
@@ -97,6 +98,8 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/reports/note-flags', [NoteFlagController::class, 'store'])->middleware('throttle:audit-report')->name('reports.note-flags.store');
         Route::get('/reports/order-edits', [OrderEditController::class, 'create'])->middleware('can:run-audits')->name('reports.order-edits');
         Route::post('/reports/order-edits', [OrderEditController::class, 'store'])->middleware('throttle:audit-report')->name('reports.order-edits.store');
+        Route::get('/reports/address-changes', [AddressChangeController::class, 'create'])->middleware('can:run-audits')->name('reports.address-changes');
+        Route::post('/reports/address-changes', [AddressChangeController::class, 'store'])->middleware('throttle:audit-report')->name('reports.address-changes.store');
         Route::get('/reports/repeat-refunds', [RepeatRefundController::class, 'create'])->middleware('can:run-audits')->name('reports.repeat-refunds');
         Route::post('/reports/repeat-refunds', [RepeatRefundController::class, 'store'])->middleware('throttle:audit-report')->name('reports.repeat-refunds.store');
         Route::get('/reports/tag-audit', [TagAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.tag-audit');
