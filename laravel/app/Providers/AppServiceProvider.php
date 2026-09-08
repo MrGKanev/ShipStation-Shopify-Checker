@@ -52,6 +52,7 @@ class AppServiceProvider extends ServiceProvider
             fn (User $user): bool => $user->role === UserRole::Admin,
         );
         Gate::define('run-audits', fn (User $user): bool => in_array($user->role, [UserRole::Operator, UserRole::Admin], true));
+        Gate::define('viewPulse', fn (?User $user): bool => $user?->role === UserRole::Admin);
 
         RateLimiter::for('login', function (Request $request): Limit {
             $email = Str::lower((string) $request->input('email'));

@@ -8,6 +8,7 @@
     "require": {
         "php": "^8.5",
         "laravel/framework": "^13.17",
+        "laravel/pulse": "^1.8",
         "laravel/slack-notification-channel": "^3.10",
         "laravel/socialite": "^5.31",
         "laravel/tinker": "^3.0",
