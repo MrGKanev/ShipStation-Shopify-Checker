@@ -20,6 +20,7 @@ use App\Http\Controllers\Reports\ConsentAuditController;
 use App\Http\Controllers\Reports\CountryMismatchController;
 use App\Http\Controllers\Reports\DiscountAbuseController;
 use App\Http\Controllers\Reports\DisputeController;
+use App\Http\Controllers\Reports\DuplicateAddressController;
 use App\Http\Controllers\Reports\EmailCheckController;
 use App\Http\Controllers\Reports\FraudRiskController;
 use App\Http\Controllers\Reports\GiftCardsController;
@@ -87,6 +88,8 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/reports/tag-policy', [TagPolicyController::class, 'store'])->middleware('throttle:audit-report')->name('reports.tag-policy.store');
         Route::get('/reports/disputes', [DisputeController::class, 'create'])->middleware('can:run-audits')->name('reports.disputes');
         Route::post('/reports/disputes', [DisputeController::class, 'store'])->middleware('throttle:audit-report')->name('reports.disputes.store');
+        Route::get('/reports/duplicate-addresses', [DuplicateAddressController::class, 'create'])->middleware('can:run-audits')->name('reports.duplicate-addresses');
+        Route::post('/reports/duplicate-addresses', [DuplicateAddressController::class, 'store'])->middleware('throttle:audit-report')->name('reports.duplicate-addresses.store');
         Route::get('/reports/tag-audit', [TagAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.tag-audit');
         Route::post('/reports/tag-audit', [TagAuditController::class, 'store'])->middleware('throttle:audit-report')->name('reports.tag-audit.store');
         Route::get('/reports/tax-audit', [TaxAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.tax-audit');
