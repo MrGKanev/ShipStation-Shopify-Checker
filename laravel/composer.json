@@ -12,6 +12,7 @@
         "laravel/tinker": "^3.0",
         "league/csv": "^9.28",
         "spatie/laravel-activitylog": "^5.1",
+        "spatie/laravel-backup": "^10.3",
         "spatie/laravel-health": "^1.40"
     },
     "require-dev": {

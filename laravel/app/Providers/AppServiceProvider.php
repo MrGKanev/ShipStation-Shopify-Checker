@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Spatie\Health\Checks\Checks\BackupsCheck;
 use Spatie\Health\Checks\Checks\CacheCheck;
 use Spatie\Health\Checks\Checks\DatabaseCheck;
 use Spatie\Health\Checks\Checks\QueueCheck;
@@ -37,6 +38,10 @@ class AppServiceProvider extends ServiceProvider
         Health::checks([
             DatabaseCheck::new(),
             CacheCheck::new(),
+            BackupsCheck::new()
+                ->onDisk((string) config('backup.backup.destination.disks.0', 'backups'))
+                ->locatedAt((string) config('backup.backup.name'))
+                ->youngestBackShouldHaveBeenMadeBefore(now()->subDays((int) env('BACKUP_MAX_AGE_DAYS', 2))),
             UsedDiskSpaceCheck::new()->warnWhenUsedSpaceIsAbovePercentage(80)->failWhenUsedSpaceIsAbovePercentage(90),
             ScheduleCheck::new()->heartbeatMaxAgeInMinutes(5),
             QueueCheck::new()->failWhenHealthJobTakesLongerThanMinutes(10),

@@ -14,3 +14,7 @@ Schedule::command('health:schedule-check-heartbeat')->everyMinute();
 Schedule::command('health:queue-check-heartbeat')->everyMinute();
 Schedule::command('health:check')->everyMinute()->withoutOverlapping();
 Schedule::command('model:prune', ['--model' => [HealthCheckResultHistoryItem::class]])->dailyAt('02:45');
+Schedule::command('backup:run', ['--only-db'])->dailyAt('01:15')->withoutOverlapping();
+Schedule::command('backup:run')->weeklyOn(0, '01:45')->withoutOverlapping();
+Schedule::command('backup:monitor')->hourlyAt(20)->withoutOverlapping();
+Schedule::command('backup:clean')->dailyAt('03:30')->withoutOverlapping();
