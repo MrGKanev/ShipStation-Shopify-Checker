@@ -408,7 +408,7 @@ Matrix-ът е release control документ, а не само checklist. М�
 достъпен route/controller/view и покриващи тестове. Наличен domain helper без
 завършен потребителски workflow не се брои за готов feature.
 
-Последно обновяване: **2026-09-08**, след Repeat Refunds slice-а.
+Последно обновяване: **2026-09-08**, след Refunds Tracker slice-а.
 
 Легенда: **Done** = feature parity за основния workflow; **Partial** = използваем,
 но по-тесен от legacy; **Todo** = няма завършен Laravel workflow;
@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 26 | 36.1% |
+| Done | 27 | 37.5% |
 | Partial | 2 | 2.8% |
-| Todo | 42 | 58.3% |
+| Todo | 41 | 56.9% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -486,7 +486,7 @@ workflow от наличния framework scaffold.
 | `run` | Run Audit | Todo | Shopify ↔ ShipStation audit по период. |
 | `trends` | Trends | Todo | Aggregated audit report trends. |
 | `dupes` | Duplicate Detector | Todo | Близки duplicate orders. |
-| `refunds` | Refunds Tracker | Todo | Shopify refunds ↔ ShipStation status. |
+| `refunds` | Refunds Tracker | Done | Refunded Shopify orders with line-item totals, optional ShipStation cross-check and active/missing risk priority. |
 | `repeatrefunds` | Repeat Refunds | Done | Refunded/partially-refunded orders grouped by normalized email, successful transaction totals and configurable threshold. |
 | `returns` | Return / RMA Tracker | Todo | Item-level returns и SKU rates. |
 | `returneditems` | Returned Items Report | Todo | Itemized returned quantities. |
@@ -529,7 +529,7 @@ workflow от наличния framework scaffold.
 | `sameip` | Same IP, Different Emails | Done | Paid orders grouped by exact client IP, case-insensitive distinct-email deduplication, detailed orders and deterministic risk sorting. |
 | `disputes` | Chargebacks / Disputes | Done | Open actionable disputes, evidence deadlines, urgency sorting and bounded pagination. |
 
-Audit subtotal: **Done 17 · Partial 1 · Todo 29 · Replaced 1**.
+Audit subtotal: **Done 18 · Partial 1 · Todo 28 · Replaced 1**.
 
 ### Search & Lookup — 12
 
@@ -590,15 +590,15 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 115 | 454 | 1,902 |
+| Laravel rewrite | 117 | 459 | 1,934 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
-| Fully mapped | 21 | 18.3% |
+| Fully mapped | 22 | 19.1% |
 | Partial / parity verification | 26 | 22.6% |
-| Pending | 68 | 59.1% |
+| Pending | 67 | 58.3% |
 | **Общо** | **115** | **100%** |
 
 #### Fully mapped legacy test files
@@ -620,6 +620,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [x] `SameIpTest.php` — всичките 5 grouping, exclusion, deduplication и sorting decisions са нанесени
 - [x] `OrderPolicyChecksTest.php` — всичките 16 Discount Abuse и Tag Policy configuration, rule semantics и tag normalization decisions са нанесени
 - [x] `RepeatRefundsTest.php` — всичките 8 threshold, transaction filtering, grouping and sorting decisions са нанесени
+- [x] `RefundsTrackerTest.php` — всичките 10 refund amount, exact-order matching, ShipStation status и risk sorting decisions са нанесени; добавени са authorization, store isolation, pagination, XSS, optional ShipStation и safe upstream failure cases
 - [x] `AddressChangesTest.php` — всичките 4 delay, missing/negative timestamp clamping и current-address output решения са нанесени и разширени с event pagination/filtering, batch hydration, authorization, validation, XSS, safe failure и truncation
 - [x] `GoogleAuthFlowTest.php` — custom flow е заменен със Socialite stateful OAuth; redirect/callback, cancellation, provider failure, verified Workspace domain, existing-user binding, session rotation и Google-only режим са покрити
 - [x] `GoogleAuthTest.php` — custom OIDC/PKCE клиента е заменен със Socialite; config guard, domain parsing, verified `hd` claim, stable Google subject binding и safe errors са покрити, а provider token-и не се пазят
@@ -805,6 +806,16 @@ Same IP traceability (`SameIpTest.php` и `OrderPolicyPageLoaderTest.php` →
   credentials, active-store isolation, XSS, safe failure и visible truncation
   са покрити.
 
+Refunds Tracker traceability (`RefundsTrackerTest.php` и refund branches от
+`OrderAnomalyPageLoaderTest.php` → `RefundTrackerAnalyzerTest.php`,
+`RefundTrackerControllerTest.php` и `ShopifyRepeatRefundCandidatesTest.php`):
+
+- Missing, awaiting shipment/payment, on-hold and completed ShipStation states,
+  refund line-item subtotal, full-refund fallback и risk ordering са пренесени.
+- Exact legacy number matching, inclusive Shopify date query, seven-day
+  ShipStation tail, roles, validation, store isolation, optional ShipStation,
+  XSS, safe failures and bounded pagination са покрити.
+
 Tag Policy traceability (`OrderPolicyChecksTest.php` и
 `OrderPolicyPageLoaderTest.php` → `TagPolicyAnalyzerTest.php`,
 `TagPolicyControllerTest.php` и `ShopifyTagPolicyTest.php`):
@@ -871,7 +882,6 @@ Tag Policy traceability (`OrderPolicyChecksTest.php` и
 - [ ] `PostShipAddrChangeTest.php`
 - [ ] `PrintQueueTest.php`
 - [ ] `PushLogTest.php`
-- [ ] `RefundsTrackerTest.php`
 - [ ] `ReportRegistryTest.php`
 - [ ] `ReturnRmaTrackerTest.php`
 - [ ] `ReturnedItemsReportTest.php`

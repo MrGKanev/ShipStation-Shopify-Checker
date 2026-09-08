@@ -34,6 +34,7 @@ use App\Http\Controllers\Reports\InventoryOversellController;
 use App\Http\Controllers\Reports\NoteFlagController;
 use App\Http\Controllers\Reports\OrderEditController;
 use App\Http\Controllers\Reports\ProductCompletenessController;
+use App\Http\Controllers\Reports\RefundTrackerController;
 use App\Http\Controllers\Reports\RepeatRefundController;
 use App\Http\Controllers\Reports\SameIpController;
 use App\Http\Controllers\Reports\SkuDuplicatesController;
@@ -108,6 +109,8 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/reports/address-changes/export', [AddressChangeController::class, 'export'])->middleware('throttle:audit-report')->name('reports.address-changes.export');
         Route::get('/reports/repeat-refunds', [RepeatRefundController::class, 'create'])->middleware('can:run-audits')->name('reports.repeat-refunds');
         Route::post('/reports/repeat-refunds', [RepeatRefundController::class, 'store'])->middleware('throttle:audit-report')->name('reports.repeat-refunds.store');
+        Route::get('/reports/refund-tracker', [RefundTrackerController::class, 'create'])->middleware('can:run-audits')->name('reports.refund-tracker');
+        Route::post('/reports/refund-tracker', [RefundTrackerController::class, 'store'])->middleware('throttle:audit-report')->name('reports.refund-tracker.store');
         Route::get('/reports/tag-audit', [TagAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.tag-audit');
         Route::post('/reports/tag-audit', [TagAuditController::class, 'store'])->middleware('throttle:audit-report')->name('reports.tag-audit.store');
         Route::get('/reports/tax-audit', [TaxAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.tax-audit');

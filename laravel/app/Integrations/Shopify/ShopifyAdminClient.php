@@ -752,7 +752,7 @@ class ShopifyAdminClient implements ShopifyAdminGateway
             query RepeatRefundCandidates($search: String!, $after: String) {
               orders(first: 250, after: $after, sortKey: CREATED_AT, reverse: true, query: $search) {
                 pageInfo { hasNextPage endCursor }
-                edges { node { legacyResourceId name createdAt email displayFinancialStatus refunds { transactions(first: 250) { nodes { kind status amountSet { shopMoney { amount currencyCode } } } } } } }
+                edges { node { legacyResourceId name createdAt email displayFinancialStatus totalPriceSet { shopMoney { amount currencyCode } } refunds { refundLineItems(first: 250) { nodes { subtotalSet { shopMoney { amount currencyCode } } } } transactions(first: 250) { nodes { kind status amountSet { shopMoney { amount currencyCode } } } } } } }
               }
             }
             GRAPHQL;
@@ -780,13 +780,27 @@ class ShopifyAdminClient implements ShopifyAdminGateway
                     $money = $transaction['amountSet']['shopMoney'] ?? null;
                     $transactions[] = ['kind' => strtolower(is_scalar($transaction['kind'] ?? null) ? (string) $transaction['kind'] : ''), 'status' => strtolower(is_scalar($transaction['status'] ?? null) ? (string) $transaction['status'] : ''), 'amount' => is_array($money) && is_numeric($money['amount'] ?? null) ? (float) $money['amount'] : 0.0];
                 }
-                $refunds[] = ['transactions' => $transactions];
+                $refundLineItems = [];
+                foreach (is_array($refund['refundLineItems']['nodes'] ?? null) ? $refund['refundLineItems']['nodes'] : [] as $refundLineItem) {
+                    if (! is_array($refundLineItem)) {
+                        continue;
+                    }
+                    $subtotal = $refundLineItem['subtotalSet']['shopMoney']['amount'] ?? null;
+                    $refundLineItems[] = ['subtotal' => is_numeric($subtotal) ? (float) $subtotal : 0.0];
+                }
+                $refunds[] = ['transactions' => $transactions, 'refund_line_items' => $refundLineItems];
             }
             $order['refunds'] = $refunds;
             $orders[] = $order;
         }
 
         return ['orders' => $orders, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
+    }
+
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function refundTrackerCandidates(Store $store, string $startDate, string $endDate): array
+    {
+        return $this->repeatRefundCandidates($store, $startDate, $endDate);
     }
 
     /** @return array{events: list<array<string, mixed>>, orders: array<string, array<string, mixed>>, pages: int, truncated: bool} */
