@@ -748,6 +748,18 @@ class ShopifyAdminClient implements ShopifyAdminGateway
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function repeatRefundCandidates(Store $store, string $startDate, string $endDate): array
     {
+        return $this->refundCandidates($store, "status:any (financial_status:refunded OR financial_status:partially_refunded) created_at:>={$startDate}T00:00:00Z created_at:<={$endDate}T23:59:59Z");
+    }
+
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function returnedItemCandidates(Store $store, string $startDate): array
+    {
+        return $this->refundCandidates($store, "status:any (financial_status:refunded OR financial_status:partially_refunded) updated_at:>={$startDate}T00:00:00Z");
+    }
+
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    private function refundCandidates(Store $store, string $search): array
+    {
         $query = <<<'GRAPHQL'
             query RepeatRefundCandidates($search: String!, $after: String) {
               orders(first: 250, after: $after, sortKey: CREATED_AT, reverse: true, query: $search) {
@@ -756,7 +768,7 @@ class ShopifyAdminClient implements ShopifyAdminGateway
               }
             }
             GRAPHQL;
-        $result = $this->paginateGraphql($store, $query, 'orders', ['search' => "status:any (financial_status:refunded OR financial_status:partially_refunded) created_at:>={$startDate}T00:00:00Z created_at:<={$endDate}T23:59:59Z"], 100);
+        $result = $this->paginateGraphql($store, $query, 'orders', ['search' => $search], 100);
         $orders = [];
         foreach ($result['edges'] as $edge) {
             $node = $edge['node'] ?? null;

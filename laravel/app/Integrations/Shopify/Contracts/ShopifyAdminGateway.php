@@ -72,6 +72,9 @@ interface ShopifyAdminGateway
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function refundTrackerCandidates(Store $store, string $startDate, string $endDate): array;
 
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function returnedItemCandidates(Store $store, string $startDate): array;
+
     /** @return array{events: list<array<string, mixed>>, orders: array<string, array<string, mixed>>, pages: int, truncated: bool} */
     public function orderEditCandidates(Store $store, string $startDate, string $endDate): array;
 
