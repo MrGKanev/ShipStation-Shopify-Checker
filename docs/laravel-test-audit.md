@@ -1,6 +1,6 @@
 # Laravel rewrite — legacy test audit
 
-Последно обновяване: **2026-09-08** след Returned Items Report slice-а.
+Последно обновяване: **2026-09-08** след Shopify API version health slice-а.
 
 Този документ е отделният checklist за тестова parity. Feature статусът се следи
 в [Laravel rewrite плана](laravel-rewrite.md), а тук се затваря всеки legacy test
@@ -11,13 +11,13 @@ contract има Laravel тест, по-силен еквивалент или з
 
 | Статус | Файлове | Дял от 115 |
 |---|---:|---:|
-| Готови | 24 | 20.9% |
-| Частично покрити | 27 | 23.5% |
+| Готови | 25 | 21.7% |
+| Частично покрити | 26 | 22.6% |
 | Непочнати | 64 | 55.7% |
 | **Оставащи за одит** | **91** | **79.1%** |
 
 Legacy baseline: **115 файла · 1,528 теста · 3,659 assertions**. Laravel
-baseline след последния slice: **469 теста · 1,984 assertions**. Броят assertions
+baseline след последния slice: **470 теста · 1,993 assertions**. Броят assertions
 е ориентир; критерият е поведенческо покритие.
 
 За всеки checkbox проверяваме business decisions, boundary интеграцията,
@@ -31,7 +31,6 @@ malformed payloads и atomic failure. Не копираме тест, който
 | Готово | Legacy файл | Тестове | Какво проверява | Какво остава |
 |---|---|---:|---|---|
 | [ ] | `AllViewsSmokeTest.php` | 1 | Всеки регистриран legacy екран се отваря | Добавяне на всеки оставащ Laravel екран към route/render smoke покритието |
-| [ ] | `ApiHealthTest.php` | 8 | Shopify/ShipStation credentials, scopes и live HTTP checks | Returned Shopify API version header; след това 8/8 method mapping |
 | [ ] | `AuthPermissionSnapshotTest.php` | 2 | Точната action → permission матрица и пълнотата ѝ | Сверка на всички actions срещу Laravel policies/routes |
 | [ ] | `AuthTest.php` | 40 | Пароли, lockout/IP ban, users, CSRF и роли | Lockout/banned-IP и пълната permission матрица |
 | [ ] | `AuthViewsTest.php` | 8 | Login режими, конфигурационни грешки, escaping и access denied | Branding и dedicated access-denied cases |
@@ -165,6 +164,7 @@ malformed payloads и atomic failure. Не копираме тест, който
 - [x] `RefundsTrackerTest.php` — 10/10 missing/active/complete ShipStation status, refund subtotal/fallback, exact number matching and risk sorting decisions.
 - [x] `ReturnRmaTrackerTest.php` — 7/7 per-refund rows, notes, item details, SKU aggregation/exclusions and newest-first sorting decisions.
 - [x] `ReturnedItemsReportTest.php` — 10/10 refund-date filtering, old-order inclusion, product quantity aggregation, CSV columns/formula safety and escaped output decisions.
+- [x] `ApiHealthTest.php` — 8/8 Shopify/ShipStation configuration, live request, scope, returned-version and safe failure decisions; persisted flow health остава отделен capability.
 - [x] `AddressChangesTest.php` — 4/4 placement-to-change delay, negative/missing timestamp clamping and current-address output decisions.
 - [x] `GoogleAuthFlowTest.php` — OAuth redirect/callback/state handling is delegated to Socialite; cancellation, provider failure, domain policy, existing-user linking, session rotation and throttled routes are covered.
 - [x] `GoogleAuthTest.php` — the custom OIDC/PKCE HTTP client is replaced by Socialite; configuration, verified `hd` claims, domain parsing, identity binding and safe failures are covered without persisting provider tokens.

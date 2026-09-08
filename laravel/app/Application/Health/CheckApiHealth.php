@@ -30,17 +30,24 @@ class CheckApiHealth
     private function checkShopify(Store $store): array
     {
         if (trim((string) $store->shopify_store) === '' || trim((string) $store->shopify_access_token) === '') {
-            return ['ok' => false, 'configured' => false, 'error' => 'Shopify credentials are incomplete.', 'latency_ms' => null, 'shop_name' => '', 'requested_version' => '', 'scopes' => [], 'missing_scopes' => []];
+            return ['ok' => false, 'configured' => false, 'error' => 'Shopify credentials are incomplete.', 'latency_ms' => null, 'shop_name' => '', 'requested_version' => '', 'returned_version' => '', 'version_matches' => false, 'scopes' => [], 'missing_scopes' => []];
         }
 
         $startedAt = hrtime(true);
         try {
             $result = $this->shopify->healthCheck($store);
             $missingScopes = array_values(array_diff(self::REQUIRED_SHOPIFY_SCOPES, $result['scopes']));
+            $versionMatches = $result['returned_version'] !== '' && $result['returned_version'] === $result['requested_version'];
+            $error = match (true) {
+                $missingScopes !== [] => 'Required Shopify scopes are missing.',
+                $result['returned_version'] === '' => 'Shopify did not return its API version header.',
+                ! $versionMatches => 'Shopify served a different API version than requested.',
+                default => '',
+            };
 
-            return [...$result, 'ok' => $missingScopes === [], 'configured' => true, 'error' => $missingScopes === [] ? '' : 'Required Shopify scopes are missing.', 'latency_ms' => $this->elapsedMilliseconds($startedAt), 'missing_scopes' => $missingScopes];
+            return [...$result, 'ok' => $missingScopes === [] && $versionMatches, 'configured' => true, 'error' => $error, 'latency_ms' => $this->elapsedMilliseconds($startedAt), 'missing_scopes' => $missingScopes, 'version_matches' => $versionMatches];
         } catch (Throwable) {
-            return ['ok' => false, 'configured' => true, 'error' => 'Shopify could not be reached or rejected the request.', 'latency_ms' => $this->elapsedMilliseconds($startedAt), 'shop_name' => '', 'requested_version' => '', 'scopes' => [], 'missing_scopes' => []];
+            return ['ok' => false, 'configured' => true, 'error' => 'Shopify could not be reached or rejected the request.', 'latency_ms' => $this->elapsedMilliseconds($startedAt), 'shop_name' => '', 'requested_version' => '', 'returned_version' => '', 'version_matches' => false, 'scopes' => [], 'missing_scopes' => []];
         }
     }
 

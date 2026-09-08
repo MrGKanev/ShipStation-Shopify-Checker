@@ -408,7 +408,7 @@ Matrix-ът е release control документ, а не само checklist. М�
 достъпен route/controller/view и покриващи тестове. Наличен domain helper без
 завършен потребителски workflow не се брои за готов feature.
 
-Последно обновяване: **2026-09-08**, след Returned Items Report slice-а.
+Последно обновяване: **2026-09-08**, след Shopify API version health slice-а.
 
 Легенда: **Done** = feature parity за основния workflow; **Partial** = използваем,
 но по-тесен от legacy; **Todo** = няма завършен Laravel workflow;
@@ -443,7 +443,7 @@ feature страниците. Те се следят отделно:
 - [x] Shopify GraphQL client, normalization и pagination foundation
 - [x] ShipStation client, normalization, retries и store credentials
 - [x] Basic `/up` liveness и `/ready` database/queue configuration checks
-- [ ] API Health е partial: Shopify scopes и ShipStation auth са готови; returned-version header и flow history остават
+- [ ] API Health е partial: Shopify scopes, requested/returned API version и ShipStation auth са готови; flow history остава
 - [x] Един дългосрочен Draft PR за целия rewrite
 - [ ] Production observability, metrics и operational runbooks
 - [ ] Background jobs, idempotency, retry и recovery foundation
@@ -570,7 +570,7 @@ Manage subtotal: **Done 1 · Partial 0 · Todo 5 · Replaced 0**.
 | `settings` | Settings | Partial | Users/stores/credentials са готови; connection tests, banned IP и notification overview липсват. |
 | `slackrules` | Slack Rules | Todo | Per-tool notification thresholds и recipients. |
 | `emailrules` | Email Rules | Todo | Per-tool email rules и digest settings. |
-| `apihealth` | API Health | Partial | Admin-only Shopify shop/scopes и ShipStation auth checks са готови; returned-version header и flow history остават. |
+| `apihealth` | API Health | Partial | Admin-only Shopify shop/scopes, requested/returned API version mismatch и ShipStation auth checks са готови; flow history остава. |
 | `configcheck` | Config Check | Todo | Policy/config validation трябва да бъде заменено с Laravel config contracts. |
 | `webhookhealth` | Webhook Health | Todo | Webhook delivery/recency diagnostics. |
 
@@ -590,14 +590,14 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 121 | 469 | 1,984 |
+| Laravel rewrite | 121 | 470 | 1,993 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
-| Fully mapped | 24 | 20.9% |
-| Partial / parity verification | 26 | 22.6% |
+| Fully mapped | 25 | 21.7% |
+| Partial / parity verification | 25 | 21.7% |
 | Pending | 65 | 56.5% |
 | **Общо** | **115** | **100%** |
 
@@ -623,6 +623,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [x] `RefundsTrackerTest.php` — всичките 10 refund amount, exact-order matching, ShipStation status и risk sorting decisions са нанесени; добавени са authorization, store isolation, pagination, XSS, optional ShipStation и safe upstream failure cases
 - [x] `ReturnRmaTrackerTest.php` — всичките 7 refund-event, note, item detail, SKU aggregation/exclusion and sorting decisions са нанесени; добавени са authorization, validation, store isolation, pagination, XSS и safe upstream failure cases
 - [x] `ReturnedItemsReportTest.php` — всичките 10 refund-date, old-order, product aggregation, CSV and escaping decisions са нанесени; добавени са authorization, store isolation, updated-order discovery, bounded pagination and safe upstream failure cases
+- [x] `ApiHealthTest.php` — всичките 8 Shopify/ShipStation configuration, live request, scope, returned-version and safe failure decisions са нанесени; flow history се следи отделно в `ShopifyFlowHealthTest.php`
 - [x] `AddressChangesTest.php` — всичките 4 delay, missing/negative timestamp clamping и current-address output решения са нанесени и разширени с event pagination/filtering, batch hydration, authorization, validation, XSS, safe failure и truncation
 - [x] `GoogleAuthFlowTest.php` — custom flow е заменен със Socialite stateful OAuth; redirect/callback, cancellation, provider failure, verified Workspace domain, existing-user binding, session rotation и Google-only режим са покрити
 - [x] `GoogleAuthTest.php` — custom OIDC/PKCE клиента е заменен със Socialite; config guard, domain parsing, verified `hd` claim, stable Google subject binding и safe errors са покрити, а provider token-и не се пазят
@@ -630,7 +631,6 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 #### Partial или чакащи method-level parity проверка
 
 - [ ] `AllViewsSmokeTest.php` — новите views имат feature rendering tests, но всички legacy views не са пренесени
-- [ ] `ApiHealthTest.php` — live credentials/scopes/connectivity paths са пренесени; Shopify returned-version header остава
 - [ ] `AuthPermissionSnapshotTest.php` — Laravel roles/policies са покрити; пълната legacy permission matrix остава
 - [ ] `AuthTest.php` — session auth е пренесен; legacy Google/banned-IP/permission branches остават
 - [ ] `AuthViewsTest.php` — login е покрит; всички auth view contracts остават

@@ -6,7 +6,7 @@ use App\Models\Store;
 
 interface ShopifyAdminGateway
 {
-    /** @return array{shop_name: string, scopes: list<string>, requested_version: string} */
+    /** @return array{shop_name: string, scopes: list<string>, requested_version: string, returned_version: string} */
     public function healthCheck(Store $store): array;
 
     /**

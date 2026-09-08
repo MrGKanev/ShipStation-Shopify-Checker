@@ -27,13 +27,14 @@ class ShopifyAdminClientTest extends TestCase
                     ['handle' => 'read_fulfillments'],
                     ['handle' => 'read_orders'],
                 ]],
-            ]]),
+            ]], 200, ['X-Shopify-API-Version' => '2026-07']),
         ]);
 
         $this->assertSame([
             'shop_name' => 'Acme',
             'scopes' => ['read_orders', 'read_fulfillments'],
             'requested_version' => '2026-07',
+            'returned_version' => '2026-07',
         ], $this->client()->healthCheck($this->store()));
         Http::assertSent(fn (Request $request): bool => str_contains((string) $request['query'], 'currentAppInstallation')
             && str_contains((string) $request['query'], 'accessScopes { handle }'));

@@ -43,7 +43,7 @@ capability-то готово.
 |---|---|---|---|
 | Liveness endpoint | Done | Laravel `/up` и feature test | Да остане евтин, без външни API calls |
 | Readiness endpoint | Partial | `/ready` проверява database connection и queue configuration и връща 200/503 без secrets | Worker freshness и cache readiness след изграждането на worker/production cache foundation |
-| API Health page | Partial | Admin-only live checks за Shopify shop/scopes и ShipStation auth, per-store isolation, latency, safe errors и rate limit | Shopify returned-version header и flow monitor върху persisted run history |
+| API Health page | Partial | Admin-only live checks за Shopify shop/scopes, requested/returned API version mismatch и ShipStation auth, per-store isolation, latency, safe errors и rate limit | Flow monitor върху persisted run history |
 | Webhook Health page | Todo | Няма webhook adapter/state | Shopify webhook discovery, required topics, target URL, delivery/recency state, per-store results и remediation text |
 | Metrics endpoint | Todo | Няма endpoint | Authentication, stable metric names, request/job/API/error/notification counters, no PII и scrape test |
 | Structured application logs | Partial | Laravel logging и безопасни warnings в текущите reports | Общ context contract: request/run/store/tool IDs, error category/status, redaction tests и production channel/retention |

@@ -44,6 +44,7 @@ class ApiHealthControllerTest extends TestCase
             'shop_name' => '<script>Shop</script>',
             'scopes' => ['read_orders'],
             'requested_version' => '2026-07',
+            'returned_version' => '2026-07',
         ]);
         $shipStation = Mockery::mock(ShipStationClientContract::class);
         $shipStation->shouldReceive('healthCheck')->once();
@@ -55,6 +56,29 @@ class ApiHealthControllerTest extends TestCase
         $this->actingAs($admin)->post(route('admin.api-health.check'))->assertOk()
             ->assertSeeText('Required Shopify scopes are missing')->assertSeeText('read_fulfillments')
             ->assertSeeText('Healthy')->assertDontSee('<script>', false);
+    }
+
+    public function test_health_check_reports_the_returned_shopify_api_version_mismatch(): void
+    {
+        [$admin] = $this->userWithStore();
+        $shopify = Mockery::mock(ShopifyAdminGateway::class);
+        $shopify->shouldReceive('healthCheck')->once()->andReturn([
+            'shop_name' => 'Example Shop',
+            'scopes' => ['read_orders', 'read_fulfillments'],
+            'requested_version' => '2026-07',
+            'returned_version' => '2026-04',
+        ]);
+        $shipStation = Mockery::mock(ShipStationClientContract::class);
+        $shipStation->shouldReceive('healthCheck')->once();
+        $factory = Mockery::mock(ShipStationClientFactory::class);
+        $factory->shouldReceive('forStore')->once()->andReturn($shipStation);
+        $this->app->instance(ShopifyAdminGateway::class, $shopify);
+        $this->app->instance(ShipStationClientFactory::class, $factory);
+
+        $this->actingAs($admin)->post(route('admin.api-health.check'))->assertOk()
+            ->assertSeeText('Shopify served a different API version than requested')
+            ->assertSeeText('Requested API version')->assertSeeText('2026-07')
+            ->assertSeeText('Returned API version')->assertSeeText('2026-04');
     }
 
     public function test_missing_credentials_make_no_external_requests(): void

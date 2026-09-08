@@ -17,6 +17,8 @@ class ShopifyAdminClient implements ShopifyAdminGateway
 {
     public const API_VERSION = '2026-07';
 
+    private string $lastResponseApiVersion = '';
+
     /**
      * The normalizer keeps the migration boundary compatible with existing workflows.
      */
@@ -25,7 +27,7 @@ class ShopifyAdminClient implements ShopifyAdminGateway
         private readonly ShopifyOrderEventNormalizer $orderEventNormalizer,
     ) {}
 
-    /** @return array{shop_name: string, scopes: list<string>, requested_version: string} */
+    /** @return array{shop_name: string, scopes: list<string>, requested_version: string, returned_version: string} */
     public function healthCheck(Store $store): array
     {
         $result = $this->graphql($store, <<<'GRAPHQL'
@@ -52,6 +54,7 @@ class ShopifyAdminClient implements ShopifyAdminGateway
             'shop_name' => is_scalar($shop['name'] ?? null) ? trim((string) $shop['name']) : '',
             'scopes' => array_values(array_unique($scopes)),
             'requested_version' => self::API_VERSION,
+            'returned_version' => $this->lastResponseApiVersion,
         ];
     }
 
@@ -1316,9 +1319,11 @@ class ShopifyAdminClient implements ShopifyAdminGateway
             $payload['variables'] = $variables;
         }
 
+        $this->lastResponseApiVersion = '';
         $response = $this->request($store)
             ->post('graphql.json', $payload)
             ->throw();
+        $this->lastResponseApiVersion = trim($response->header('X-Shopify-API-Version'));
 
         $result = json_decode($response->body(), true);
 

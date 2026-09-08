@@ -71,7 +71,8 @@
                             <dt class="text-slate-500">Latency</dt><dd>{{ $result['latency_ms'] === null ? '—' : $result['latency_ms'].' ms' }}</dd>
                             @if ($key === 'shopify')
                                 <dt class="text-slate-500">Shop</dt><dd>{{ $result['shop_name'] ?: '—' }}</dd>
-                                <dt class="text-slate-500">API version</dt><dd>{{ $result['requested_version'] ?: '—' }}</dd>
+                                <dt class="text-slate-500">Requested API version</dt><dd>{{ $result['requested_version'] ?: '—' }}</dd>
+                                <dt class="text-slate-500">Returned API version</dt><dd class="{{ $result['version_matches'] ? '' : 'text-red-600 dark:text-red-400' }}">{{ $result['returned_version'] ?: 'Missing' }}</dd>
                                 <dt class="text-slate-500">Scopes</dt><dd>{{ $result['scopes'] === [] ? '—' : implode(', ', $result['scopes']) }}</dd>
                                 <dt class="text-slate-500">Missing scopes</dt><dd class="{{ $result['missing_scopes'] === [] ? '' : 'text-red-600 dark:text-red-400' }}">{{ $result['missing_scopes'] === [] ? 'None' : implode(', ', $result['missing_scopes']) }}</dd>
                             @endif
