@@ -429,6 +429,7 @@ boundary задачи са реален migration progress, но не надув
 feature страниците. Те се следят отделно:
 
 - [x] Laravel application foundation, health endpoint и CI
+- [x] Persisted operational health за database, cache, disk, scheduler и queue worker с admin-only dashboard и scheduled pruning
 - [x] Session authentication и login throttling
 - [x] Viewer/operator/admin роли и authorization
 - [x] Stores, encrypted credentials и active-store isolation
@@ -583,7 +584,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 108 | 437 | 1,817 |
+| Laravel rewrite | 109 | 439 | 1,828 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 

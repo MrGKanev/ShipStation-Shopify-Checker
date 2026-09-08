@@ -43,6 +43,7 @@ use App\Http\Controllers\Reports\TaxAuditController;
 use App\Http\Controllers\Reports\ZombieProductsController;
 use App\Http\Controllers\StatusController;
 use Illuminate\Support\Facades\Route;
+use Spatie\Health\Http\Controllers\HealthCheckResultsController;
 
 Route::redirect('/', '/dashboard');
 Route::get('/ready', ReadinessController::class)->name('ready');
@@ -135,6 +136,7 @@ Route::middleware('auth')->group(function (): void {
             ->group(function (): void {
                 Route::get('/api-health', [ApiHealthController::class, 'show'])->name('api-health');
                 Route::get('/action-log', ActionLogController::class)->name('action-log');
+                Route::get('/health', HealthCheckResultsController::class)->name('health');
                 Route::post('/api-health', [ApiHealthController::class, 'check'])->middleware('throttle:api-health')->name('api-health.check');
                 Route::post('/api-health/test-email', [ApiHealthController::class, 'sendTestEmail'])->middleware('throttle:api-health')->name('api-health.test-email');
                 Route::resource('stores', StoreController::class)->except(['show', 'destroy']);
