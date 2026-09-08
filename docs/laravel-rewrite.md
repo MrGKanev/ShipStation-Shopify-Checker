@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 23 | 31.9% |
+| Done | 24 | 33.3% |
 | Partial | 2 | 2.8% |
-| Todo | 45 | 62.5% |
+| Todo | 44 | 61.1% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -486,7 +486,7 @@ workflow от наличния framework scaffold.
 | `orphans` | Orphan Detector | Todo | ShipStation orders без Shopify order. |
 | `activess` | Active SS Conflicts | Todo | Cancelled/refunded Shopify, но active в ShipStation. |
 | `ssshipped` | SS Shipped / Shopify Unfulfilled | Todo | Cross-platform fulfillment sync failures. |
-| `orderedits` | Order Edit History | Todo | Post-placement changes. |
+| `orderedits` | Order Edit History | Done | Paginated edit events, batch order hydration, grouped summaries and edit-delay calculation. |
 | `noteflags` | Note Flags | Done | Configurable case-insensitive note keywords over paid unfulfilled orders, with safe pagination. |
 | `addrcheck` | Address Scanner | Done | Required fields, short street, US/CA postal formats, province, express phone и PO Box/carrier checks с два legacy филтъра. |
 | `emailcheck` | Email Checker | Done | Paid date-range scan с missing/invalid/disposable critical правила, suspicious warning евристики, severity sorting и visible truncation. |
@@ -522,7 +522,7 @@ workflow от наличния framework scaffold.
 | `sameip` | Same IP, Different Emails | Done | Paid orders grouped by exact client IP, case-insensitive distinct-email deduplication, detailed orders and deterministic risk sorting. |
 | `disputes` | Chargebacks / Disputes | Done | Open actionable disputes, evidence deadlines, urgency sorting and bounded pagination. |
 
-Audit subtotal: **Done 15 · Partial 1 · Todo 31 · Replaced 1**.
+Audit subtotal: **Done 16 · Partial 1 · Todo 30 · Replaced 1**.
 
 ### Search & Lookup — 12
 
@@ -583,7 +583,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 97 | 416 | 1,694 |
+| Laravel rewrite | 100 | 420 | 1,705 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
