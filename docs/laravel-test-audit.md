@@ -1,6 +1,6 @@
 # Laravel rewrite — legacy test audit
 
-Последно обновяване: **2026-09-08** след Content Security Policy slice-а.
+Последно обновяване: **2026-09-08** след Slack Notification Channel slice-а.
 
 Този документ е отделният checklist за тестова parity. Feature статусът се следи
 в [Laravel rewrite плана](laravel-rewrite.md), а тук се затваря всеки legacy test
@@ -12,12 +12,12 @@ contract има Laravel тест, по-силен еквивалент или з
 | Статус | Файлове | Дял от 115 |
 |---|---:|---:|
 | Готови | 21 | 18.3% |
-| Частично покрити | 26 | 22.6% |
-| Непочнати | 68 | 59.1% |
+| Частично покрити | 27 | 23.5% |
+| Непочнати | 67 | 58.3% |
 | **Оставащи за одит** | **94** | **81.7%** |
 
 Legacy baseline: **115 файла · 1,528 теста · 3,659 assertions**. Laravel
-baseline след последния slice: **446 теста · 1,861 assertions**. Броят assertions
+baseline след последния slice: **450 теста · 1,877 assertions**. Броят assertions
 е ориентир; критерият е поведенческо покритие.
 
 За всеки checkbox проверяваме business decisions, boundary интеграцията,
@@ -52,6 +52,7 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `RiskScorerTest.php` | 33 | Fraud risk сигнали, weights и score bands | Custom weights и explicit mapping на всички methods |
 | [ ] | `SearchLookupPageLoaderTest.php` | 19 | Lookup/compare/timeline dispatch, validation и errors | Останалите search tools и всички loader branches |
 | [ ] | `SecurityTest.php` | 5 | Proxy trust, sessions, rolling rate limit и headers | Full security checklist срещу Laravel middleware/config |
+| [ ] | `SlackNotifierTest.php` | 19 | Slack payloads, mentions, delivery и safe failure | Queue-ready webhook channel, admin-only delivery diagnostic, trusted endpoint validation и credential-free test payload са готови; audit/scan payloads, mentions и retry mapping остават |
 | [ ] | `ShipStationClientTest.php` | 23 | Auth, lookup, retries, create, active/awaiting/shipment fetch и cache | Create order, active/voided/date fetch, cache/checkpoint semantics |
 | [ ] | `ShopifyClientTest.php` | 58 | Shopify queries, mutations, retries, cache и всички report fetchers | Method-level mapping за непреместените APIs и update mutation |
 | [ ] | `StoresTest.php` | 7 | Multi-store file config и session selection | Accepted replacement mapping към DB stores и active-store middleware |
@@ -96,7 +97,6 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `EmailNotifierTest.php` | 30 | SMTP config, audit/scan/digest messages, escaping и attachments → Laravel mailables |
 | [ ] | `EmailRulesTest.php` | 25 | Per-tool modes, thresholds, recipients и persistence → notification preference model |
 | [ ] | `ManageSettingsPageLoaderTest.php` | 14 | Settings load/save, validation и authorization → admin settings workflow |
-| [ ] | `SlackNotifierTest.php` | 19 | Slack payloads, mentions, delivery и safe failure → Slack notification channel |
 | [ ] | `SlackRulesTest.php` | 19 | Audit/scan thresholds, mentions, defaults и persistence → Slack preferences |
 
 ## Непочнати — order, fulfillment и logistics workflows

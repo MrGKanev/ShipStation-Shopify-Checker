@@ -433,6 +433,7 @@ feature страниците. Те се следят отделно:
 - [x] Проверени database и artifact backups с отделен disk, retention cleanup, monitoring, health integration и опционално AES-256 архивиране
 - [x] Sentry exception observability за web и queue failures с environment/release context, изключен tracing по подразбиране и application-level PII/credential scrub
 - [x] Global Content Security Policy с Vite nonce, безопасен report-only rollout и environment switch за enforcing режим
+- [x] Queue-ready Slack notification channel с trusted webhook validation и admin-only delivery diagnostic
 - [x] Session authentication и login throttling
 - [x] Viewer/operator/admin роли и authorization
 - [x] Stores, encrypted credentials и active-store isolation
@@ -459,7 +460,7 @@ workflow от наличния framework scaffold.
 - [ ] Main audit CLI/web orchestration (`audit.php`)
 - [ ] Queue worker и scheduled execution (`worker.php`)
 - [ ] Daily email digest (`email_digest.php`)
-- [ ] Slack notifications и per-tool rules
+- [ ] Slack channel и delivery diagnostic са готови; audit/scan notifications, mentions и per-tool rules остават
 - [ ] Email notifications, recipients и per-tool rules
 - [x] SMTP configuration diagnostic и admin-only test delivery
 - [ ] Discord notifications
@@ -587,7 +588,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 112 | 446 | 1,861 |
+| Laravel rewrite | 113 | 450 | 1,877 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
@@ -645,6 +646,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `RiskScorerTest.php` — осемте сигнала са пренесени; custom weights и 33-method mapping остават
 - [ ] `SearchLookupPageLoaderTest.php` — single lookup/compare/timeline subset е пренесен
 - [ ] `SecurityTest.php` — escaping, validation и tenant isolation са разширени; целият checklist остава
+- [ ] `SlackNotifierTest.php` — queue-ready webhook delivery, trusted endpoint validation, safe admin diagnostic и credential-free payload са готови; audit/scan payloads, mentions и retry mapping остават
 - [ ] `ShipStationClientTest.php` — lookup/shipments/pagination/retries subset е пренесен
 - [ ] `ShopifyClientTest.php` — GraphQL HTTP boundary subset е пренесен
 - [ ] `StoresTest.php` — Laravel stores са нов DB модел; legacy multi-store behavior се сверява
@@ -876,7 +878,6 @@ Tag Policy traceability (`OrderPolicyChecksTest.php` и
 - [ ] `ShopifyFlowHealthTest.php`
 - [ ] `SidebarSettingsTest.php`
 - [ ] `SimpleScanPageLoaderTest.php`
-- [ ] `SlackNotifierTest.php`
 - [ ] `SlackRulesTest.php`
 - [ ] `SsShippedUnfulfilledTest.php`
 - [ ] `ToolRegistryTest.php`

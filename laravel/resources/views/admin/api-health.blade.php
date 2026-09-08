@@ -37,6 +37,24 @@
             </form>
         </section>
 
+        <section class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-xl font-bold">Slack delivery</h2>
+                    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Incoming webhook: {{ $slackConfiguration['endpoint'] ?: 'not configured' }}</p>
+                </div>
+                <span class="rounded-full px-3 py-1 text-xs font-semibold {{ $slackConfiguration['configured'] ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200' }}">{{ $slackConfiguration['configured'] ? 'Configured' : 'Needs configuration' }}</span>
+            </div>
+
+            @if ($slackResult === 'sent')<p class="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">Test Slack notification sent successfully.</p>@endif
+            @if ($slackResult === 'failed')<p class="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">Test Slack notification could not be sent. Check the webhook configuration and application log.</p>@endif
+
+            <form class="mt-4" method="POST" action="{{ route('admin.api-health.test-slack') }}">
+                @csrf
+                <button class="rounded-lg bg-indigo-600 px-5 py-2.5 font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50" type="submit" @disabled(! $slackConfiguration['configured'])>Send test notification</button>
+            </form>
+        </section>
+
         @if ($health)
             <p class="text-sm text-slate-500 dark:text-slate-400">Checked at {{ $health['checked_at'] }}</p>
             <div class="grid gap-5 lg:grid-cols-2">
