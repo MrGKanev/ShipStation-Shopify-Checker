@@ -1,2 +1,6 @@
+packages:
+  - '.'
+  - 'laravel'
+
 allowBuilds:
   '@parcel/watcher': true

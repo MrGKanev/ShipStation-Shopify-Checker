@@ -1,10 +1,11 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
 
 /* Scan PHP templates and JS for utility classes */
 @source "../../views/**/*.php";
 @source "../../index.php";
 @source "../../audit.php";
 @source "../../assets/app.js";
+@source "../../src/ViewHelpers.php";
 
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 

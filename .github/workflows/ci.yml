@@ -36,6 +36,37 @@ jobs:
       - name: Run static analysis
         run: composer analyse
 
+  laravel:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: laravel
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: curl, json, mbstring, pdo_sqlite
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Audit Composer dependencies
+        run: composer audit
+
+      - name: Run tests
+        run: composer test
+
+      - name: Run static analysis
+        run: composer analyse
+
+      - name: Check PHP formatting
+        run: vendor/bin/pint --test
+
   frontend:
     runs-on: ubuntu-latest
 
@@ -57,6 +88,9 @@ jobs:
 
       - name: Build frontend assets
         run: pnpm build
+
+      - name: Build Laravel frontend assets
+        run: pnpm --filter shopify-ops-laravel build
 
       - name: Audit frontend dependencies
         run: pnpm audit --audit-level moderate
