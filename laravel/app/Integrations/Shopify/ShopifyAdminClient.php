@@ -752,7 +752,7 @@ class ShopifyAdminClient implements ShopifyAdminGateway
             query RepeatRefundCandidates($search: String!, $after: String) {
               orders(first: 250, after: $after, sortKey: CREATED_AT, reverse: true, query: $search) {
                 pageInfo { hasNextPage endCursor }
-                edges { node { legacyResourceId name createdAt email displayFinancialStatus totalPriceSet { shopMoney { amount currencyCode } } refunds { refundLineItems(first: 250) { nodes { subtotalSet { shopMoney { amount currencyCode } } } } transactions(first: 250) { nodes { kind status amountSet { shopMoney { amount currencyCode } } } } } } }
+                edges { node { legacyResourceId name createdAt email displayFinancialStatus totalPriceSet { shopMoney { amount currencyCode } } refunds { createdAt note totalRefundedSet { shopMoney { amount currencyCode } } refundLineItems(first: 250) { nodes { quantity subtotalSet { shopMoney { amount currencyCode } } lineItem { name sku } } } transactions(first: 250) { nodes { kind status amountSet { shopMoney { amount currencyCode } } } } } } }
               }
             }
             GRAPHQL;
@@ -786,9 +786,24 @@ class ShopifyAdminClient implements ShopifyAdminGateway
                         continue;
                     }
                     $subtotal = $refundLineItem['subtotalSet']['shopMoney']['amount'] ?? null;
-                    $refundLineItems[] = ['subtotal' => is_numeric($subtotal) ? (float) $subtotal : 0.0];
+                    $lineItem = is_array($refundLineItem['lineItem'] ?? null) ? $refundLineItem['lineItem'] : [];
+                    $refundLineItems[] = [
+                        'quantity' => is_numeric($refundLineItem['quantity'] ?? null) ? (int) $refundLineItem['quantity'] : 0,
+                        'subtotal' => is_numeric($subtotal) ? (float) $subtotal : 0.0,
+                        'line_item' => [
+                            'name' => is_scalar($lineItem['name'] ?? null) ? (string) $lineItem['name'] : '',
+                            'sku' => is_scalar($lineItem['sku'] ?? null) ? (string) $lineItem['sku'] : '',
+                        ],
+                    ];
                 }
-                $refunds[] = ['transactions' => $transactions, 'refund_line_items' => $refundLineItems];
+                $totalRefunded = $refund['totalRefundedSet']['shopMoney']['amount'] ?? null;
+                $refunds[] = [
+                    'created_at' => is_scalar($refund['createdAt'] ?? null) ? (string) $refund['createdAt'] : '',
+                    'note' => is_scalar($refund['note'] ?? null) ? (string) $refund['note'] : '',
+                    'total_refunded' => is_numeric($totalRefunded) ? (float) $totalRefunded : 0.0,
+                    'transactions' => $transactions,
+                    'refund_line_items' => $refundLineItems,
+                ];
             }
             $order['refunds'] = $refunds;
             $orders[] = $order;

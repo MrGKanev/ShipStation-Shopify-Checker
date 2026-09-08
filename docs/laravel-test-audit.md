@@ -1,6 +1,6 @@
 # Laravel rewrite — legacy test audit
 
-Последно обновяване: **2026-09-08** след Refunds Tracker slice-а.
+Последно обновяване: **2026-09-08** след Return / RMA Tracker slice-а.
 
 Този документ е отделният checklist за тестова parity. Feature статусът се следи
 в [Laravel rewrite плана](laravel-rewrite.md), а тук се затваря всеки legacy test
@@ -11,13 +11,13 @@ contract има Laravel тест, по-силен еквивалент или з
 
 | Статус | Файлове | Дял от 115 |
 |---|---:|---:|
-| Готови | 22 | 19.1% |
+| Готови | 23 | 20.0% |
 | Частично покрити | 27 | 23.5% |
-| Непочнати | 66 | 57.4% |
-| **Оставащи за одит** | **93** | **80.9%** |
+| Непочнати | 65 | 56.5% |
+| **Оставащи за одит** | **92** | **80.0%** |
 
 Legacy baseline: **115 файла · 1,528 теста · 3,659 assertions**. Laravel
-baseline след последния slice: **459 теста · 1,934 assertions**. Броят assertions
+baseline след последния slice: **464 теста · 1,962 assertions**. Броят assertions
 е ориентир; критерият е поведенческо покритие.
 
 За всеки checkbox проверяваме business decisions, boundary интеграцията,
@@ -116,7 +116,6 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `PageLoaderTest.php` | 18 | Главен audit loader, compare results, ignore rules и notification behavior |
 | [ ] | `PartialFulfillStallsTest.php` | 6 | Partial fulfillment age threshold, completed exclusions и sorting |
 | [ ] | `PostShipAddrChangeTest.php` | 5 | Address edits after shipment, timing and sorting |
-| [ ] | `ReturnRmaTrackerTest.php` | 7 | Return/RMA detection, age, statuses and sorting |
 | [ ] | `ReturnedItemsReportTest.php` | 10 | Returned SKU quantities, refunds, dates and aggregation |
 | [ ] | `SimpleScanPageLoaderTest.php` | 19 | Shared tag/tax/returns/email report loader, validation and notifications | Email wiring/credentials са покрити; returns и notification branches остават |
 | [ ] | `SsShippedUnfulfilledTest.php` | 6 | ShipStation shipped while Shopify unfulfilled, exclusions and sorting |
@@ -165,6 +164,7 @@ malformed payloads и atomic failure. Не копираме тест, който
 - [x] `DisputesPageLoaderTest.php` — 7/7 deadline computation, urgency sorting, initial/configuration and Shopify success paths.
 - [x] `RepeatRefundsTest.php` — 8/8 threshold, successful-transaction totals, identity grouping and sorting decisions.
 - [x] `RefundsTrackerTest.php` — 10/10 missing/active/complete ShipStation status, refund subtotal/fallback, exact number matching and risk sorting decisions.
+- [x] `ReturnRmaTrackerTest.php` — 7/7 per-refund rows, notes, item details, SKU aggregation/exclusions and newest-first sorting decisions.
 - [x] `AddressChangesTest.php` — 4/4 placement-to-change delay, negative/missing timestamp clamping and current-address output decisions.
 - [x] `GoogleAuthFlowTest.php` — OAuth redirect/callback/state handling is delegated to Socialite; cancellation, provider failure, domain policy, existing-user linking, session rotation and throttled routes are covered.
 - [x] `GoogleAuthTest.php` — the custom OIDC/PKCE HTTP client is replaced by Socialite; configuration, verified `hd` claims, domain parsing, identity binding and safe failures are covered without persisting provider tokens.
