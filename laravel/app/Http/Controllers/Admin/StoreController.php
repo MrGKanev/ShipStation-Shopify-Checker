@@ -79,6 +79,11 @@ class StoreController extends Controller
 
         $store->update($attributes);
 
+        $rotatedCredentials = array_values(array_filter(['shopify_access_token', 'shipstation_api_key', 'shipstation_api_secret'], fn (string $credential): bool => $request->filled($credential)));
+        if ($rotatedCredentials !== []) {
+            activity('administration')->causedBy($request->user())->performedOn($store)->event('credentials_rotated')->withProperties(['store_id' => $store->getKey(), 'credential_fields' => $rotatedCredentials])->log('Store credentials rotated');
+        }
+
         return back()->with('status', 'Store updated.');
     }
 }

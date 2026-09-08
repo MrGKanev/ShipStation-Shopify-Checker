@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ActiveStoreController;
+use App\Http\Controllers\Admin\ActionLogController;
 use App\Http\Controllers\Admin\ApiHealthController;
 use App\Http\Controllers\Admin\StoreController;
 use App\Http\Controllers\Admin\UserController;
@@ -133,6 +134,7 @@ Route::middleware('auth')->group(function (): void {
             ->middleware('can:manage-administration')
             ->group(function (): void {
                 Route::get('/api-health', [ApiHealthController::class, 'show'])->name('api-health');
+                Route::get('/action-log', ActionLogController::class)->name('action-log');
                 Route::post('/api-health', [ApiHealthController::class, 'check'])->middleware('throttle:api-health')->name('api-health.check');
                 Route::post('/api-health/test-email', [ApiHealthController::class, 'sendTestEmail'])->middleware('throttle:api-health')->name('api-health.test-email');
                 Route::resource('stores', StoreController::class)->except(['show', 'destroy']);

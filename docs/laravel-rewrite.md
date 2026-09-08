@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 25 | 34.7% |
+| Done | 26 | 36.1% |
 | Partial | 2 | 2.8% |
-| Todo | 43 | 59.7% |
+| Todo | 42 | 58.3% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -551,10 +551,10 @@ Search subtotal: **Done 7 · Partial 0 · Todo 4 · Replaced 1**.
 | `pushlog` | Push Log | Todo |
 | `runlog` | Run History | Todo |
 | `jobs` | Job Queue | Todo |
-| `actionlog` | Action Log | Todo |
+| `actionlog` | Action Log | Done | Admin-only newest-first activity history for allowlisted user/store changes, credential rotations and store-access updates, with scheduled retention cleanup. |
 | `printqueue` | Print Queue | Todo |
 
-Manage subtotal: **Done 0 · Partial 0 · Todo 6 · Replaced 0**.
+Manage subtotal: **Done 1 · Partial 0 · Todo 5 · Replaced 0**.
 
 ### Settings — 6
 
@@ -583,15 +583,15 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 107 | 434 | 1,805 |
+| Laravel rewrite | 108 | 437 | 1,817 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
 | Fully mapped | 21 | 18.3% |
-| Partial / parity verification | 25 | 21.7% |
-| Pending | 69 | 60.0% |
+| Partial / parity verification | 26 | 22.6% |
+| Pending | 68 | 59.1% |
 | **Общо** | **115** | **100%** |
 
 #### Fully mapped legacy test files
@@ -637,6 +637,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `OrderTimelineTest.php` — workflow е пренесен и разширен; 26 legacy methods чакат explicit mapping
 - [ ] `ProductInventoryPageLoaderTest.php` — Product Completeness, Inventory Oversell, Inventory Aging, Inventory Forecast, Zombie Products и Catalog Quality wiring/error/success paths са пренесени; останалите catalogue workflows остават
 - [ ] `ReporterTest.php` — общият League CSV streaming contract, safe filenames и formula escaping са готови и Address Changes го използва; JSON, summaries, attachments и останалите report schemas остават
+- [ ] `UserActionLogTest.php` — DB-backed admin Action Log, safe allowlisted changes, credential rotation metadata, store-access updates, authorization и scheduled retention са готови; legacy JSON import остава
 - [ ] `RiskScorerTest.php` — осемте сигнала са пренесени; custom weights и 33-method mapping остават
 - [ ] `SearchLookupPageLoaderTest.php` — single lookup/compare/timeline subset е пренесен
 - [ ] `SecurityTest.php` — escaping, validation и tenant isolation са разширени; целият checklist остава
@@ -875,7 +876,6 @@ Tag Policy traceability (`OrderPolicyChecksTest.php` и
 - [ ] `SlackRulesTest.php`
 - [ ] `SsShippedUnfulfilledTest.php`
 - [ ] `ToolRegistryTest.php`
-- [ ] `UserActionLogTest.php`
 - [ ] `ViewHelpersTest.php`
 - [ ] `VoidedShipmentsTest.php`
 - [ ] `WorkerTest.php`

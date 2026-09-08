@@ -73,6 +73,7 @@ class UserController extends Controller
      */
     public function update(UserUpdateRequest $request, User $user): RedirectResponse
     {
+        $previousStoreIds = $user->stores()->orderBy('stores.id')->pluck('stores.id')->all();
         DB::transaction(function () use ($request, $user): void {
             $attributes = $request->safe()->except(['password', 'password_confirmation', 'store_ids']);
 
@@ -83,6 +84,10 @@ class UserController extends Controller
             $user->update($attributes);
             $user->stores()->sync($request->validated('store_ids'));
         });
+        $currentStoreIds = $user->stores()->orderBy('stores.id')->pluck('stores.id')->all();
+        if ($previousStoreIds !== $currentStoreIds) {
+            activity('administration')->causedBy($request->user())->performedOn($user)->event('store_access_updated')->withProperties(['old_store_ids' => $previousStoreIds, 'store_ids' => $currentStoreIds])->log('User store access updated');
+        }
 
         return back()->with('status', 'User updated.');
     }
