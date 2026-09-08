@@ -36,7 +36,7 @@ class PackingSlipTest extends TestCase
         $factory->shouldReceive('forStore')->times(3)->with(Mockery::on(fn (Store $received): bool => $received->is($store)))->andReturn($client);
         $this->app->instance(ShipStationClientFactory::class, $factory);
 
-        $this->actingAs($user)->post(route('orders.packing-slip.store'), ['order_number' => '#1001'])->assertOk()->assertSeeText('Packing Slip')->assertSeeText('S, M')->assertSeeTextInOrder(['First', 'Second'])->assertSee('&lt;script&gt;x&lt;/script&gt;', false)->assertDontSee('<script>', false)->assertSee('window.print()', false);
+        $this->actingAs($user)->post(route('orders.packing-slip.store'), ['order_number' => '#1001'])->assertOk()->assertSeeText('Packing Slip')->assertSeeText('S, M')->assertSeeTextInOrder(['First', 'Second'])->assertSee('&lt;script&gt;x&lt;/script&gt;', false)->assertDontSee('<script>', false)->assertSee('data-print-window', false)->assertDontSee('onclick=', false);
         $this->actingAs($user)->post(route('orders.packing-slip.store'), ['order_number' => '1002'])->assertOk()->assertSeeText('was not found');
         $this->actingAs($user)->post(route('orders.packing-slip.store'), ['order_number' => '1003'])->assertOk()->assertSeeText('More than one exact');
     }
