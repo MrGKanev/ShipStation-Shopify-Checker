@@ -789,6 +789,61 @@ class ShopifyAdminClient implements ShopifyAdminGateway
         return ['orders' => $orders, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
     }
 
+    /** @return array{events: list<array<string, mixed>>, orders: array<string, array<string, mixed>>, pages: int, truncated: bool} */
+    public function orderEditCandidates(Store $store, string $startDate, string $endDate): array
+    {
+        $eventsQuery = <<<'GRAPHQL'
+            query OrderEditEvents($search: String!, $after: String) {
+              events(first: 250, after: $after, sortKey: CREATED_AT, reverse: true, query: $search) {
+                pageInfo { hasNextPage endCursor }
+                edges { node { __typename id action createdAt message ... on BasicEvent { subjectId subjectType } } }
+              }
+            }
+            GRAPHQL;
+        $page = $this->paginateGraphql($store, $eventsQuery, 'events', ['search' => "created_at:>={$startDate}T00:00:00Z created_at:<={$endDate}T23:59:59Z"], 100);
+        $events = [];
+        $ids = [];
+        foreach ($page['edges'] as $edge) {
+            $node = $edge['node'] ?? null;
+            if (! is_array($node)) {
+                throw new ShopifyGraphqlException([], 'Shopify order edit events returned an unexpected response shape.');
+            }
+            $event = $this->orderEventNormalizer->normalize($node, '');
+            $event['verb'] = mb_strtolower(is_scalar($node['action'] ?? null) ? (string) $node['action'] : '');
+            $events[] = $event;
+            if ($event['verb'] === 'edit_complete' && is_int($event['subject_id']) && $event['subject_id'] > 0) {
+                $ids[(string) $event['subject_id']] = true;
+            }
+        }
+        $orders = [];
+        $ordersQuery = <<<'GRAPHQL'
+            query EditedOrders($ids: [ID!]!) { nodes(ids: $ids) { ... on Order { legacyResourceId name createdAt email displayFinancialStatus displayFulfillmentStatus totalPriceSet { shopMoney { amount currencyCode } } } } }
+            GRAPHQL;
+        foreach (array_chunk(array_keys($ids), 250) as $chunk) {
+            $graphqlIds = [];
+            foreach ($chunk as $id) {
+                $graphqlIds[] = 'gid://shopify/Order/'.(string) $id;
+            }
+            $result = $this->graphql($store, $ordersQuery, ['ids' => $graphqlIds]);
+            $nodes = $result['data']['nodes'] ?? null;
+            if (! is_array($nodes)) {
+                throw new ShopifyGraphqlException([], 'Shopify edited orders returned an unexpected response shape.');
+            }
+            foreach ($nodes as $node) {
+                if (! is_array($node)) {
+                    throw new ShopifyGraphqlException([], 'Shopify edited orders returned an unexpected response shape.');
+                }
+                $order = $this->orderNormalizer->normalize($node);
+                $id = (string) ($order['id'] ?? '');
+                if ($id !== '') {
+                    $orders[$id] = $order;
+                }
+            }
+        }
+
+        return ['events' => $events, 'orders' => $orders, 'pages' => $page['pages'], 'truncated' => $page['truncated']];
+    }
+
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function tagAuditCandidates(Store $store, string $startDate, string $endDate): array
     {
