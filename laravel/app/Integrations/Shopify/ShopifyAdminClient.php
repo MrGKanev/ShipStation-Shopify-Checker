@@ -746,6 +746,50 @@ class ShopifyAdminClient implements ShopifyAdminGateway
     }
 
     /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
+    public function repeatRefundCandidates(Store $store, string $startDate, string $endDate): array
+    {
+        $query = <<<'GRAPHQL'
+            query RepeatRefundCandidates($search: String!, $after: String) {
+              orders(first: 250, after: $after, sortKey: CREATED_AT, reverse: true, query: $search) {
+                pageInfo { hasNextPage endCursor }
+                edges { node { legacyResourceId name createdAt email displayFinancialStatus refunds { transactions(first: 250) { nodes { kind status amountSet { shopMoney { amount currencyCode } } } } } } }
+              }
+            }
+            GRAPHQL;
+        $result = $this->paginateGraphql($store, $query, 'orders', ['search' => "status:any (financial_status:refunded OR financial_status:partially_refunded) created_at:>={$startDate}T00:00:00Z created_at:<={$endDate}T23:59:59Z"], 100);
+        $orders = [];
+        foreach ($result['edges'] as $edge) {
+            $node = $edge['node'] ?? null;
+            if (! is_array($node)) {
+                throw new ShopifyGraphqlException([], 'Shopify repeat refunds returned an unexpected response shape.');
+            }
+            $order = $this->orderNormalizer->normalize($node);
+            if (! in_array($order['financial_status'], ['refunded', 'partially_refunded'], true)) {
+                continue;
+            }
+            $refunds = [];
+            foreach (is_array($node['refunds'] ?? null) ? $node['refunds'] : [] as $refund) {
+                if (! is_array($refund)) {
+                    continue;
+                }
+                $transactions = [];
+                foreach (is_array($refund['transactions']['nodes'] ?? null) ? $refund['transactions']['nodes'] : [] as $transaction) {
+                    if (! is_array($transaction)) {
+                        continue;
+                    }
+                    $money = $transaction['amountSet']['shopMoney'] ?? null;
+                    $transactions[] = ['kind' => strtolower(is_scalar($transaction['kind'] ?? null) ? (string) $transaction['kind'] : ''), 'status' => strtolower(is_scalar($transaction['status'] ?? null) ? (string) $transaction['status'] : ''), 'amount' => is_array($money) && is_numeric($money['amount'] ?? null) ? (float) $money['amount'] : 0.0];
+                }
+                $refunds[] = ['transactions' => $transactions];
+            }
+            $order['refunds'] = $refunds;
+            $orders[] = $order;
+        }
+
+        return ['orders' => $orders, 'pages' => $result['pages'], 'truncated' => $result['truncated']];
+    }
+
+    /** @return array{orders: list<array<string, mixed>>, pages: int, truncated: bool} */
     public function tagAuditCandidates(Store $store, string $startDate, string $endDate): array
     {
         $query = <<<'GRAPHQL'

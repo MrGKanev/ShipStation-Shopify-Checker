@@ -408,7 +408,7 @@ Matrix-ът е release control документ, а не само checklist. М�
 достъпен route/controller/view и покриващи тестове. Наличен domain helper без
 завършен потребителски workflow не се брои за готов feature.
 
-Последно обновяване: **2026-09-08**, след Note Flags slice-а.
+Последно обновяване: **2026-09-08**, след Repeat Refunds slice-а.
 
 Легенда: **Done** = feature parity за основния workflow; **Partial** = използваем,
 но по-тесен от legacy; **Todo** = няма завършен Laravel workflow;
@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 22 | 30.6% |
+| Done | 23 | 31.9% |
 | Partial | 2 | 2.8% |
-| Todo | 46 | 63.9% |
+| Todo | 45 | 62.5% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -480,7 +480,7 @@ workflow от наличния framework scaffold.
 | `trends` | Trends | Todo | Aggregated audit report trends. |
 | `dupes` | Duplicate Detector | Todo | Близки duplicate orders. |
 | `refunds` | Refunds Tracker | Todo | Shopify refunds ↔ ShipStation status. |
-| `repeatrefunds` | Repeat Refunds | Todo | Повторни refunds по клиент. |
+| `repeatrefunds` | Repeat Refunds | Done | Refunded/partially-refunded orders grouped by normalized email, successful transaction totals and configurable threshold. |
 | `returns` | Return / RMA Tracker | Todo | Item-level returns и SKU rates. |
 | `returneditems` | Returned Items Report | Todo | Itemized returned quantities. |
 | `orphans` | Orphan Detector | Todo | ShipStation orders без Shopify order. |
@@ -522,7 +522,7 @@ workflow от наличния framework scaffold.
 | `sameip` | Same IP, Different Emails | Done | Paid orders grouped by exact client IP, case-insensitive distinct-email deduplication, detailed orders and deterministic risk sorting. |
 | `disputes` | Chargebacks / Disputes | Done | Open actionable disputes, evidence deadlines, urgency sorting and bounded pagination. |
 
-Audit subtotal: **Done 14 · Partial 1 · Todo 32 · Replaced 1**.
+Audit subtotal: **Done 15 · Partial 1 · Todo 31 · Replaced 1**.
 
 ### Search & Lookup — 12
 
@@ -583,15 +583,15 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 94 | 413 | 1,672 |
+| Laravel rewrite | 97 | 416 | 1,694 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
-| Fully mapped | 17 | 14.8% |
+| Fully mapped | 18 | 15.7% |
 | Partial / parity verification | 24 | 20.9% |
-| Pending | 74 | 64.3% |
+| Pending | 73 | 63.5% |
 | **Общо** | **115** | **100%** |
 
 #### Fully mapped legacy test files
@@ -612,6 +612,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [x] `AddressScannerPageTest.php` — всичките 4 filtering, clean-row и severity sorting decisions са нанесени
 - [x] `SameIpTest.php` — всичките 5 grouping, exclusion, deduplication и sorting decisions са нанесени
 - [x] `OrderPolicyChecksTest.php` — всичките 16 Discount Abuse и Tag Policy configuration, rule semantics и tag normalization decisions са нанесени
+- [x] `RepeatRefundsTest.php` — всичките 8 threshold, transaction filtering, grouping and sorting decisions са нанесени
 
 #### Partial или чакащи method-level parity проверка
 
@@ -861,7 +862,6 @@ Tag Policy traceability (`OrderPolicyChecksTest.php` и
 - [ ] `PrintQueueTest.php`
 - [ ] `PushLogTest.php`
 - [ ] `RefundsTrackerTest.php`
-- [ ] `RepeatRefundsTest.php`
 - [ ] `ReportRegistryTest.php`
 - [ ] `ReporterTest.php`
 - [ ] `ReturnRmaTrackerTest.php`

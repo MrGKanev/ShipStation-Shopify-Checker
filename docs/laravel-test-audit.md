@@ -1,6 +1,6 @@
 # Laravel rewrite — legacy test audit
 
-Последно обновяване: **2026-09-08** след Note Flags slice-а.
+Последно обновяване: **2026-09-08** след Repeat Refunds slice-а.
 
 Този документ е отделният checklist за тестова parity. Feature статусът се следи
 в [Laravel rewrite плана](laravel-rewrite.md), а тук се затваря всеки legacy test
@@ -11,13 +11,13 @@ contract има Laravel тест, по-силен еквивалент или з
 
 | Статус | Файлове | Дял от 115 |
 |---|---:|---:|
-| Готови | 17 | 14.8% |
+| Готови | 18 | 15.7% |
 | Частично покрити | 24 | 20.9% |
-| Непочнати | 74 | 64.3% |
-| **Оставащи за одит** | **98** | **85.2%** |
+| Непочнати | 73 | 63.5% |
+| **Оставащи за одит** | **97** | **84.3%** |
 
 Legacy baseline: **115 файла · 1,528 теста · 3,659 assertions**. Laravel
-baseline след последния slice: **413 теста · 1,672 assertions**. Броят assertions
+baseline след последния slice: **416 теста · 1,694 assertions**. Броят assertions
 е ориентир; критерият е поведенческо покритие.
 
 За всеки checkbox проверяваме business decisions, boundary интеграцията,
@@ -120,7 +120,6 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `PartialFulfillStallsTest.php` | 6 | Partial fulfillment age threshold, completed exclusions и sorting |
 | [ ] | `PostShipAddrChangeTest.php` | 5 | Address edits after shipment, timing and sorting |
 | [ ] | `RefundsTrackerTest.php` | 10 | Refund totals, status/date filters, item aggregation и sorting |
-| [ ] | `RepeatRefundsTest.php` | 8 | Customer refund clustering, thresholds, missing identity и sorting |
 | [ ] | `ReturnRmaTrackerTest.php` | 7 | Return/RMA detection, age, statuses and sorting |
 | [ ] | `ReturnedItemsReportTest.php` | 10 | Returned SKU quantities, refunds, dates and aggregation |
 | [ ] | `SimpleScanPageLoaderTest.php` | 19 | Shared tag/tax/returns/email report loader, validation and notifications | Email wiring/credentials са покрити; returns и notification branches остават |
@@ -168,6 +167,7 @@ malformed payloads и atomic failure. Не копираме тест, който
 - [x] `SameIpTest.php` — 5/5 exact-IP grouping, distinct-email deduplication, exclusions and sorting decisions.
 - [x] `OrderPolicyChecksTest.php` — 16/16 Discount Abuse и Tag Policy configuration, required/forbidden semantics и tag normalization decisions.
 - [x] `DisputesPageLoaderTest.php` — 7/7 deadline computation, urgency sorting, initial/configuration and Shopify success paths.
+- [x] `RepeatRefundsTest.php` — 8/8 threshold, successful-transaction totals, identity grouping and sorting decisions.
 
 ## Как се обновява
 
