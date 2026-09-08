@@ -18,3 +18,7 @@ Schedule::command('backup:run', ['--only-db'])->dailyAt('01:15')->withoutOverlap
 Schedule::command('backup:run')->weeklyOn(0, '01:45')->withoutOverlapping();
 Schedule::command('backup:monitor')->hourlyAt(20)->withoutOverlapping();
 Schedule::command('backup:clean')->dailyAt('03:30')->withoutOverlapping();
+
+if (config('queue.default') === 'redis') {
+    Schedule::command('horizon:snapshot')->everyFiveMinutes();
+}

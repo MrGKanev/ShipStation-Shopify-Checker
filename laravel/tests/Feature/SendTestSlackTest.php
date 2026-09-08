@@ -66,6 +66,7 @@ class SendTestSlackTest extends TestCase
         $payload = $notification->toSlack((object) [])->toArray();
 
         $this->assertInstanceOf(ShouldQueue::class, $notification);
+        $this->assertSame('notifications', $notification->queue);
         $this->assertStringContainsString('successfully connected', $payload['text']);
         $this->assertStringContainsString('No store credentials or order data', $payload['text']);
         $this->assertNull($payload['channel']);

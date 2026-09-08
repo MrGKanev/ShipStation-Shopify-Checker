@@ -15,6 +15,7 @@ use Illuminate\Support\Str;
 use Spatie\Health\Checks\Checks\BackupsCheck;
 use Spatie\Health\Checks\Checks\CacheCheck;
 use Spatie\Health\Checks\Checks\DatabaseCheck;
+use Spatie\Health\Checks\Checks\HorizonCheck;
 use Spatie\Health\Checks\Checks\QueueCheck;
 use Spatie\Health\Checks\Checks\ScheduleCheck;
 use Spatie\Health\Checks\Checks\UsedDiskSpaceCheck;
@@ -35,7 +36,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Health::checks([
+        $healthChecks = [
             DatabaseCheck::new(),
             CacheCheck::new(),
             BackupsCheck::new()
@@ -45,7 +46,13 @@ class AppServiceProvider extends ServiceProvider
             UsedDiskSpaceCheck::new()->warnWhenUsedSpaceIsAbovePercentage(80)->failWhenUsedSpaceIsAbovePercentage(90),
             ScheduleCheck::new()->heartbeatMaxAgeInMinutes(5),
             QueueCheck::new()->failWhenHealthJobTakesLongerThanMinutes(10),
-        ]);
+        ];
+
+        if (config('queue.default') === 'redis') {
+            $healthChecks[] = HorizonCheck::new();
+        }
+
+        Health::checks($healthChecks);
 
         Gate::define(
             'manage-administration',

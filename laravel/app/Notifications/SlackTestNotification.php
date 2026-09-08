@@ -15,7 +15,9 @@ class SlackTestNotification extends Notification implements ShouldQueue
     public function __construct(
         public readonly string $applicationName,
         public readonly string $sentAt,
-    ) {}
+    ) {
+        $this->onQueue('notifications');
+    }
 
     /**
      * Get the notification's delivery channels.

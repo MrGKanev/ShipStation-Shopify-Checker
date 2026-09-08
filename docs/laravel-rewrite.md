@@ -435,6 +435,7 @@ feature страниците. Те се следят отделно:
 - [x] Global Content Security Policy с Vite nonce, безопасен report-only rollout и environment switch за enforcing режим
 - [x] Queue-ready Slack notification channel с trusted webhook validation и admin-only delivery diagnostic
 - [x] Admin-only Laravel Pulse dashboard с dedicated DB connection option, bounded retention и privacy-minimized opt-in recorders
+- [x] Redis queue runtime чрез Laravel Horizon с bounded supervisors, admin-only dashboard, queue health check и scheduled metrics snapshots
 - [x] Session authentication и login throttling
 - [x] Viewer/operator/admin роли и authorization
 - [x] Stores, encrypted credentials и active-store isolation
@@ -589,7 +590,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 114 | 452 | 1,889 |
+| Laravel rewrite | 115 | 454 | 1,902 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 

@@ -25,6 +25,7 @@
                             <a class="text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400" href="{{ route('admin.action-log') }}">Action Log</a>
                             <a class="text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400" href="{{ route('admin.health') }}">Health</a>
                             @if(config('pulse.enabled'))<a class="text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400" href="{{ url(config('pulse.path')) }}">Pulse</a>@endif
+                            @if(config('queue.default') === 'redis')<a class="text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400" href="{{ url(config('horizon.path')) }}">Horizon</a>@endif
                         </nav>
                     @endcan
                 </div>
@@ -87,6 +88,7 @@
                         <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 sm:hidden dark:hover:bg-slate-800" href="{{ route('admin.action-log') }}">Action Log</a>
                         <a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 sm:hidden dark:hover:bg-slate-800" href="{{ route('admin.health') }}">Health</a>
                         @if(config('pulse.enabled'))<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 sm:hidden dark:hover:bg-slate-800" href="{{ url(config('pulse.path')) }}">Pulse</a>@endif
+                        @if(config('queue.default') === 'redis')<a class="rounded-lg px-3 py-2 font-medium hover:bg-slate-100 sm:hidden dark:hover:bg-slate-800" href="{{ url(config('horizon.path')) }}">Horizon</a>@endif
                     @endcan
                 </nav>
 
