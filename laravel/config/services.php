@@ -45,4 +45,12 @@ return [
         'api_secret' => env('SS_API_SECRET'),
     ],
 
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI', '/auth/google/callback'),
+        'allowed_domains' => env('GOOGLE_ALLOWED_DOMAINS', ''),
+        'login_only' => env('GOOGLE_LOGIN_ONLY', false),
+    ],
+
 ];

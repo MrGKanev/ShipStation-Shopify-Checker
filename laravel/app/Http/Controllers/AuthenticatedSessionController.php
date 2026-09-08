@@ -12,11 +12,14 @@ class AuthenticatedSessionController extends Controller
 {
     public function create(): View
     {
-        return view('auth.login');
+        return view('auth.login', ['googleConfigured' => $this->googleConfigured(), 'googleLoginOnly' => (bool) config('services.google.login_only')]);
     }
 
     public function store(LoginRequest $request): RedirectResponse
     {
+        if ((bool) config('services.google.login_only')) {
+            return back()->withErrors(['email' => 'Password sign-in is disabled. Continue with Google.'])->onlyInput('email');
+        }
         if (! Auth::attempt($request->validated())) {
             return back()
                 ->withErrors(['email' => 'The provided credentials do not match our records.'])
@@ -36,5 +39,13 @@ class AuthenticatedSessionController extends Controller
         $request->session()->regenerateToken();
 
         return redirect()->route('login');
+    }
+
+    private function googleConfigured(): bool
+    {
+        return trim((string) config('services.google.client_id')) !== ''
+            && trim((string) config('services.google.client_secret')) !== ''
+            && trim((string) config('services.google.redirect')) !== ''
+            && trim((string) config('services.google.allowed_domains')) !== '';
     }
 }

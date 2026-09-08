@@ -1,6 +1,6 @@
 # Laravel rewrite — legacy test audit
 
-Последно обновяване: **2026-09-08** след Address Changes slice-а.
+Последно обновяване: **2026-09-08** след Google Socialite slice-а.
 
 Този документ е отделният checklist за тестова parity. Feature статусът се следи
 в [Laravel rewrite плана](laravel-rewrite.md), а тук се затваря всеки legacy test
@@ -11,13 +11,13 @@ contract има Laravel тест, по-силен еквивалент или з
 
 | Статус | Файлове | Дял от 115 |
 |---|---:|---:|
-| Готови | 19 | 16.5% |
+| Готови | 21 | 18.3% |
 | Частично покрити | 24 | 20.9% |
-| Непочнати | 72 | 62.6% |
-| **Оставащи за одит** | **96** | **83.5%** |
+| Непочнати | 70 | 60.9% |
+| **Оставащи за одит** | **94** | **81.7%** |
 
 Legacy baseline: **115 файла · 1,528 теста · 3,659 assertions**. Laravel
-baseline след последния slice: **425 теста · 1,740 assertions**. Броят assertions
+baseline след последния slice: **432 теста · 1,794 assertions**. Броят assertions
 е ориентир; критерият е поведенческо покритие.
 
 За всеки checkbox проверяваме business decisions, boundary интеграцията,
@@ -33,8 +33,8 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `AllViewsSmokeTest.php` | 1 | Всеки регистриран legacy екран се отваря | Добавяне на всеки оставащ Laravel екран към route/render smoke покритието |
 | [ ] | `ApiHealthTest.php` | 8 | Shopify/ShipStation credentials, scopes и live HTTP checks | Returned Shopify API version header; след това 8/8 method mapping |
 | [ ] | `AuthPermissionSnapshotTest.php` | 2 | Точната action → permission матрица и пълнотата ѝ | Сверка на всички actions срещу Laravel policies/routes |
-| [ ] | `AuthTest.php` | 40 | Пароли, lockout/IP ban, users, CSRF и роли | Google login, lockout/banned-IP и пълната permission матрица |
-| [ ] | `AuthViewsTest.php` | 8 | Login режими, конфигурационни грешки, escaping и access denied | Google-only/password-only UX и branding/error cases |
+| [ ] | `AuthTest.php` | 40 | Пароли, lockout/IP ban, users, CSRF и роли | Lockout/banned-IP и пълната permission матрица |
+| [ ] | `AuthViewsTest.php` | 8 | Login режими, конфигурационни грешки, escaping и access denied | Branding и dedicated access-denied cases |
 | [ ] | `GraphQL/EventNormalizerTest.php` | 28 | Нормализация на всички Shopify order event типове | Поле-по-поле сверка на останалите event variants |
 | [ ] | `GraphQL/IdsTest.php` | 17 | Numeric/GID преобразуване и невалидни ID стойности | Общ reusable Laravel ID contract извън текущите order paths |
 | [ ] | `GraphQL/OrderComponentNormalizerTest.php` | 27 | Address, item, shipping, fulfillment, refund и discount нормализация | Shipping/refund/discount полета и edge cases |
@@ -95,8 +95,6 @@ malformed payloads и atomic failure. Не копираме тест, който
 | [ ] | `EmailDigestTest.php` | 10 | Daily selection, thresholds, grouping и latest run → scheduled digest job |
 | [ ] | `EmailNotifierTest.php` | 30 | SMTP config, audit/scan/digest messages, escaping и attachments → Laravel mailables |
 | [ ] | `EmailRulesTest.php` | 25 | Per-tool modes, thresholds, recipients и persistence → notification preference model |
-| [ ] | `GoogleAuthFlowTest.php` | 8 | OAuth redirect/callback/state/domain/user flow → Socialite feature tests |
-| [ ] | `GoogleAuthTest.php` | 22 | OAuth config, state, claims, domains и role mapping → Google auth service tests |
 | [ ] | `ManageSettingsPageLoaderTest.php` | 14 | Settings load/save, validation и authorization → admin settings workflow |
 | [ ] | `SlackNotifierTest.php` | 19 | Slack payloads, mentions, delivery и safe failure → Slack notification channel |
 | [ ] | `SlackRulesTest.php` | 19 | Audit/scan thresholds, mentions, defaults и persistence → Slack preferences |
@@ -168,6 +166,8 @@ malformed payloads и atomic failure. Не копираме тест, който
 - [x] `DisputesPageLoaderTest.php` — 7/7 deadline computation, urgency sorting, initial/configuration and Shopify success paths.
 - [x] `RepeatRefundsTest.php` — 8/8 threshold, successful-transaction totals, identity grouping and sorting decisions.
 - [x] `AddressChangesTest.php` — 4/4 placement-to-change delay, negative/missing timestamp clamping and current-address output decisions.
+- [x] `GoogleAuthFlowTest.php` — OAuth redirect/callback/state handling is delegated to Socialite; cancellation, provider failure, domain policy, existing-user linking, session rotation and throttled routes are covered.
+- [x] `GoogleAuthTest.php` — the custom OIDC/PKCE HTTP client is replaced by Socialite; configuration, verified `hd` claims, domain parsing, identity binding and safe failures are covered without persisting provider tokens.
 
 ## Как се обновява
 

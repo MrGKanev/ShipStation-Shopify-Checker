@@ -8,7 +8,15 @@
             <p class="text-sm text-slate-500 dark:text-slate-400">Use your operations account to continue.</p>
         </div>
 
-        <form class="mt-8 flex flex-col gap-5" method="POST" action="{{ route('login.store') }}">
+        @error('google')<div class="mt-6 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{{ $message }}</div>@enderror
+
+        @if($googleConfigured)
+            <a class="mt-8 block rounded-lg border border-slate-300 px-4 py-2.5 text-center font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800" href="{{ route('auth.google.redirect') }}">Continue with Google</a>
+        @elseif($googleLoginOnly)
+            <div class="mt-8 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">Google sign-in configuration is incomplete.</div>
+        @endif
+
+        @unless($googleLoginOnly)<form class="mt-8 flex flex-col gap-5" method="POST" action="{{ route('login.store') }}">
             @csrf
 
             <div class="flex flex-col gap-2">
@@ -47,5 +55,6 @@
                 Sign in
             </button>
         </form>
+        @endunless
     </section>
 @endsection

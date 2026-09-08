@@ -451,7 +451,7 @@ workflow от наличния framework scaffold.
 - [x] Password/session login в Laravel
 - [x] Multi-store membership и active-store switching
 - [x] Encrypted integration credentials
-- [ ] Google OAuth login и callback flow
+- [x] Google OAuth login и callback flow чрез Socialite, verified Workspace `hd` allowlist, existing-user binding, session rotation и OAuth throttling
 - [ ] Main audit CLI/web orchestration (`audit.php`)
 - [ ] Queue worker и scheduled execution (`worker.php`)
 - [ ] Daily email digest (`email_digest.php`)
@@ -583,15 +583,15 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 104 | 425 | 1,740 |
+| Laravel rewrite | 106 | 432 | 1,794 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
 | Статус | Файлове | Дял |
 |---|---:|---:|
-| Fully mapped | 19 | 16.5% |
+| Fully mapped | 21 | 18.3% |
 | Partial / parity verification | 24 | 20.9% |
-| Pending | 72 | 62.6% |
+| Pending | 70 | 60.9% |
 | **Общо** | **115** | **100%** |
 
 #### Fully mapped legacy test files
@@ -614,6 +614,8 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [x] `OrderPolicyChecksTest.php` — всичките 16 Discount Abuse и Tag Policy configuration, rule semantics и tag normalization decisions са нанесени
 - [x] `RepeatRefundsTest.php` — всичките 8 threshold, transaction filtering, grouping and sorting decisions са нанесени
 - [x] `AddressChangesTest.php` — всичките 4 delay, missing/negative timestamp clamping и current-address output решения са нанесени и разширени с event pagination/filtering, batch hydration, authorization, validation, XSS, safe failure и truncation
+- [x] `GoogleAuthFlowTest.php` — custom flow е заменен със Socialite stateful OAuth; redirect/callback, cancellation, provider failure, verified Workspace domain, existing-user binding, session rotation и Google-only режим са покрити
+- [x] `GoogleAuthTest.php` — custom OIDC/PKCE клиента е заменен със Socialite; config guard, domain parsing, verified `hd` claim, stable Google subject binding и safe errors са покрити, а provider token-и не се пазят
 
 #### Partial или чакащи method-level parity проверка
 
@@ -827,8 +829,6 @@ Tag Policy traceability (`OrderPolicyChecksTest.php` и
 - [ ] `EmailRulesTest.php`
 - [ ] `FulfillmentIssuePageLoaderTest.php`
 - [ ] `FulfillmentLogisticsChecksTest.php`
-- [ ] `GoogleAuthFlowTest.php`
-- [ ] `GoogleAuthTest.php`
 - [ ] `GraphQL/AdminLookupsTest.php`
 - [ ] `GraphQL/CatalogAndFulfillmentTest.php`
 - [ ] `GraphQL/CustomDataLookupsTest.php`
