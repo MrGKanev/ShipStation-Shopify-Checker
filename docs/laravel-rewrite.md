@@ -408,7 +408,7 @@ Matrix-ът е release control документ, а не само checklist. М�
 достъпен route/controller/view и покриващи тестове. Наличен domain helper без
 завършен потребителски workflow не се брои за готов feature.
 
-Последно обновяване: **2026-09-08**, след Duplicate Shipping Addresses slice-а.
+Последно обновяване: **2026-09-08**, след Note Flags slice-а.
 
 Легенда: **Done** = feature parity за основния workflow; **Partial** = използваем,
 но по-тесен от legacy; **Todo** = няма завършен Laravel workflow;
@@ -418,9 +418,9 @@ Matrix-ът е release control документ, а не само checklist. М�
 
 | Статус | Страници/инструменти | Дял от 72 |
 |---|---:|---:|
-| Done | 21 | 29.2% |
+| Done | 22 | 30.6% |
 | Partial | 2 | 2.8% |
-| Todo | 47 | 65.3% |
+| Todo | 46 | 63.9% |
 | Replaced | 2 | 2.8% |
 | **Общо** | **72** | **100%** |
 
@@ -487,7 +487,7 @@ workflow от наличния framework scaffold.
 | `activess` | Active SS Conflicts | Todo | Cancelled/refunded Shopify, но active в ShipStation. |
 | `ssshipped` | SS Shipped / Shopify Unfulfilled | Todo | Cross-platform fulfillment sync failures. |
 | `orderedits` | Order Edit History | Todo | Post-placement changes. |
-| `noteflags` | Note Flags | Todo | Flagged keywords в order notes. |
+| `noteflags` | Note Flags | Done | Configurable case-insensitive note keywords over paid unfulfilled orders, with safe pagination. |
 | `addrcheck` | Address Scanner | Done | Required fields, short street, US/CA postal formats, province, express phone и PO Box/carrier checks с два legacy филтъра. |
 | `emailcheck` | Email Checker | Done | Paid date-range scan с missing/invalid/disposable critical правила, suspicious warning евристики, severity sorting и visible truncation. |
 | `hvorders` | High-Value No Phone | Done | Operator/admin report с currency-aware праг, cancelled exclusion, deterministic sorting и visible truncation. |
@@ -522,7 +522,7 @@ workflow от наличния framework scaffold.
 | `sameip` | Same IP, Different Emails | Done | Paid orders grouped by exact client IP, case-insensitive distinct-email deduplication, detailed orders and deterministic risk sorting. |
 | `disputes` | Chargebacks / Disputes | Done | Open actionable disputes, evidence deadlines, urgency sorting and bounded pagination. |
 
-Audit subtotal: **Done 13 · Partial 1 · Todo 33 · Replaced 1**.
+Audit subtotal: **Done 14 · Partial 1 · Todo 32 · Replaced 1**.
 
 ### Search & Lookup — 12
 
@@ -583,7 +583,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 | Suite | Test files | Executed tests | Assertions |
 |---|---:|---:|---:|
 | Stable plain PHP | 115 | 1,528 | 3,659 |
-| Laravel rewrite | 91 | 410 | 1,658 |
+| Laravel rewrite | 94 | 413 | 1,672 |
 
 Текущ file-level disposition на всичките **115 legacy test файла**:
 
@@ -623,7 +623,7 @@ pagination, malformed payload и tenant-isolation случаи. Release gate о�
 - [ ] `GraphQL/EventNormalizerTest.php` — event normalization работи; всички 28 legacy test methods чакат mapping
 - [ ] `GraphQL/IdsTest.php` — order/event ID paths са покрити; общият legacy ID contract остава
 - [ ] `GraphQL/OrderComponentNormalizerTest.php` — address/items/fulfillment subset е пренесен
-- [ ] `OrderPolicyPageLoaderTest.php` — Discount Abuse, Same IP, Tag Policy и Duplicate Shipping Addresses paths са пренесени; останалите policy report branches чакат method-level сверка
+- [ ] `OrderPolicyPageLoaderTest.php` — Discount Abuse, Same IP, Tag Policy, Duplicate Shipping Addresses и Note Flags paths са пренесени; останалите policy report branches чакат method-level сверка
 - [ ] `GraphQL/OrderDirectLookupTest.php` — direct order lookup работи, но legacy full field set остава
 - [ ] `FraudComplianceChecksTest.php` — High-Value No Phone, Country Mismatch и Email Checker матриците са пренесени; останалите fraud/compliance checks остават
 - [ ] `GraphQL/OrderEventLookupTest.php` — pagination contract е пренесен; method-level mapping остава

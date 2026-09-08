@@ -28,6 +28,7 @@ use App\Http\Controllers\Reports\HighValueNoPhoneController;
 use App\Http\Controllers\Reports\InventoryAgingController;
 use App\Http\Controllers\Reports\InventoryForecastController;
 use App\Http\Controllers\Reports\InventoryOversellController;
+use App\Http\Controllers\Reports\NoteFlagController;
 use App\Http\Controllers\Reports\ProductCompletenessController;
 use App\Http\Controllers\Reports\SameIpController;
 use App\Http\Controllers\Reports\SkuDuplicatesController;
@@ -90,6 +91,8 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/reports/disputes', [DisputeController::class, 'store'])->middleware('throttle:audit-report')->name('reports.disputes.store');
         Route::get('/reports/duplicate-addresses', [DuplicateAddressController::class, 'create'])->middleware('can:run-audits')->name('reports.duplicate-addresses');
         Route::post('/reports/duplicate-addresses', [DuplicateAddressController::class, 'store'])->middleware('throttle:audit-report')->name('reports.duplicate-addresses.store');
+        Route::get('/reports/note-flags', [NoteFlagController::class, 'create'])->middleware('can:run-audits')->name('reports.note-flags');
+        Route::post('/reports/note-flags', [NoteFlagController::class, 'store'])->middleware('throttle:audit-report')->name('reports.note-flags.store');
         Route::get('/reports/tag-audit', [TagAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.tag-audit');
         Route::post('/reports/tag-audit', [TagAuditController::class, 'store'])->middleware('throttle:audit-report')->name('reports.tag-audit.store');
         Route::get('/reports/tax-audit', [TaxAuditController::class, 'create'])->middleware('can:run-audits')->name('reports.tax-audit');
